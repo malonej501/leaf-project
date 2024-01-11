@@ -5,3 +5,4 @@
 !.gitignore
 !*/
 !*vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01/LeafGenerator/*
+!*data-processing/*
