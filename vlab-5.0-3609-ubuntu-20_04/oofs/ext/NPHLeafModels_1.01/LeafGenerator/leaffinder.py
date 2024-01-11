@@ -36,7 +36,7 @@ veinsoutsidelamina_thresh = 0.01  # 0.037 #0.75 for 12de and 12f 0.2 for everyth
 veinswidth_thresh = 0.05
 
 # paths
-wd = "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01"
+wd = "/home/m/malone/GitHub/leaf-project/vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01"
 
 nleaves = len(pdict["pspace1"])
 

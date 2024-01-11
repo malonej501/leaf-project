@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #set directory to the leaf model, then run source (necessary at the start of each session
-cd /home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/$1
+cd /home/m/malone/GitHub/leaf-project/vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01/$1
 source ./../../../../bin/sourceme.sh
 
 #generate the parameter file using the Input python script
