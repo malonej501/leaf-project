@@ -16,24 +16,29 @@ from pyvirtualdisplay import Display
 
 #################################### Initialisation ####################################
 
-scheme = "mut3"
+scheme = "mut3"  # model of mutation
 testvals = [10, 1, 0.1]  # only relevant for scheme = "mut1"
+startleaf = 0  # the index of the leaf in pdict that the simulation will start at, 0 for the beginning
 # testvals = [0,0,0]
 # nrounds = 100
-ngen_thresh = 120
-ncores = 10
-timeout = 160
+ngen_thresh = 120  # threshold no. leaves which, if reached in at least 1 of the walks, will terminate the simulation
+ncores = 10  # no. cores and also no. walks - performed in parallel
+timeout = 160  # simulation will skip to next iteration if a leaf takes longer than this number of seconds to generate
 
 # Walk constraint parameters
 symmetry_thresh = (
     0.05  # 0.1 #the acceptable limit for the proportion of non_overlapping area
 )
-weightdifference_thresh = 0.06
+weightdifference_thresh = 0.06  # the absolute difference between the area of the left and right side of the leaf
 primordium_thresh = 1.1  # this is how many times the width of the scale bar the maxwidth of the leaf must be greater than to pass the primordium check
-overlappingmargin_thresh = 0.005  # 0.006 #0.08 #0.012 for 12b
-veinarea_thresh = 0.02
-veinsoutsidelamina_thresh = 0.01  # 0.037 #0.75 for 12de and 12f 0.2 for everything else. This is the proportion of vein area non-overlapping with the lamina
-veinswidth_thresh = 0.05
+overlappingmargin_thresh = 0.005  # 0.006 #0.08 #0.012 for 12b # the fraction of the lamina area that is permitted to be occupied by margin
+veinarea_thresh = (
+    0.02  # vein area must be greater than this fraction of the silhouette area
+)
+veinsoutsidelamina_thresh = 0.01  # 0.037 #0.75 for 12de and 12f 0.2 for everything else. # The proportion of vein area permitted to be non-overlapping with the lamina
+veinswidth_thresh = (
+    0.05  # veins must be greater than this fraction of the total width of the image
+)
 
 # paths
 wd = "/home/m/malone/GitHub/leaf-project/vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01"
@@ -908,7 +913,7 @@ def start():
 
     if __name__ == "__main__":
         processes = []
-        for leafid in leafids[-9:]:  # [-39:]:
+        for leafid in leafids[startleaf:]:  # [-39:]:
             for wid in range(ncores):
                 process = multiprocessing.Process(target=randomwalk, args=(wid, leafid))
                 processes.append(process)
@@ -921,7 +926,8 @@ def start():
     display.stop()
 
 
-# start()
+if __name__ == "__main__":
+    start()
 
 ######################################################################################################################
 #################################### The Remaining Code is for debugging Purposes ####################################
