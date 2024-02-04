@@ -5,7 +5,7 @@ import re
 import seaborn as sns
 import matplotlib
 import matplotlib.pyplot as plt
-from scipy import stats
+from scipy import stats, linalg
 import sys
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
@@ -16,12 +16,17 @@ import seaborn.objects as so
 from itertools import product
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+import sympy as sp
+from scipy.integrate import odeint
 
 wd = "leaves_full_21-9-23_MUT2.2_CLEAN"
 # resd = "/home/m/malone/leaf_storage/random_walks"
 wd1 = "../vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01/LeafGenerator"
 
 sys.path.insert(1, wd1)
+
+sns.set_palette("colorblind")
+order = ["u", "l", "d", "c"]
 
 from pdict import *
 
@@ -817,12 +822,12 @@ def prop_curves():
     grouped_by_first_cat = (
         concat.groupby(["first_cat", "step", "shape"])
         .size()
-        .reset_index(name="total_first_cat_step_shape")
+        .reset_index(name="total_shape_firstcat")
     )
     # total no. leaves per step for every first_cat
     grouped_by_first_cat_total = (
         grouped_by_first_cat.groupby(["first_cat", "step"])
-        .agg(total_first_cat_step=("total_first_cat_step_shape", "sum"))
+        .agg(total_firstcat=("total_shape_firstcat", "sum"))
         .reset_index()
     )
 
@@ -830,8 +835,8 @@ def prop_curves():
         grouped_by_first_cat_total, on=["first_cat", "step"]
     )
     grouped_by_first_cat["proportion"] = (
-        grouped_by_first_cat["total_first_cat_step_shape"]
-        / grouped_by_first_cat["total_first_cat_step"]
+        grouped_by_first_cat["total_shape_firstcat"]
+        / grouped_by_first_cat["total_firstcat"]
     )
     print(grouped_by_first_cat)
 
@@ -839,93 +844,42 @@ def prop_curves():
     grouped_by_leaf = (
         concat.groupby(["leafid", "first_cat", "step", "shape"])
         .size()
-        .reset_index(name="count")
+        .reset_index(name="total_shape_leafid")
     )
+
     # get total no. leaves per step per leaf
     grouped_by_leaf_total = (
-        grouped_by_leaf.groupby(["leafid", "first_cat", "step"])
-        .agg(total_leafid_first_cat_step=("count", "sum"))
+        grouped_by_leaf.groupby(["leafid", "step"])
+        .agg(total_leafid=("total_shape_leafid", "sum"))
         .reset_index()
     )
 
     grouped_by_leaf = grouped_by_leaf.merge(
-        grouped_by_leaf_total, on=["leafid", "first_cat", "step"]
+        grouped_by_leaf_total, on=["leafid", "step"]
     )
+
+    grouped_by_leaf = grouped_by_leaf.merge(
+        grouped_by_first_cat_total, on=["first_cat", "step"]
+    )
+
     # get proportion of each shape per step per leaf
     grouped_by_leaf["proportion"] = (
-        grouped_by_leaf["count"] / grouped_by_leaf["total_leafid_first_cat_step"]
+        grouped_by_leaf["total_shape_leafid"] / grouped_by_leaf["total_leafid"]
     )
 
-    # grouped_by_leaf_avg_by_first_cat = (
-    #     grouped_by_leaf.groupby(["first_cat", "step", "shape"])
-    #     .agg(mean_prop=("proportion", "mean"))
-    #     .reset_index()
-    # )
-
-    # grouped_by_leaf_std_by_first_cat = (
-    #     grouped_by_leaf.groupby(["first_cat", "step"])
-    #     .agg(std=("proportion", "std"))
-    #     .reset_index()
-    # )
-    # # get std for the means of the proportions for each step for each first_cat
-    # grouped_by_leaf_avg_by_first_cat = grouped_by_leaf_avg_by_first_cat.merge(
-    #     grouped_by_leaf_std_by_first_cat, on=["first_cat", "step"]
-    # )
-
-    # print(grouped_by_leaf_avg_by_first_cat)
-    # print(grouped_by_leaf_avg_by_first_cat["std"].describe())
-
-    concat_grouped_by_first_cat = concat.merge(
-        grouped_by_first_cat, on=["first_cat", "step", "shape"]
-    )
-
-    # captures within first_cat uncertainty
-    concat_grouped_by_leaf = concat.merge(
-        grouped_by_leaf, on=["leafid", "first_cat", "step", "shape"]
-    )
-
-    grouped_by_leaf_total = grouped_by_leaf_total.merge(
-        grouped_by_first_cat, on=["first_cat", "step"]
-    )
-
-    grouped_by_leaf_total["proportion_leafid"] = (
-        grouped_by_leaf_total["total_first_cat_step_shape"]
-        / grouped_by_leaf_total["total_leafid_first_cat_step"]
-    )
-
-    grouped_by_leaf_leafid_total = (
-        grouped_by_leaf.groupby(["leafid", "first_cat", "step", "shape"])
-        .agg(total_leafid_shape_step=("count", "sum"))
-        .reset_index()
-    )
-
-    grouped_by_leaf_total = grouped_by_leaf_total.merge(
-        grouped_by_leaf_leafid_total, on=["leafid", "first_cat", "step", "shape"]
-    )
-
-    print(grouped_by_leaf_total)
+    print(grouped_by_leaf)
 
     # sns.relplot(
-    #     data=grouped_by_leaf_total,
+    #     data=grouped_by_leaf,
     #     x="step",
-    #     y="proportion_leafid",
+    #     y="proportion",
     #     col="first_cat",
     #     hue="shape",
     #     kind="line",
     #     col_wrap=2,
+    #     col_order=order,
     #     # errorbar="sd",
-    # ).set_axis_labels("step", "average proportion")
-
-    # sns.relplot(
-    #     data=grouped_by_leaf_total,
-    #     x="step",
-    #     y="proportion_first_cat/leafid",
-    #     col="first_cat",
-    #     hue="shape",
-    #     kind="line",
-    #     col_wrap=2,
-    #     # errorbar="sd",
-    # ).set_axis_labels("step", "average proportion")
+    # ).set_axis_labels("step", "average proportion").set(xlim=(0, 60))
 
     sns.relplot(
         data=grouped_by_first_cat,
@@ -935,13 +889,72 @@ def prop_curves():
         hue="shape",
         kind="line",
         col_wrap=2,
-        # errorbar="sd",
+        col_order=order,
+        hue_order=order,
     )
 
+    plt.show()
+
+
+def curves_phylogeny():
+
+    tee = sp.symbols("t")
+
+    t_vals = np.linspace(0, 0.5, 500)
+    QMCMC = np.array(
+        [
+            [-7.554229919, 4.90788243, 0.648523446, 1.997824043],
+            [77.126084851, -166.160628819, 30.208611133, 58.825932835],
+            [45.248729997, 38.483670211, -119.743221002, 36.010820794],
+            [16.253673911, 16.234659459, 11.907356073, -44.395689443],
+        ]
+    )
+
+    results = []
+
+    for t_val in t_vals:
+        result = np.array([])
+        QMCMC_t = QMCMC * t_val
+        result = linalg.expm(QMCMC_t)
+        results.append(result)
+
+    plot_data = {"t": [], "first_cat": [], "last_cat": [], "P": []}
+
+    for i, matrix in enumerate(results):
+        for row in range(matrix.shape[0]):
+            for column in range(matrix.shape[1]):
+                plot_data["t"].append(t_vals[i])
+                plot_data["first_cat"].append(row)
+                plot_data["last_cat"].append(column)
+                plot_data["P"].append(matrix[row, column])
+
+    plot_data = pd.DataFrame(plot_data)
+    # mapping = {"u": 0, "l": 1, "d": 2, "c": 3}
+    mapping = {0: "u", 1: "l", 2: "d", 3: "c"}
+    plot_data["first_cat"].replace(mapping, inplace=True)
+    plot_data["last_cat"].replace(mapping, inplace=True)
+    print(plot_data)
+
+    sns.relplot(
+        data=plot_data,
+        x="t",
+        y="P",
+        col="first_cat",
+        hue="last_cat",
+        kind="line",
+        col_wrap=2,
+        col_order=order,
+        hue_order=order,
+        facet_kws={
+            "sharey": False
+        },  # Uncomment this if you want each row to have its own y-axis scale
+    )
     plt.show()
 
 
 # stack_plot()
 # paramspace()
 
-prop_curves()
+# prop_curves()
+
+curves_phylogeny()
