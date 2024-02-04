@@ -17,9 +17,9 @@ from itertools import product
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-wd = "/home/m/malone/leaf_storage/random_walks/leaves_full_21-9-23_MUT2.2_CLEAN"
-resd = "/home/m/malone/leaf_storage/random_walks"
-wd1 = "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/LeafGenerator"
+wd = "leaves_full_21-9-23_MUT2.2_CLEAN"
+# resd = "/home/m/malone/leaf_storage/random_walks"
+wd1 = "../vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01/LeafGenerator"
 
 sys.path.insert(1, wd1)
 
@@ -644,7 +644,7 @@ def overallfreq():
     )
 
 
-def curves():
+def stack_plot():
     dfs = concatenator()
     print(dfs)
 
@@ -801,4 +801,147 @@ def curves():
     plt.show()
 
 
-paramspace()
+def prop_curves():
+    dfs = concatenator()
+
+    for walk in dfs:
+        walk["step"] = walk.index.values
+
+    concat = pd.concat(dfs, ignore_index=True)
+    concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    mapping = {"u": 0, "l": 1, "d": 2, "c": 3}
+    concat["dummy"] = concat["shape"].map(mapping)
+    print(concat)
+
+    # no. each shape type for each step of each first_cat
+    grouped_by_first_cat = (
+        concat.groupby(["first_cat", "step", "shape"])
+        .size()
+        .reset_index(name="total_first_cat_step_shape")
+    )
+    # total no. leaves per step for every first_cat
+    grouped_by_first_cat_total = (
+        grouped_by_first_cat.groupby(["first_cat", "step"])
+        .agg(total_first_cat_step=("total_first_cat_step_shape", "sum"))
+        .reset_index()
+    )
+
+    grouped_by_first_cat = grouped_by_first_cat.merge(
+        grouped_by_first_cat_total, on=["first_cat", "step"]
+    )
+    grouped_by_first_cat["proportion"] = (
+        grouped_by_first_cat["total_first_cat_step_shape"]
+        / grouped_by_first_cat["total_first_cat_step"]
+    )
+    print(grouped_by_first_cat)
+
+    # get total no. leaves per shape, per step for each leaf
+    grouped_by_leaf = (
+        concat.groupby(["leafid", "first_cat", "step", "shape"])
+        .size()
+        .reset_index(name="count")
+    )
+    # get total no. leaves per step per leaf
+    grouped_by_leaf_total = (
+        grouped_by_leaf.groupby(["leafid", "first_cat", "step"])
+        .agg(total_leafid_first_cat_step=("count", "sum"))
+        .reset_index()
+    )
+
+    grouped_by_leaf = grouped_by_leaf.merge(
+        grouped_by_leaf_total, on=["leafid", "first_cat", "step"]
+    )
+    # get proportion of each shape per step per leaf
+    grouped_by_leaf["proportion"] = (
+        grouped_by_leaf["count"] / grouped_by_leaf["total_leafid_first_cat_step"]
+    )
+
+    # grouped_by_leaf_avg_by_first_cat = (
+    #     grouped_by_leaf.groupby(["first_cat", "step", "shape"])
+    #     .agg(mean_prop=("proportion", "mean"))
+    #     .reset_index()
+    # )
+
+    # grouped_by_leaf_std_by_first_cat = (
+    #     grouped_by_leaf.groupby(["first_cat", "step"])
+    #     .agg(std=("proportion", "std"))
+    #     .reset_index()
+    # )
+    # # get std for the means of the proportions for each step for each first_cat
+    # grouped_by_leaf_avg_by_first_cat = grouped_by_leaf_avg_by_first_cat.merge(
+    #     grouped_by_leaf_std_by_first_cat, on=["first_cat", "step"]
+    # )
+
+    # print(grouped_by_leaf_avg_by_first_cat)
+    # print(grouped_by_leaf_avg_by_first_cat["std"].describe())
+
+    concat_grouped_by_first_cat = concat.merge(
+        grouped_by_first_cat, on=["first_cat", "step", "shape"]
+    )
+
+    # captures within first_cat uncertainty
+    concat_grouped_by_leaf = concat.merge(
+        grouped_by_leaf, on=["leafid", "first_cat", "step", "shape"]
+    )
+
+    grouped_by_leaf_total = grouped_by_leaf_total.merge(
+        grouped_by_first_cat, on=["first_cat", "step"]
+    )
+
+    grouped_by_leaf_total["proportion_leafid"] = (
+        grouped_by_leaf_total["total_first_cat_step_shape"]
+        / grouped_by_leaf_total["total_leafid_first_cat_step"]
+    )
+
+    grouped_by_leaf_leafid_total = (
+        grouped_by_leaf.groupby(["leafid", "first_cat", "step", "shape"])
+        .agg(total_leafid_shape_step=("count", "sum"))
+        .reset_index()
+    )
+
+    grouped_by_leaf_total = grouped_by_leaf_total.merge(
+        grouped_by_leaf_leafid_total, on=["leafid", "first_cat", "step", "shape"]
+    )
+
+    print(grouped_by_leaf_total)
+
+    # sns.relplot(
+    #     data=grouped_by_leaf_total,
+    #     x="step",
+    #     y="proportion_leafid",
+    #     col="first_cat",
+    #     hue="shape",
+    #     kind="line",
+    #     col_wrap=2,
+    #     # errorbar="sd",
+    # ).set_axis_labels("step", "average proportion")
+
+    # sns.relplot(
+    #     data=grouped_by_leaf_total,
+    #     x="step",
+    #     y="proportion_first_cat/leafid",
+    #     col="first_cat",
+    #     hue="shape",
+    #     kind="line",
+    #     col_wrap=2,
+    #     # errorbar="sd",
+    # ).set_axis_labels("step", "average proportion")
+
+    sns.relplot(
+        data=grouped_by_first_cat,
+        x="step",
+        y="proportion",
+        col="first_cat",
+        hue="shape",
+        kind="line",
+        col_wrap=2,
+        # errorbar="sd",
+    )
+
+    plt.show()
+
+
+# stack_plot()
+# paramspace()
+
+prop_curves()
