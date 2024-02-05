@@ -918,21 +918,21 @@ def curves_phylogeny():
         result = linalg.expm(QMCMC_t)
         results.append(result)
 
-    plot_data = {"t": [], "first_cat": [], "last_cat": [], "P": []}
+    plot_data = {"t": [], "first_cat": [], "shape": [], "P": []}
 
     for i, matrix in enumerate(results):
         for row in range(matrix.shape[0]):
             for column in range(matrix.shape[1]):
                 plot_data["t"].append(t_vals[i])
                 plot_data["first_cat"].append(row)
-                plot_data["last_cat"].append(column)
+                plot_data["shape"].append(column)
                 plot_data["P"].append(matrix[row, column])
 
     plot_data = pd.DataFrame(plot_data)
     # mapping = {"u": 0, "l": 1, "d": 2, "c": 3}
     mapping = {0: "u", 1: "l", 2: "d", 3: "c"}
     plot_data["first_cat"].replace(mapping, inplace=True)
-    plot_data["last_cat"].replace(mapping, inplace=True)
+    plot_data["shape"].replace(mapping, inplace=True)
     print(plot_data)
 
     sns.relplot(
@@ -940,7 +940,7 @@ def curves_phylogeny():
         x="t",
         y="P",
         col="first_cat",
-        hue="last_cat",
+        hue="shape",
         kind="line",
         col_wrap=2,
         col_order=order,
