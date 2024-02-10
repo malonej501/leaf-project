@@ -869,20 +869,8 @@ def prop_curves():
 
     print(grouped_by_leaf)
 
-    # sns.relplot(
-    #     data=grouped_by_leaf,
-    #     x="step",
-    #     y="proportion",
-    #     col="first_cat",
-    #     hue="shape",
-    #     kind="line",
-    #     col_wrap=2,
-    #     col_order=order,
-    #     # errorbar="sd",
-    # ).set_axis_labels("step", "average proportion").set(xlim=(0, 60))
-
     sns.relplot(
-        data=grouped_by_first_cat,
+        data=grouped_by_leaf,
         x="step",
         y="proportion",
         col="first_cat",
@@ -890,8 +878,20 @@ def prop_curves():
         kind="line",
         col_wrap=2,
         col_order=order,
-        hue_order=order,
-    )
+        errorbar="ci",  # 95% confidence interval calculated with bootstrapping see https://seaborn.pydata.org/tutorial/error_bars.html
+    ).set_axis_labels("step", "average proportion").set(xlim=(0, 60))
+
+    # sns.relplot(
+    #     data=grouped_by_first_cat,
+    #     x="step",
+    #     y="proportion",
+    #     col="first_cat",
+    #     hue="shape",
+    #     kind="line",
+    #     col_wrap=2,
+    #     col_order=order,
+    #     hue_order=order,
+    # )
 
     plt.show()
 
@@ -900,7 +900,8 @@ def curves_phylogeny():
 
     tee = sp.symbols("t")
 
-    t_vals = np.linspace(0, 0.5, 500)
+    t_vals = np.linspace(0, 1, 500)
+    # QMCMC are average rates from BayesTraitsV4_ 4 - 12 - 23 _mcmc
     QMCMC = np.array(
         [
             [-7.554229919, 4.90788243, 0.648523446, 1.997824043],
@@ -909,13 +910,27 @@ def curves_phylogeny():
             [16.253673911, 16.234659459, 11.907356073, -44.395689443],
         ]
     )
+    # QML are average rates from /multistatererun/multistate_rerun _d . csv
+    QML = np.array(
+        [
+            [-7.33971033333333, 5.66013596969697, 0.265320606060606, 1.41425375757576],
+            [99.9958611414141, -162.866899474747, 0.259923232323232, 62.6111151010101],
+            [
+                3.19065408080808,
+                0.991705666666667,
+                -4.24180003030303,
+                0.0594402828282828,
+            ],
+            [19.7934216262626, 11.5333476161616, 5.61182216161616, -36.9385914040404],
+        ]
+    )
 
     results = []
 
     for t_val in t_vals:
         result = np.array([])
-        QMCMC_t = QMCMC * t_val
-        result = linalg.expm(QMCMC_t)
+        QML_t = QML * t_val
+        result = linalg.expm(QML_t)
         results.append(result)
 
     plot_data = {"t": [], "first_cat": [], "shape": [], "P": []}
@@ -952,9 +967,99 @@ def curves_phylogeny():
     plt.show()
 
 
+def randomwalk_rates_firstswitch():
+    dfs = concatenator()
+
+    for walk in dfs:
+        walk["step"] = walk.index.values
+
+    # final_rows = [df.iloc[-1] for df in dfs if not df.empty] # to get the state at the end of each walk
+    # Get the step at the first shape switch or the last row if no switch
+    firstswitch_dfs = []
+    for df in dfs:
+        if not df.empty:
+            first_cat = first_cats[first_cats["leafid"] == df.iloc[0]["leafid"]][
+                "first_cat"
+            ].values[0]
+            walk_length = len(df)
+            for i, value in enumerate(df["shape"]):
+                if (
+                    i + 1 < walk_length
+                ):  # if the shape never changes, append the final step anyway
+                    if value != first_cat:
+                        firstswitch_dfs.append(df.iloc[i])
+                        break
+                else:
+                    firstswitch_dfs.append(df.iloc[i])
+
+    concat = pd.concat(firstswitch_dfs, axis=1).T.reset_index(drop=True)
+    concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    mapping = {"u": 0, "l": 1, "d": 2, "c": 3}
+    concat["shape_id"] = concat["shape"].map(mapping)
+    print(concat)
+
+    # frequency of shapes at firstswitch step grouped by leafid
+    grouped_by_leaf = (
+        concat.groupby(["leafid", "first_cat", "shape"])
+        .agg(mean_step=("step", "mean"))
+        .reset_index()
+    )
+    print(grouped_by_leaf)
+    # make a rate metric
+    grouped_by_leaf["mean_step"] = grouped_by_leaf["mean_step"].replace(0, np.nan)
+    grouped_by_leaf["100-mean_step"] = 100 - grouped_by_leaf["mean_step"]
+
+    sns.catplot(
+        data=grouped_by_leaf,
+        y="100-mean_step",
+        x="first_cat",
+        hue="shape",
+        kind="bar",
+        order=order,
+        hue_order=order,
+    )
+    plt.show()
+
+
+def randomwalk_rates_step60():
+    dfs = concatenator()
+
+    for walk in dfs:
+        walk["step"] = walk.index.values
+
+    concat = pd.concat(dfs, ignore_index=True)
+    concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    mapping = {"u": 0, "l": 1, "d": 2, "c": 3}
+    concat["shape_id"] = concat["shape"].map(mapping)
+    print(concat)
+
+    step60 = concat[concat["step"] == 60].reset_index(drop=True)
+    print(step60)
+
+    grouped_by_leaf = (
+        step60.groupby(["leafid", "first_cat", "shape"])
+        .size()
+        .reset_index(name="total_shape_leafid")
+    )
+    print(grouped_by_leaf)
+
+    sns.catplot(
+        data=grouped_by_leaf,
+        y="total_shape_leafid",
+        x="first_cat",
+        hue="shape",
+        kind="bar",
+        order=order,
+        hue_order=order,
+    )
+    plt.show()
+
+
+randomwalk_rates_firstswitch()
+
 # stack_plot()
 # paramspace()
 
 # prop_curves()
 
-curves_phylogeny()
+# curves_phylogeny()
