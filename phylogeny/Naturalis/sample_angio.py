@@ -1,5 +1,9 @@
 import pandas as pd
 from datetime import datetime
+import os
+import urllib.request
+from PIL import Image
+
 
 species_per_family = 200  # specify no. species to sample per angiosperm family - if there aren't enough species in the database, it will take the maximum number.
 
@@ -99,6 +103,27 @@ def img_from_sample():
         f"./Naturalis_multimedia_eud_sample_{current_date}.csv",
         index=False,
     )
+
+
+def download_imgs():
+    if os.listdir("download_imgs"):
+        print("download_imgs is not empty! Terminating.")
+
+    else:
+        intersect = pd.read_csv(
+            "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
+        )
+
+        for index, row in intersect.iterrows():
+            try:
+                species = row["species"]
+                print(index, species)
+                url = row["accessURI"]
+                urllib.request.urlretrieve(url, f"temp.png")
+                img = Image.open(r"temp.png")
+                img.save(f"download_imgs/{species}{index}.png")
+            except:
+                None
 
 
 if __name__ == "__main__":
