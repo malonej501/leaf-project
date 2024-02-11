@@ -1055,7 +1055,7 @@ def randomwalk_rates_step60():
     plt.show()
 
 
-randomwalk_rates_firstswitch()
+# randomwalk_rates_firstswitch()
 
 # stack_plot()
 # paramspace()
