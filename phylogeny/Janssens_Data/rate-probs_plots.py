@@ -9,8 +9,8 @@ import copy
 import sympy as sp
 from sympy import *
 
-wd = "mcmc/unif_dated_21-1-24/"
-filename = "mcmc_unif_dated_21-1-24.csv"
+wd = "mcmc/unif_dated_21-1-24_reduced/"
+filename = "mcmc_unif_dated_21-1-24_reduced.csv"
 
 ##### Getting Probs #####
 
@@ -109,6 +109,8 @@ def rates_probs_mean(prob_tab):
     print(prob_tab)
     prob_tab.to_csv(wd + f"probs_t{T}_{filename}", index=false)
 
+    return prob_tab
+
 
 def rates_mean_probs(prob_tab):
     print(rates_full_wstat)
@@ -127,9 +129,6 @@ def rates_mean_probs(prob_tab):
 sns.set_palette("colorblind")
 order = ["u", "l", "d", "c"]
 
-rates_full = pd.read_csv(wd + filename)
-
-probs_full = pd.read_csv(wd + f"probs_t{T}_" + filename)
 
 #### Data processing
 
@@ -164,6 +163,7 @@ def translong(data, dtype):
     return full_trans, full_long
 
 
+probs_full = rates_probs_mean(prob_tab)
 rates_full_trans, rates_full_long = translong(rates_full, "rate")
 probs_full_trans, probs_full_long = translong(probs_full, "prob")
 print(rates_full_long)
@@ -319,25 +319,28 @@ def curves_phylogeny():
     plt.show()
 
 
-kruskal_result = kruskal(
-    rates_full["q01"],
-    rates_full["q02"],
-    rates_full["q03"],
-    rates_full["q10"],
-    rates_full["q12"],
-    rates_full["q13"],
-    rates_full["q20"],
-    rates_full["q21"],
-    rates_full["q23"],
-    rates_full["q30"],
-    rates_full["q31"],
-    rates_full["q32"],
-)
+def kruskal_test(rates_full):
+    kruskal_result = kruskal(
+        rates_full["q01"],
+        rates_full["q02"],
+        rates_full["q03"],
+        rates_full["q10"],
+        rates_full["q12"],
+        rates_full["q13"],
+        rates_full["q20"],
+        rates_full["q21"],
+        rates_full["q23"],
+        rates_full["q30"],
+        rates_full["q31"],
+        rates_full["q32"],
+    )
 
-print(kruskal_result)
+    print(kruskal_result)
+
 
 # rates_probs_mean(prob_tab)
 # catplot1()
 # catplot2()
 
 curves_phylogeny()
+catplot1()

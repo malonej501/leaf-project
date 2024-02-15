@@ -9,7 +9,7 @@ tree <- read.nexus("Janssens_ml_dated.tre")
 tree_tips <- data.frame(tip_labels = tree$tip.label)
 
 naturalis_sample <- read.csv("./sample_eud_21-1-24/Naturalis_multimedia_eud_sample_13-01-24.csv")
-naturalis_sample_labelled <- read.csv("./sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24.csv")
+naturalis_sample_labelled <- read.csv("./sample_eud_21-1-24_reduced/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_reduced.csv")
 
 naturalis_sample_tree_intersect <- naturalis_sample[naturalis_sample$species %in% intersect(tree_tips$tip_labels, naturalis_sample$species),]
 #write.csv(naturalis_sample_tree_intersect, file="Naturalis_sample_Janssens_intersect_species_list.csv", row.names=FALSE)
