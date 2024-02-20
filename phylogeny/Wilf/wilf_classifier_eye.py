@@ -337,7 +337,9 @@ def process_images(species_full):
         # )
         for filepath in Wilf_sample_filepaths[startfrom:]:
             if filepath.endswith(".jpg"):
-                query = filepath.rsplit("/", 1)[-1].rstrip(".jpg")
+                query = filepath.rsplit("/", 1)[-1]  # .rstrip(".jpg")
+                query_split = query.split("_")
+                species = query_split[1] + "_" + query_split[2]
 
                 root = tk.Tk()
                 root.title(f"Image Viewer: {query}")
@@ -363,7 +365,7 @@ def process_images(species_full):
                 root.bind("<Key>", lambda event, arg=root: on_press(event, arg))
                 root.mainloop()
 
-                leafdata.append((query, pressed_keys.copy()[0]))
+                leafdata.append((query, species, pressed_keys.copy()[0]))
                 pressed_keys.clear()
                 print(leafdata[-1])
 
@@ -380,7 +382,7 @@ if __name__ == "__main__":
 
     with Listener(on_press=on_press) as listener:
         leafdata = process_images(species_full)
-        leafdata_df = pd.DataFrame(leafdata, columns=["species", "shape"])
+        leafdata_df = pd.DataFrame(leafdata, columns=["filename", "species", "shape"])
         print(leafdata_df)
         leafdata_df.to_csv(f"img_labels_{startfrom}-.csv", index=False)
 
