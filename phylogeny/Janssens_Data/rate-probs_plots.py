@@ -9,8 +9,8 @@ import copy
 import sympy as sp
 from sympy import *
 
-wd = "mcmc/unif_dated_21-1-24/"
-filename = "mcmc_unif_dated_21-1-24.csv"
+wd = "mcmc/unif_geeta_21-02-24/"
+filename = "mcmc_unif_21-02-24_geeta.csv"
 
 ##### Getting Probs #####
 
@@ -83,22 +83,6 @@ def getprobs(Q):
 
 
 def rates_probs_mean(prob_tab):
-    # Q1 = np.array(
-    #     [
-    #         [-7.33971033333333, 5.66013596969697, 0.265320606060606, 1.41425375757576],
-    #         [99.9958611414141, -162.866899474747, 0.259923232323232, 62.6111151010101],
-    #         [
-    #             3.19065408080808,
-    #             0.991705666666667,
-    #             -4.24180003030303,
-    #             0.0594402828282828,
-    #         ],
-    #         [19.7934216262626, 11.5333476161616, 5.61182216161616, -36.9385914040404],
-    #     ]
-    # )
-    # print(Q1)
-    # print(getprobs(Q1))
-    # exit()
 
     for i in range(0, len(rates_full_wstat)):
         rates = matrixfromrow(rates_full_wstat, i)
@@ -108,6 +92,8 @@ def rates_probs_mean(prob_tab):
 
     print(prob_tab)
     prob_tab.to_csv(wd + f"probs_t{T}_{filename}", index=false)
+
+    return prob_tab
 
 
 def rates_mean_probs(prob_tab):
@@ -127,9 +113,6 @@ def rates_mean_probs(prob_tab):
 sns.set_palette("colorblind")
 order = ["u", "l", "d", "c"]
 
-rates_full = pd.read_csv(wd + filename)
-
-probs_full = pd.read_csv(wd + f"probs_t{T}_" + filename)
 
 #### Data processing
 
@@ -164,6 +147,7 @@ def translong(data, dtype):
     return full_trans, full_long
 
 
+probs_full = rates_probs_mean(prob_tab)
 rates_full_trans, rates_full_long = translong(rates_full, "rate")
 probs_full_trans, probs_full_long = translong(probs_full, "prob")
 print(rates_full_long)
@@ -252,7 +236,7 @@ def catplot2():
     g.fig.suptitle(f"Uncertainty of rates\nN={N_trees}, {filename}")
     plt.xticks(fontsize=9)
     plt.subplots_adjust(right=0.8, top=0.89, bottom=0.15)
-    plt.savefig(wd + f"rates_uncert_t{T}_{filename}.png", dpi=100)
+    plt.savefig(wd + f"rates_uncert_{filename}.png", dpi=100)
     plt.clf()
 
 
@@ -262,7 +246,7 @@ def box2():
     plt.ylabel("Evolutionary rate")
     plt.title(f"Uncertainty of ML evolutionary rates\nN={N_trees} {filename}")
     # sns.violinplot(data=rates_full, inner="quart")
-    plt.savefig(wd + f"rates_uncert_t{T}_{filename}.png")
+    plt.savefig(wd + f"rates_uncert_{filename}.png")
     plt.show()
     plt.clf()
 
@@ -319,25 +303,29 @@ def curves_phylogeny():
     plt.show()
 
 
-kruskal_result = kruskal(
-    rates_full["q01"],
-    rates_full["q02"],
-    rates_full["q03"],
-    rates_full["q10"],
-    rates_full["q12"],
-    rates_full["q13"],
-    rates_full["q20"],
-    rates_full["q21"],
-    rates_full["q23"],
-    rates_full["q30"],
-    rates_full["q31"],
-    rates_full["q32"],
-)
+def kruskal_test(rates_full):
+    kruskal_result = kruskal(
+        rates_full["q01"],
+        rates_full["q02"],
+        rates_full["q03"],
+        rates_full["q10"],
+        rates_full["q12"],
+        rates_full["q13"],
+        rates_full["q20"],
+        rates_full["q21"],
+        rates_full["q23"],
+        rates_full["q30"],
+        rates_full["q31"],
+        rates_full["q32"],
+    )
 
-print(kruskal_result)
+    print(kruskal_result)
+
 
 # rates_probs_mean(prob_tab)
 # catplot1()
 # catplot2()
 
 curves_phylogeny()
+catplot1()
+catplot2()

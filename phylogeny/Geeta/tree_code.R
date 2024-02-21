@@ -5,25 +5,29 @@ library(ggmap)
 library(ggtree)
 
 tree <- read.nexus("Janssens_ml_dated.tre")
+tree_labs <- data.frame(tree$tip.label)
 
-tree_tips <- data.frame(tip_labels = tree$tip.label)
+geeta_tree <- read.nexus("561Data08.tre")
+geeta_labs <- data.frame(geeta_tree$tip.label)
 
-naturalis_sample <- read.csv("./sample_eud_21-1-24/Naturalis_multimedia_eud_sample_13-01-24.csv")
-naturalis_sample_labelled <- read.csv("./sample_eud_21-1-24_reduced/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_reduced.csv")
+tree_labs_sub_all <- tree_labs[grep(paste(geeta_labs$tip.label, collapse="|"), tree_labs$tree.tip.label),]
+tree_labs_sub_first_indicies <- sapply(geeta_labs$tip.label, function(x) which(grepl(x, tree_labs$tree.tip.label))[1])
+tree_labs_sub_first <- na.omit(data.frame(species = tree_labs[tree_labs_sub_first_indicies,])) # remove NAs
+#tree_labs_sub_first <- tree_labs_sub_first[!grepl("OUT", tree_labs_sub_first$species)] # remove outgroups 
+rownames(tree_labs_sub_first) <- NULL # reset index
 
-naturalis_sample_tree_intersect <- naturalis_sample[naturalis_sample$species %in% intersect(tree_tips$tip_labels, naturalis_sample$species),]
-#write.csv(naturalis_sample_tree_intersect, file="Naturalis_sample_Janssens_intersect_species_list.csv", row.names=FALSE)
-naturalis_sample_labelled_tree_intersect <- naturalis_sample_labelled[tree$tip.label %in% naturalis_sample_labelled$species,]
+# Create a new shape file that contains the subset of species (not genus) with shape labels
+shape = read.csv("561AngLf09_D.csv", header = FALSE, col.names = c("genus","shape"))
+matching_species = grep(paste(shape$genus, collapse ="|"), tree_labs_sub_first$species)
+matching_species_labs = data.frame(species = tree_labs_sub_first$species, shape = shape$shape[matching_species])
+# write.table(matching_species_labs, "Geeta_sub_species.txt", sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
 
-tree_intersect <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% naturalis_sample_tree_intersect$species)])
-tree_intersect_labelled <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% naturalis_sample_labelled$species)])
+
+tree_sub_labelled <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% tree_labs_sub_first$species)])
 #tree_intersect_labelled <- drop.tip(tree_intersect_labelled, unique(tree_intersect_labelled$tiplabel))
-write.nexus(tree_intersect_labelled, file="./Naturalis_sample_Janssens_intersect_labelled.tre")
-print(sum(table(tree_intersect_labelled$tip.label)))
-tips = dataframe(tip_labels = tree_intersect_labelled$tip.label)
-print(length(unique(naturalis_sample_labelled$species)))
-#returns the species in the naturalis sample but not in the Janssens tree
-print(naturalis_sample_labelled[!(naturalis_sample_labelled$species %in% tree$tip.label),]$species)
+write.nexus(tree_sub_labelled, file="./Geeta_sub_Janssens.tre")
+print(sum(table(tree_sub_labelled$tip.label)))
+tips = dataframe(tip_labels = tree_sub_labelled$tip.label)
 
 tree_minus_outgroups <- drop.tip(tree, c("OUT_Pinus","OUT_Taxus","OUT_Ginkgo",
                                          "OUT_Zamia","OUT_Cycas"))

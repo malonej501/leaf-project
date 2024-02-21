@@ -1,9 +1,10 @@
 import torch
 import torchvision
 import torchvision.transforms as transforms
+import numpy as np
+import pandas as pd
 from fastai.vision.all import *
 import os
-import pandas as pd
 
 img_wd = "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_21-01-24/"
 img_labels = pd.read_csv(
@@ -53,7 +54,8 @@ dls = ImageDataLoaders.from_name_func(
 
 learn = cnn_learner(dls, resnet34, metrics=error_rate, pretrained=True)
 learn.fine_tune(epochs=10)
+learn.export()
 
 interp = ClassificationInterpretation.from_learner(learn)
 interp.plot_confusion_matrix()
-interp.plot_top_6_losses(6)
+interp.plot_top_losses(6)

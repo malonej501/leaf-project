@@ -30,7 +30,9 @@ for shape in ["u", "l", "d", "c"]:
     else:
         conflicts_by_shape.append(np.NaN)
 
-
 print(f"Total conflicts = {n_conflicts}")
 print(f"Proportion conflicts = {prop_conflicts}")
 print(f"proportion conflicts by shape (u,l,d,c):\n\t{conflicts_by_shape}")
+
+print(full["shape_x"].value_counts())
+print(full["shape_y"].value_counts())

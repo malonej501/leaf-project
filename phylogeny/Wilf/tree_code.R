@@ -8,17 +8,18 @@ tree <- read.nexus("Janssens_ml_dated.tre")
 
 tree_tips <- data.frame(tip_labels = tree$tip.label)
 
-naturalis_sample <- read.csv("./sample_eud_21-1-24/Naturalis_multimedia_eud_sample_13-01-24.csv")
-naturalis_sample_labelled <- read.csv("./sample_eud_21-1-24_reduced/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_reduced.csv")
+wilf_sample <- read.csv("Wilf_eud_sample_20-02-24.csv")
+wilf_sample_lab <- read.csv("./20-02-24/img_labels_unambig_full.csv")
 
-naturalis_sample_tree_intersect <- naturalis_sample[naturalis_sample$species %in% intersect(tree_tips$tip_labels, naturalis_sample$species),]
-#write.csv(naturalis_sample_tree_intersect, file="Naturalis_sample_Janssens_intersect_species_list.csv", row.names=FALSE)
-naturalis_sample_labelled_tree_intersect <- naturalis_sample_labelled[tree$tip.label %in% naturalis_sample_labelled$species,]
+wilf_sample_tree_intersect <- wilf_sample[wilf_sample$genus_species %in% intersect(tree_tips$tip_labels, wilf_sample$genus_species),]
+# write.csv(wilf_sample_tree_intersect, file="Wilf_sample_Janssens_intersect_species_list.csv", row.names=FALSE)
+length(unique(wilf_sample_tree_intersect$genus_species))
+wilf_sample_lab_tree_intersect <- intersect(tree_tips$tip_labels, wilf_sample_lab$species)
 
-tree_intersect <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% naturalis_sample_tree_intersect$species)])
-tree_intersect_labelled <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% naturalis_sample_labelled$species)])
+tree_intersect <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% wilf_sample_tree_intersect$species)])
+tree_intersect_labelled <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% wilf_sample_lab_tree_intersect)])
 #tree_intersect_labelled <- drop.tip(tree_intersect_labelled, unique(tree_intersect_labelled$tiplabel))
-write.nexus(tree_intersect_labelled, file="./Naturalis_sample_Janssens_intersect_labelled.tre")
+write.nexus(tree_intersect_labelled, file="./Wilf_sample_Janssens_intersect_labelled.tre")
 print(sum(table(tree_intersect_labelled$tip.label)))
 tips = dataframe(tip_labels = tree_intersect_labelled$tip.label)
 print(length(unique(naturalis_sample_labelled$species)))
