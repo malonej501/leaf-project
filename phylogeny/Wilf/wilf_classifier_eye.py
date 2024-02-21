@@ -18,40 +18,23 @@ import shutil
 wd = "leaf_imgs"
 file = "Wilf_sample_20-02-24_Janssens_intersect.csv"
 
-startfrom = 0  # which leaf index to start labelling from
+startfrom = 2380  # which leaf index to start labelling from
 
 # Google search engine initialisation
 api_key = "REMOVED FOR SECURITY REASONS - SEE LOCAL MACHINE"  # API key for leaf-project tied to malonej501@gmail.com
 cx = "25948abc932774194"  # search engine id for leaf-finder within leaf-project tied to malonej501@gmail.com
 
 
-def check_alldownloaded(species_full):
-    # filenames_expected = [
-    #     f"{value}{index}" for index, value in enumerate(species_full["genus_species"])
-    # ]
-    filenames_expected = species_full["genus_species"].tolist()
-    # filenames_expected = [string + ".jpg" for string in filenames_expected]
-    Wilf_sample_filenames = []
+def get_filepaths(species_full):
+    filenames_expected = species_full["Filename"].tolist()
     Wilf_sample_filepaths = []
     for dirpath, dirnames, filenames in os.walk(wd):
         # print(filenames)
         for filename in filenames:
             if filename.endswith(".jpg"):
-                filename_split = filename.split("_")
-                filename_genus_species = filename_split[1] + "_" + filename_split[2]
-                Wilf_sample_filenames.append(filename_genus_species)
-                Wilf_sample_filepaths.append(os.path.join(dirpath, filename))
-
-    missing_imgs = list(set(filenames_expected).difference(Wilf_sample_filenames))
-
-    print("Missing imgs:")
-    if missing_imgs:
-        for i in missing_imgs:
-            print(i)
-        print("ERROR: not all images in sample are present")
-        exit()
-    else:
-        print("None!")
+                filename_without_jpg = filename.rstrip(".jpg")
+                if filename_without_jpg in filenames_expected:
+                    Wilf_sample_filepaths.append(os.path.join(dirpath, filename))
 
     return Wilf_sample_filepaths
 
@@ -329,7 +312,7 @@ def process_images_old(species_full):
 def process_images(species_full):
     leafdata = []
 
-    Wilf_sample_filepaths = check_alldownloaded(species_full)
+    Wilf_sample_filepaths = sorted(get_filepaths(species_full))
     try:
         # sorted_file_list = sorted(
         #     os.listdir(wd + "Naturalis_eud_sample_Janssens_intersect_21-01-24"),
