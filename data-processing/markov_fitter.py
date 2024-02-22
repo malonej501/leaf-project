@@ -148,10 +148,11 @@ dfs = get_data()
 def likelihood(
     p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33
 ):
+    L_data = 1
     P = sp.Matrix(4, 4, p)
     for walk in dfs:
         if not walk.empty:
-            likelihood = 1
+            L_walk = 1
             # create step sequence list with the initial shape on the front
             steps = walk["shape"].tolist()
             initial_state = walk["first_cat"][0]
@@ -162,7 +163,7 @@ def likelihood(
                 else:
                     prev = steps[i - 1]
                 transition = prev + curr
-                likelihood *= transition_map[transition](
+                L_walk *= transition_map[transition](
                     p00,
                     p01,
                     p02,
@@ -180,8 +181,12 @@ def likelihood(
                     p32,
                     p33,
                 )
+        # print(L_walk)
+        # print(np.log(L_walk))
+        # exit()
+        L_data += L_walk
 
-    return likelihood
+    return L_data
 
 
 def metropolis_hastings():
@@ -190,6 +195,7 @@ def metropolis_hastings():
         init = np.random.uniform(0, 1, 16)
         location = init
         location_l = likelihood(*location)
+        print(location_l)
     proposal_l = 0
     step = 0
     for step in range(nsteps):
