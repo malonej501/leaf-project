@@ -1055,6 +1055,79 @@ def randomwalk_rates_step60():
     plt.show()
 
 
+def randomwalk_rates_allswitch():
+    dfs = concatenator()
+
+    trans_time = {
+        "uu": [],
+        "ul": [],
+        "ud": [],
+        "uc": [],
+        "lu": [],
+        "ll": [],
+        "ld": [],
+        "lc": [],
+        "du": [],
+        "dl": [],
+        "dd": [],
+        "dc": [],
+        "cu": [],
+        "cl": [],
+        "cd": [],
+        "cc": [],
+    }
+
+    for walk in dfs:
+        walk["step"] = walk.index.values
+        walk = walk[walk["step"] <= 60].reset_index(drop=True)
+        if not walk.empty:
+            first_cat = first_cats[first_cats["leafid"] == walk.iloc[0]["leafid"]][
+                "first_cat"
+            ].values[0]
+            current_shape = first_cat
+            holding_nsteps = 0
+            for i, row in walk.iterrows():
+                if row["shape"] == current_shape:
+                    holding_nsteps += 1
+                else:
+                    if i == 0:
+                        end_shape = first_cat
+                    else:
+                        end_shape = walk["shape"][i - 1]
+                    next_shape = row["shape"]
+                    transition = end_shape + next_shape
+                    trans_time[transition].append(holding_nsteps)
+                    current_shape = row["shape"]
+                    holding_nsteps = 0
+
+    flat = [(key, value) for key, values in trans_time.items() for value in values]
+    trans_time_df = pd.DataFrame(flat, columns=["transition", "holding_nsteps"])
+    trans_time_df["transition_count"] = trans_time_df["transition"].map(
+        trans_time_df["transition"].value_counts()
+    )
+    trans_time_df["count/hold"] = (
+        trans_time_df["transition_count"] / trans_time_df["holding_nsteps"]
+    )
+    print(trans_time_df)
+
+    sns.catplot(
+        data=trans_time_df,
+        y="count/hold",
+        x="transition",
+        kind="box",
+    )
+    plt.show()
+    # concat = pd.concat(dfs, ignore_index=True)
+    # concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    # mapping = {"u": 0, "l": 1, "d": 2, "c": 3}
+    # concat["shape_id"] = concat["shape"].map(mapping)
+
+    # step60 = concat[concat["step"] <= 60].reset_index(drop=True)
+    # print(step60)
+
+    # leafwalk = step60.groupby(["leafid", "walkid"])
+
+
 # randomwalk_rates_firstswitch()
 
 # stack_plot()
@@ -1063,3 +1136,5 @@ def randomwalk_rates_step60():
 # prop_curves()
 
 # curves_phylogeny()
+
+randomwalk_rates_allswitch()
