@@ -1128,13 +1128,14 @@ def randomwalk_rates_allswitch():
     # leafwalk = step60.groupby(["leafid", "walkid"])
 
 
-# randomwalk_rates_firstswitch()
+if __name__ == "__main__":
+    # randomwalk_rates_firstswitch()
 
-# stack_plot()
-# paramspace()
+    # stack_plot()
+    # paramspace()
 
-# prop_curves()
+    # prop_curves()
 
-# curves_phylogeny()
+    # curves_phylogeny()
 
-randomwalk_rates_allswitch()
+    randomwalk_rates_allswitch()
