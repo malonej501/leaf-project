@@ -6,8 +6,10 @@ import functools
 import operator
 import copy
 from dataprocessing import concatenator, first_cats
+import multiprocessing
 
 nsteps = 500
+nchains = 8
 
 p_labels = [
     "p00",
@@ -241,7 +243,9 @@ def likelihood(
     return L_data
 
 
-def metropolis_hastings_rates():
+def metropolis_hastings_rates(chain_id):
+    np.random.seed()
+    report = []
     location_l = 0
     while np.isinf(location_l) or location_l == 0:
         init = np.random.uniform(0, 100, 12)
@@ -269,7 +273,7 @@ def metropolis_hastings_rates():
                 (proposal_nondiag < 0) | (proposal_nondiag > 100)
             )  # constrain non-diagonal rates to be between 0 and 100
         ):
-            jump = np.random.uniform(-5, 5, 12)
+            jump = np.random.uniform(-10, 10, 12)
             Q_jump = np.array(
                 [
                     [-(jump[0] + jump[1] + jump[2]), jump[0], jump[1], jump[2]],
@@ -291,6 +295,31 @@ def metropolis_hastings_rates():
             print(f"Step: {step}, Likelihood: {location_l}\n{location}")
         else:
             continue
+        report.append([step, location_l, *location.flatten().tolist()])
+        report_df = pd.DataFrame(
+            report,
+            columns=[
+                "step",
+                "location_LL",
+                "q00",
+                "q01",
+                "q02",
+                "q03",
+                "q10",
+                "q11",
+                "q12",
+                "q13",
+                "q20",
+                "q21",
+                "q22",
+                "q23",
+                "q30",
+                "q31",
+                "q32",
+                "q33",
+            ],
+        )
+        report_df.to_csv(f"markov_fitter_reports/chain_{chain_id}.csv", index=False)
     print(f"ML params:\n{location}")
 
 
@@ -369,7 +398,21 @@ def metropolis_hastings():
         print(f"Q estimate: {Q}")
 
 
-metropolis_hastings_rates()
+def parallel_search():
+    processes = []
+    for chain_id in range(nchains):  # [-39:]:
+        process = multiprocessing.Process(
+            target=metropolis_hastings_rates, args=(chain_id,)
+        )
+        processes.append(process)
+        process.start()
+
+    # this waits for each wid process to finish before moving onto the next leafid
+    for process in processes:
+        process.join()
+
+
+parallel_search()
 
 # ML params: [0.99826104 0.01398225 0.01326471 0.01950028 0.77214213 0.47574471
 #  0.42267044 0.47365062 0.83230558 0.25730578 0.0937699  0.45734609
