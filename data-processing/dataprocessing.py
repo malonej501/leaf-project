@@ -568,8 +568,8 @@ def paramspace():
     scaled_data = StandardScaler().fit_transform(data)
 
     pca_params = PCA(n_components=2)
-    explained_variance_ratio = pca_params.explained_variance_ratio_
     princip_params = pca_params.fit_transform(scaled_data)
+    explained_variance_ratio = pca_params.explained_variance_ratio_
     princip_df = pd.DataFrame(data=princip_params, columns=["pc1", "pc2"])
     princip_df_starting_leaves = princip_df.iloc[: len(starting_leaves)]
     princip_df_starting_leaves["shape"] = list(first_cats["first_cat"].values)
@@ -591,6 +591,11 @@ def paramspace():
         bins=100,
         # alpha=0.5,
     )
+    g.set_axis_labels(
+        f"PC1 ({(explained_variance_ratio[0] * 100):.2f}%)",
+        f"PC2 ({(explained_variance_ratio[1] * 100):.2f}%)",
+    )
+
     # sns.relplot(
     #     x="pc1",
     #     y="pc2",
@@ -615,12 +620,10 @@ def paramspace():
             data=princip_df_starting_leaves,
             palette="colorblind",
             legend=False,
-            linewidth=0,
+            # linewidth=0,
             # edgecolor="black",
             ax=ax,
         )
-    plt.xlabel(f'PC1 ({explained_variance_ratio[0]:.2f} explained variance)')
-    plt.ylabel(f'PC2 ({explained_variance_ratio[1]:.2f} explained variance)')
     plt.show()
 
 
@@ -1135,10 +1138,10 @@ if __name__ == "__main__":
     # randomwalk_rates_firstswitch()
 
     # stack_plot()
-    # paramspace()
+    paramspace()
 
     # prop_curves()
 
     # curves_phylogeny()
 
-    randomwalk_rates_allswitch()
+    # randomwalk_rates_allswitch()
