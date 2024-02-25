@@ -568,6 +568,7 @@ def paramspace():
     scaled_data = StandardScaler().fit_transform(data)
 
     pca_params = PCA(n_components=2)
+    explained_variance_ratio = pca_params.explained_variance_ratio_
     princip_params = pca_params.fit_transform(scaled_data)
     princip_df = pd.DataFrame(data=princip_params, columns=["pc1", "pc2"])
     princip_df_starting_leaves = princip_df.iloc[: len(starting_leaves)]
@@ -618,6 +619,8 @@ def paramspace():
             # edgecolor="black",
             ax=ax,
         )
+    plt.xlabel(f'PC1 ({explained_variance_ratio[0]:.2f} explained variance)')
+    plt.ylabel(f'PC2 ({explained_variance_ratio[1]:.2f} explained variance)')
     plt.show()
 
 
