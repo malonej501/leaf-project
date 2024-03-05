@@ -234,7 +234,6 @@ def likelihood_rates_t1(Q):
                     prev = steps[i - 1]
                     transition = prev + curr
                     L_walk *= Pt[transition_map_rates[transition]]
-                    alltransitions.append(transition)
         L_data += np.log(L_walk)
 
     return L_data
