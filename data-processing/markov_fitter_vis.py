@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 order = ["u", "l", "d", "c"]
+burnin = 500  # no. steps to discard when calculating posteriors
 
 
 def get_data():
@@ -25,7 +26,7 @@ def plot_LL():
 
 def get_data_post_burnin_long():
     data_full = get_data()
-    data_post_burnin = data_full[data_full["step"] > 100]
+    data_post_burnin = data_full[data_full["step"] > burnin]
     data_post_burnin_nondiag = data_post_burnin.drop(
         ["q00", "q11", "q22", "q33"], axis=1
     )
@@ -62,7 +63,7 @@ def get_posterior_by_chain():
         x="initial_shape",
         hue="final_shape",
         col="chain_id",
-        kind="box",
+        kind="bar",
         col_wrap=4,
         palette="colorblind",
         hue_order=order,
@@ -79,7 +80,7 @@ def get_posterior_overall():
         y="rate",
         x="initial_shape",
         hue="final_shape",
-        kind="box",
+        kind="bar",
         palette="colorblind",
         hue_order=order,
         col_order=order,
@@ -87,5 +88,23 @@ def get_posterior_overall():
     plt.show()
 
 
-get_posterior_by_chain()
-get_posterior_overall()
+def rate_convergence():
+    data_post_burnin_nondiag_long = get_data_post_burnin_long()
+
+    sns.relplot(
+        data=data_post_burnin_nondiag_long,
+        y="rate",
+        x="step",
+        col="transition",
+        hue="transition",
+        palette="colorblind",
+        kind="line",
+        col_wrap=4,
+    )
+    plt.show()
+
+
+# plot_LL()
+# get_posterior_by_chain()
+# get_posterior_overall()
+rate_convergence()

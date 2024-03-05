@@ -219,8 +219,6 @@ def likelihood_rates_t1(Q):
     t = 1
     L_data = 1
     Pt = scipy.linalg.expm(Q * t)
-    print(Pt)
-    exit()
     for walk in dfs:
         if not walk.empty:
             L_walk = 1
@@ -327,12 +325,12 @@ def metropolis_hastings_rates(chain_id):
             proposal_l = likelihood_rates_t1(proposal)
         # acceptance_ratio = proposal_l / location_l  # for maximising likelihood
         acceptance_ratio = location_l / proposal_l  # for maximising log_likelihood
-        print(location_l, proposal_l, acceptance_ratio)
+        print(step, location_l, proposal_l, acceptance_ratio)
         acceptance_threshold = np.random.uniform(0.99, 1)
         if acceptance_ratio > acceptance_threshold:
             location = copy.deepcopy(proposal)
             location_l = copy.deepcopy(proposal_l)
-            print(f"Step: {step}, Likelihood: {location_l}\n{location}")
+            # print(f"Step: {step}, Likelihood: {location_l}\n{location}")
         else:
             continue
         report.append([step, location_l, *location.flatten().tolist()])
