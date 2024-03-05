@@ -10,6 +10,10 @@ import multiprocessing
 
 nsteps = 500
 nchains = 8
+lb = 0  # lower bound of inferred rate parameters
+ub = 100  # upper bound of inferred rate parameters
+step_size = 10  # random numbers are picked uniformly between + and - this number which make the jump matrix
+# for lb0 ub100, step_size10 seems to work well
 
 p_labels = [
     "p00",
@@ -168,14 +172,6 @@ dfs = get_data()
 
 
 def likelihood_rates(Q):
-    # Q = np.array(
-    #     [
-    #         [q00, q01, q02, q03],
-    #         [q10, q11, q12, q13],
-    #         [q20, q21, q22, q23],
-    #         [q30, q31, q32, q33],
-    #     ]
-    # )
     L_data = 1
     for walk in dfs:
         if not walk.empty:
@@ -191,6 +187,51 @@ def likelihood_rates(Q):
                     prev = steps[i - 1]
                     transition = prev + curr
                     Pt = scipy.linalg.expm(Q * t)
+                    L_walk *= Pt[transition_map_rates[transition]]
+        # rate_map = {}
+        # L_data += np.log(L_walk)
+        L_data += np.log(L_walk)
+
+    return L_data
+
+
+def likelihood_rates_frominitial(Q):
+    L_data = 1
+    for walk in dfs:
+        if not walk.empty:
+            L_walk = 1
+            t = 0
+            initial_state = walk["first_cat"][0]
+            steps = walk["shape"].tolist()
+            for i, curr in enumerate(steps):
+                t += 1
+                transition = initial_state + curr
+                Pt = scipy.linalg.expm(Q * t)
+                L_walk *= Pt[transition_map_rates[transition]]
+        # rate_map = {}
+        # L_data += np.log(L_walk)
+        L_data += np.log(L_walk)
+
+    return L_data
+
+
+def likelihood_rates_t1(Q):
+    t = 1
+    L_data = 1
+    Pt = scipy.linalg.expm(Q * t)
+    print(Pt)
+    exit()
+    for walk in dfs:
+        if not walk.empty:
+            L_walk = 1
+            initial_state = walk["first_cat"][0]
+            steps = walk["shape"].tolist()
+            for i, curr in enumerate(steps):
+                if i == 0:
+                    prev = initial_state
+                else:
+                    prev = steps[i - 1]
+                    transition = prev + curr
                     L_walk *= Pt[transition_map_rates[transition]]
         # rate_map = {}
         # L_data += np.log(L_walk)
@@ -248,7 +289,7 @@ def metropolis_hastings_rates(chain_id):
     report = []
     location_l = 0
     while np.isinf(location_l) or location_l == 0:
-        init = np.random.uniform(0, 100, 12)
+        init = np.random.uniform(lb, ub, 12)
         Q_init = np.array(
             [
                 [-(init[0] + init[1] + init[2]), init[0], init[1], init[2]],
@@ -258,8 +299,7 @@ def metropolis_hastings_rates(chain_id):
             ]
         )
         location = Q_init
-        location_l = likelihood_rates(location)
-        print(location_l)
+        location_l = likelihood_rates_t1(location)
     proposal_l = 0
     step = 0
     for step in range(nsteps):
@@ -270,10 +310,10 @@ def metropolis_hastings_rates(chain_id):
             np.isinf(proposal_l)
             or proposal_l == 0
             or np.any(
-                (proposal_nondiag < 0) | (proposal_nondiag > 100)
-            )  # constrain non-diagonal rates to be between 0 and 100
+                (proposal_nondiag < lb) | (proposal_nondiag > ub)
+            )  # constrain non-diagonal rates to be between lb and ub
         ):
-            jump = np.random.uniform(-10, 10, 12)
+            jump = np.random.uniform(-step_size, step_size, 12)
             Q_jump = np.array(
                 [
                     [-(jump[0] + jump[1] + jump[2]), jump[0], jump[1], jump[2]],
@@ -284,7 +324,7 @@ def metropolis_hastings_rates(chain_id):
             )
             proposal = location + Q_jump
             proposal_nondiag = proposal[~np.eye(proposal.shape[0], dtype=bool)]
-            proposal_l = likelihood_rates(proposal)
+            proposal_l = likelihood_rates_t1(proposal)
         # acceptance_ratio = proposal_l / location_l  # for maximising likelihood
         acceptance_ratio = location_l / proposal_l  # for maximising log_likelihood
         print(location_l, proposal_l, acceptance_ratio)
