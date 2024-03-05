@@ -7,8 +7,11 @@ import operator
 import copy
 from dataprocessing import concatenator, first_cats
 import multiprocessing
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-nsteps = 500
+
+nsteps = 10000
 nchains = 8
 lb = 0  # lower bound of inferred rate parameters
 ub = 100  # upper bound of inferred rate parameters
@@ -231,8 +234,7 @@ def likelihood_rates_t1(Q):
                     prev = steps[i - 1]
                     transition = prev + curr
                     L_walk *= Pt[transition_map_rates[transition]]
-        # rate_map = {}
-        # L_data += np.log(L_walk)
+                    alltransitions.append(transition)
         L_data += np.log(L_walk)
 
     return L_data
@@ -448,6 +450,27 @@ def parallel_search():
     # this waits for each wid process to finish before moving onto the next leafid
     for process in processes:
         process.join()
+
+
+def count_transitions():
+    alltransitions = []
+    for walk in dfs:
+        if not walk.empty:
+            initial_state = walk["first_cat"][0]
+            steps = walk["shape"].tolist()
+            for i, curr in enumerate(steps):
+                if i == 0:
+                    prev = initial_state
+                else:
+                    prev = steps[i - 1]
+                    transition = prev + curr
+                    alltransitions.append(transition)
+    counts = ((pd.Series(alltransitions)).value_counts()).to_frame().reset_index()
+    counts.columns = ["transition", "count"]
+    counts["log_count"] = np.log(counts["count"])
+    print(counts)
+    sns.catplot(data=counts, x="transition", y="count", kind="bar")
+    plt.show()
 
 
 parallel_search()

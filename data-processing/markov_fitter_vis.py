@@ -49,6 +49,7 @@ def get_data_post_burnin_long():
         .apply(lambda str: str[2])
         .replace(mapping)
     )
+    data_post_burnin_nondiag_long
 
     return data_post_burnin_nondiag_long
 
@@ -90,9 +91,13 @@ def get_posterior_overall():
 
 def rate_convergence():
     data_post_burnin_nondiag_long = get_data_post_burnin_long()
+    chain_0 = data_post_burnin_nondiag_long[
+        data_post_burnin_nondiag_long["chain_id"] == "0"
+    ].reset_index(drop=True)
+    print(chain_0)
 
     sns.relplot(
-        data=data_post_burnin_nondiag_long,
+        data=chain_0,
         y="rate",
         x="step",
         col="transition",
