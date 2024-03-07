@@ -472,7 +472,27 @@ def count_transitions():
     plt.show()
 
 
-parallel_search()
+def count_shapes():
+    allshapes = []
+    for walk in dfs:
+        if not walk.empty:
+            initial_state = walk["first_cat"][0]
+            steps = walk["shape"].tolist()
+            for i, curr in enumerate(steps):
+                if i == 0:
+                    allshapes.append(initial_state)
+                    allshapes.append(curr)
+                else:
+                    allshapes.append(curr)
+    counts = ((pd.Series(allshapes)).value_counts()).to_frame().reset_index()
+    counts.columns = ["shape", "count"]
+    print(counts)
+    sns.catplot(data=counts, x="shape", y="count", kind="bar")
+    plt.show()
+
+
+# parallel_search()
+count_shapes()
 
 # ML params: [0.99826104 0.01398225 0.01326471 0.01950028 0.77214213 0.47574471
 #  0.42267044 0.47365062 0.83230558 0.25730578 0.0937699  0.45734609
