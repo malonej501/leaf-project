@@ -64,7 +64,7 @@ def get_posterior_by_chain():
         x="initial_shape",
         hue="final_shape",
         col="chain_id",
-        kind="bar",
+        kind="box",
         col_wrap=4,
         palette="colorblind",
         hue_order=order,
@@ -81,7 +81,7 @@ def get_posterior_overall():
         y="rate",
         x="initial_shape",
         hue="final_shape",
-        kind="bar",
+        kind="box",
         palette="colorblind",
         hue_order=order,
         col_order=order,
@@ -109,7 +109,35 @@ def rate_convergence():
     plt.show()
 
 
+def rate_against_frequency():
+    # each transition rate against the frequency of the initial state in the data
+    data_post_burnin_nondiag_long = get_data_post_burnin_long()
+    freq = pd.read_csv("MUT2.2_shape_counts.csv")
+    print(data_post_burnin_nondiag_long)
+    print(freq)
+    long_merged = pd.merge(
+        data_post_burnin_nondiag_long,
+        freq,
+        left_on="initial_shape",
+        right_on="shape",
+        how="inner",
+    )
+    print(long_merged)
+    sns.catplot(
+        data=long_merged,
+        y="rate",
+        x="count",
+        hue="transition",
+        col="chain_id",
+        kind="box",
+        col_wrap=4,
+        palette="colorblind",
+    )
+    plt.show()
+
+
 # plot_LL()
 # get_posterior_by_chain()
 # get_posterior_overall()
-rate_convergence()
+# rate_convergence()
+rate_against_frequency()
