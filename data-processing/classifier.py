@@ -14,7 +14,7 @@ contourbuff_size = 40
 wd = "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01"
 wd1 = "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/LeafGenerator/testleaves/"
 
-randomwalkleaves = "/home/m/malone/leaf_storage/random_walks/leaves_full_11-10-23_MUT3"
+randomwalkleaves = "leaves_full_21-9-23_MUT2.2_CLEAN"
 
 
 def imageprocessing(leaf):
@@ -254,9 +254,7 @@ def morphometrics(
             )
             b = minmax_above_dist
             c = minmax_below_dist
-            minmax_angle = np.rad2deg(
-                np.arccos((b**2 + c**2 - a**2) / (2 * b * c))
-            )
+            minmax_angle = np.rad2deg(np.arccos((b**2 + c**2 - a**2) / (2 * b * c)))
 
             v1 = [
                 local_maxima[0] - local_minima_below[0],
@@ -658,6 +656,31 @@ def refdistout(directory):
 # main_batch(wd1)
 
 
+def contour_out(directory):
+    # load all the leaf image files
+    files = os.listdir(directory)
+    image_files = [f for f in files if f.endswith(".png")]
+    image_files.sort()
+    image_files.sort(key=lambda s: int("".join(filter(str.isdigit, s))))
+
+    leafidslist = []
+    refdistlist = []
+
+    for file in image_files:
+        print(f"#### Leaf: {file}")
+
+        leaf = cv2.imread(directory + "/" + file, cv2.IMREAD_GRAYSCALE)
+
+        contour, contour_compressed, veins, img, thresh = imageprocessing(leaf)
+        print(contour_compressed)
+        exit()
+
+    report = pd.DataFrame.from_dict(dict(zip(leafidslist, refdistlist)), orient="index")
+    print(report)
+
+    report.to_csv(directory + "/" + "refdist_report.csv", header=False)
+
+
 def parallel(wd, function):
     if __name__ == "__main__":
         processes = []
@@ -695,6 +718,8 @@ def parallel(wd, function):
 # refdistout("/home/m/malone/leaf_storage/accuracy_test_200")
 # main_batch("/home/m/malone/leaf_storage/Official Starting Sample/12-9-23")
 # main_batch("/home/m/malone/leaf_storage/Official Starting Sample/more-symmetric_12-7-23")
-main_batch(
-    "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/LeafGenerator/starting_sample_12-9-23"
-)
+# main_batch(
+#     "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/LeafGenerator/starting_sample_12-9-23"
+# )
+
+parallel(randomwalkleaves, contour_out)
