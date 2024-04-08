@@ -12,8 +12,9 @@ nsteps = 2000
 nchains = 8
 lb = 0  # lower bound of inferred rate parameters
 ub = 100  # upper bound of inferred rate parameters
-step_size = 5  # random numbers are picked uniformly between + and - this number which make the jump matrix
+step_size = 10  # random numbers are picked uniformly between + and - this number which make the jump matrix
 # for lb0 ub100, step_size10 seems to work well
+# can lower to 5 if running for nsteps >= ~10000
 
 
 transition_map_rates = {
@@ -85,18 +86,35 @@ def likelihood_rates(Q):
     return L_data
 
 
+def load_Pts(Q):
+    Pts_length = 120
+    Pts = []
+    for t in range(1, Pts_length):
+        Qt = Q * t
+        Pt = scipy.linalg.expm(Qt)
+        Pts.append(Pt)
+        if len(Pts) >= 2 and np.allclose(
+            Pts[-1], Pts[-2], atol=1e-10
+        ):  # if the probabilities converge, don't bother computing remaining Pt matrices, just append equilibrium value until list is full
+            current_len = len(Pts)
+            while current_len < Pts_length:
+                Pts.append(Pts[-1])
+                current_len += 1
+            break
+    return Pts
+
+
 def likelihood_rates_frominitial(Q):
     L_data = 1
+    Pts = load_Pts(Q)
     for walk in dfs:
         if not walk.empty:
             L_walk = 1
-            t = 0
             initial_state = walk["first_cat"][0]
             steps = walk["shape"].tolist()
             for i, curr in enumerate(steps):
-                t += 1
                 transition = initial_state + curr
-                Pt = scipy.linalg.expm(Q * t)
+                Pt = Pts[i]
                 L_walk *= Pt[transition_map_rates[transition]]
         # rate_map = {}
         # L_data += np.log(L_walk)
@@ -141,7 +159,7 @@ def metropolis_hastings_rates(chain_id):
             ]
         )
         location = Q_init
-        location_l = likelihood_rates_t1(location)
+        location_l = likelihood_rates_frominitial(location)
     proposal_l = 0
     step = 0
     for step in range(nsteps):
@@ -166,7 +184,7 @@ def metropolis_hastings_rates(chain_id):
             )
             proposal = location + Q_jump
             proposal_nondiag = proposal[~np.eye(proposal.shape[0], dtype=bool)]
-            proposal_l = likelihood_rates_t1(proposal)
+            proposal_l = likelihood_rates_frominitial(proposal)
         # location_l += 100000
         # proposal_l += 100000
         # acceptance_ratio = proposal_l / location_l  # for maximising likelihood
