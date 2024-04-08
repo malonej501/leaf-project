@@ -1,9 +1,6 @@
 import pandas as pd
 import numpy as np
-import sympy as sp
 import scipy
-import functools
-import operator
 import copy
 from dataprocessing import concatenator, first_cats
 import multiprocessing
@@ -11,123 +8,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
-nsteps = 10000
+nsteps = 2000
 nchains = 8
 lb = 0  # lower bound of inferred rate parameters
 ub = 100  # upper bound of inferred rate parameters
-step_size = 10  # random numbers are picked uniformly between + and - this number which make the jump matrix
+step_size = 5  # random numbers are picked uniformly between + and - this number which make the jump matrix
 # for lb0 ub100, step_size10 seems to work well
 
-p_labels = [
-    "p00",
-    "p01",
-    "p02",
-    "p03",
-    "p10",
-    "p11",
-    "p12",
-    "p13",
-    "p20",
-    "p21",
-    "p22",
-    "p23",
-    "p30",
-    "p31",
-    "p32",
-    "p33",
-]
-p = sp.symbols(p_labels)
-
-transition_map = {
-    "uu": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: p00
-    * (1 - p01)
-    * (1 - p02)
-    * (1 - p03),
-    "ul": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p00
-    )
-    * p01
-    * (1 - p02)
-    * (1 - p03),
-    "ud": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p00
-    )
-    * (1 - p01)
-    * p02
-    * (1 - p03),
-    "uc": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p00
-    )
-    * (1 - p01)
-    * (1 - p02)
-    * p03,
-    "lu": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: p10
-    * (1 - p11)
-    * (1 - p12)
-    * (1 - p13),
-    "ll": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p10
-    )
-    * p11
-    * (1 - p12)
-    * (1 - p13),
-    "ld": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p10
-    )
-    * (1 - p11)
-    * p12
-    * (1 - p13),
-    "lc": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p10
-    )
-    * (1 - p11)
-    * (1 - p12)
-    * p13,
-    "du": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: p20
-    * (1 - p21)
-    * (1 - p22)
-    * (1 - p23),
-    "dl": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p20
-    )
-    * p21
-    * (1 - p22)
-    * (1 - p23),
-    "dd": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p20
-    )
-    * (1 - p21)
-    * p22
-    * (1 - p23),
-    "dc": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p20
-    )
-    * (1 - p21)
-    * (1 - p22)
-    * p23,
-    "cu": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: p30
-    * (1 - p31)
-    * (1 - p32)
-    * (1 - p33),
-    "cl": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p30
-    )
-    * p31
-    * (1 - p32)
-    * (1 - p33),
-    "cd": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p30
-    )
-    * (1 - p31)
-    * p32
-    * (1 - p33),
-    "cc": lambda p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33: (
-        1 - p30
-    )
-    * (1 - p31)
-    * (1 - p32)
-    * p33,
-}
 
 transition_map_rates = {
     "uu": (0, 0),
@@ -239,50 +126,6 @@ def likelihood_rates_t1(Q):
     return L_data
 
 
-def likelihood(
-    p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33
-):
-    L_data = 1
-    P = sp.Matrix(4, 4, p)
-    for walk in dfs:
-        if not walk.empty:
-            L_walk = 1
-            # create step sequence list with the initial shape on the front
-            steps = walk["shape"].tolist()
-            initial_state = walk["first_cat"][0]
-            # build the likelihood function
-            for i, curr in enumerate(steps):
-                if i == 0:
-                    prev = initial_state
-                else:
-                    prev = steps[i - 1]
-                transition = prev + curr
-                L_walk *= transition_map[transition](
-                    p00,
-                    p01,
-                    p02,
-                    p03,
-                    p10,
-                    p11,
-                    p12,
-                    p13,
-                    p20,
-                    p21,
-                    p22,
-                    p23,
-                    p30,
-                    p31,
-                    p32,
-                    p33,
-                )
-        # print(L_walk)
-        # print(np.log(L_walk))
-        # exit()
-        L_data += np.log(L_walk)  # log of products = sum of the logs
-
-    return L_data
-
-
 def metropolis_hastings_rates(chain_id):
     np.random.seed()
     report = []
@@ -324,10 +167,13 @@ def metropolis_hastings_rates(chain_id):
             proposal = location + Q_jump
             proposal_nondiag = proposal[~np.eye(proposal.shape[0], dtype=bool)]
             proposal_l = likelihood_rates_t1(proposal)
+        # location_l += 100000
+        # proposal_l += 100000
         # acceptance_ratio = proposal_l / location_l  # for maximising likelihood
         acceptance_ratio = location_l / proposal_l  # for maximising log_likelihood
         print(step, location_l, proposal_l, acceptance_ratio)
-        acceptance_threshold = np.random.uniform(0.99, 1)
+        acceptance_threshold = np.random.uniform(0.999, 1)
+        # acceptance_threshold = np.random.uniform(0, 1)
         if acceptance_ratio > acceptance_threshold:
             location = copy.deepcopy(proposal)
             location_l = copy.deepcopy(proposal_l)
@@ -360,44 +206,6 @@ def metropolis_hastings_rates(chain_id):
         )
         report_df.to_csv(f"markov_fitter_reports/chain_{chain_id}.csv", index=False)
     print(f"ML params:\n{location}")
-
-
-def metropolis_hastings():
-    try:
-        location_l = 0
-        while np.isinf(location_l) or location_l == 0:
-            init = np.random.uniform(0, 1, 16)
-            location = init
-            location_l = likelihood(*location)
-            print(location_l)
-        proposal_l = 0
-        step = 0
-        for step in range(nsteps):
-            proposal_l = 0
-            proposal = []
-            while (
-                np.isinf(proposal_l)
-                or proposal_l == 0
-                or any(i < 0 or i > 1 for i in proposal)
-            ):
-                jump = np.random.uniform(-0.05, 0.05, 16)
-                proposal = location + jump
-                proposal_l = likelihood(*proposal)
-            # acceptance_ratio = proposal_l / location_l  # for maximising likelihood
-            acceptance_ratio = location_l / proposal_l  # for maximising log_likelihood
-            print(location_l, proposal_l, acceptance_ratio)
-            acceptance_threshold = np.random.uniform(0.5, 1.5)
-            if acceptance_ratio > acceptance_threshold:
-                location = copy.deepcopy(proposal)
-                location_l = copy.deepcopy(proposal_l)
-                print(f"Step: {step}, Likelihood: {location_l}")
-            else:
-                continue
-    finally:
-        print(f"ML params: {location}")
-        P = location.reshape(4, 4)
-        Q = np.linalg.slogdet(P)
-        print(f"Q estimate: {Q}")
 
 
 def parallel_search():
@@ -454,12 +262,5 @@ def count_shapes():
     plt.show()
 
 
-# parallel_search()
-count_shapes()
-
-# ML params: [0.99826104 0.01398225 0.01326471 0.01950028 0.77214213 0.47574471
-#  0.42267044 0.47365062 0.83230558 0.25730578 0.0937699  0.45734609
-#  0.94638902 0.59232413 0.06093926 0.07854079]
-# ML params: [0.99423626 0.00141407 0.00539718 0.01960178 0.75330801 0.87560217
-#  0.71831958 0.37055998 0.56737443 0.62423334 0.56100007 0.38894312
-#  0.84030609 0.26382123 0.60430812 0.00841867]
+parallel_search()
+# count_shapes()
