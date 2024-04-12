@@ -6,15 +6,19 @@ from dataprocessing import concatenator, first_cats
 import multiprocessing
 import matplotlib.pyplot as plt
 import seaborn as sns
+import cProfile
 
 
-nsteps = 2000
+nsteps = 10000
 nchains = 8
 lb = 0  # lower bound of inferred rate parameters
-ub = 100  # upper bound of inferred rate parameters
-step_size = 10  # random numbers are picked uniformly between + and - this number which make the jump matrix
+ub = 0.1  # upper bound of inferred rate parameters
+step_size = 0.05  # random numbers are picked uniformly between + and - this number which make the jump matrix
 # for lb0 ub100, step_size10 seems to work well
 # can lower to 5 if running for nsteps >= ~10000
+# step parameters
+mean = 0
+stdev = 0.005
 
 
 transition_map_rates = {
@@ -78,10 +82,12 @@ def likelihood_rates(Q):
                     prev = steps[i - 1]
                     transition = prev + curr
                     Pt = scipy.linalg.expm(Q * t)
-                    L_walk *= Pt[transition_map_rates[transition]]
+                    # L_walk *= Pt[transition_map_rates[transition]]
+                    L_walk += np.log(Pt[transition_map_rates[transition]])
         # rate_map = {}
         # L_data += np.log(L_walk)
-        L_data += np.log(L_walk)
+        # LL_data += L_walk
+        L_data += L_walk
 
     return L_data
 
@@ -125,11 +131,11 @@ def likelihood_rates_frominitial(Q):
 
 def likelihood_rates_t1(Q):
     t = 1
-    L_data = 1
+    L_data = 0
     Pt = scipy.linalg.expm(Q * t)
     for walk in dfs:
         if not walk.empty:
-            L_walk = 1
+            L_walk = 0  # set to 1 if *= to get probability
             initial_state = walk["first_cat"][0]
             steps = walk["shape"].tolist()
             for i, curr in enumerate(steps):
@@ -138,8 +144,8 @@ def likelihood_rates_t1(Q):
                 else:
                     prev = steps[i - 1]
                     transition = prev + curr
-                    L_walk *= Pt[transition_map_rates[transition]]
-        L_data += np.log(L_walk)
+                    L_walk += np.log(Pt[transition_map_rates[transition]])
+        L_data += L_walk
 
     return L_data
 
@@ -159,7 +165,7 @@ def metropolis_hastings_rates(chain_id):
             ]
         )
         location = Q_init
-        location_l = likelihood_rates_frominitial(location)
+        location_l = likelihood_rates_t1(location)
     proposal_l = 0
     step = 0
     for step in range(nsteps):
@@ -173,7 +179,8 @@ def metropolis_hastings_rates(chain_id):
                 (proposal_nondiag < lb) | (proposal_nondiag > ub)
             )  # constrain non-diagonal rates to be between lb and ub
         ):
-            jump = np.random.uniform(-step_size, step_size, 12)
+            # jump = np.random.uniform(-step_size, step_size, 12)
+            jump = np.random.normal(mean, stdev, 12)
             Q_jump = np.array(
                 [
                     [-(jump[0] + jump[1] + jump[2]), jump[0], jump[1], jump[2]],
@@ -184,13 +191,15 @@ def metropolis_hastings_rates(chain_id):
             )
             proposal = location + Q_jump
             proposal_nondiag = proposal[~np.eye(proposal.shape[0], dtype=bool)]
-            proposal_l = likelihood_rates_frominitial(proposal)
-        # location_l += 100000
-        # proposal_l += 100000
+            proposal_l = likelihood_rates_t1(proposal)
+        # location_l += 10000
+        # proposal_l += 10000
         # acceptance_ratio = proposal_l / location_l  # for maximising likelihood
         acceptance_ratio = location_l / proposal_l  # for maximising log_likelihood
+        # acceptance_ratio = np.exp(proposal_l - location_l)
+        # print(proposal_l / location_l)
         print(step, location_l, proposal_l, acceptance_ratio)
-        acceptance_threshold = np.random.uniform(0.999, 1)
+        acceptance_threshold = np.random.uniform(0.99, 1)
         # acceptance_threshold = np.random.uniform(0, 1)
         if acceptance_ratio > acceptance_threshold:
             location = copy.deepcopy(proposal)
@@ -280,5 +289,31 @@ def count_shapes():
     plt.show()
 
 
-parallel_search()
-# count_shapes()
+if __name__ == "__main__":
+    parallel_search()
+
+    # init = [ # MLE estimates
+    #     0.0059100,
+    #     0.0027669,
+    #     0.0004471,
+    #     0.0555743,
+    #     0.0263329,
+    #     0.0003601,
+    #     0.0388942,
+    #     0.0233140,
+    #     0.0122715,
+    #     0.0208720,
+    #     0.0017733,
+    #     0.0345245,
+    # ]
+    # Q = np.array(
+    #     [
+    #         [-(init[0] + init[1] + init[2]), init[0], init[1], init[2]],
+    #         [init[3], -(init[3] + init[4] + init[5]), init[4], init[5]],
+    #         [init[6], init[7], -(init[6] + init[7] + init[8]), init[8]],
+    #         [init[9], init[10], init[11], -(init[9] + init[10] + init[11])],
+    #     ]
+    # )
+    # L = likelihood_rates_t1(Q)
+    # print(L)
+    # count_shapes()
