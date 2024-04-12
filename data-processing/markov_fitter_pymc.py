@@ -4,7 +4,7 @@ import scipy
 import pandas as pd
 import numpy as np
 import arviz as az
-import pytensor
+import pytensor.tensor as tt
 
 
 print(f"running on PyMCv{pm.__version__}")
@@ -137,7 +137,7 @@ with markov_model:
     q32 = pm.Uniform("q32", lower=0, upper=1)
     q33 = pm.Deterministic("q33", -q30 - q31 - q32)
 
-    Q = pytensor.tensor.stacklists(
+    Q = tt.stacklists(
         [
             [q00, q01, q02, q03],
             [q10, q11, q12, q13],
@@ -148,7 +148,8 @@ with markov_model:
 
     def logL(dfs, Q):
         t = 1  # between each state
-        Pt = scipy.linalg.expm(Q * t)
+        Pt = tt.slinalg.expm(Q * t)
+        print(Pt)
         L_data = 0
         for walk in dfs:
             if not walk.empty:
@@ -161,7 +162,7 @@ with markov_model:
                     else:
                         prev = steps[i - 1]
                         transition = prev + curr
-                        L_walk += np.log(Pt[transition_map_rates[transition]])
+                        L_walk += tt.log(Pt[transition_map_rates[transition]])
             L_data += L_walk
         return L_data
 
