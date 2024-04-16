@@ -974,7 +974,7 @@ def curves_phylogeny():
     plt.show()
 
 
-def curves_CTMC_simfit():
+def curves_CTMC_MLEsimfit():
 
     # Get timeseries data
     dfs = concatenator()
@@ -1018,6 +1018,177 @@ def curves_CTMC_simfit():
     Q = np.array(mle["rate"].values).reshape(4, 4)
     QL = np.array(mle["LB"].values).reshape(4, 4)
     QU = np.array(mle["UB"].values).reshape(4, 4)
+    for t in t_vals:
+        Pt = linalg.expm(Q * t)
+        PLt = linalg.expm(QL * t)
+        PUt = linalg.expm(QU * t)
+        curves.append([Pt, PLt, PUt])
+
+    plot_data = {"t": [], "first_cat": [], "shape": [], "P": [], "lb": [], "ub": []}
+
+    for i, list in enumerate(curves):
+        for j, matrix in enumerate(list):
+            for row in range(matrix.shape[0]):
+                for column in range(matrix.shape[1]):
+                    if j == 0:
+                        plot_data["t"].append(t_vals[i])
+                        plot_data["first_cat"].append(row)
+                        plot_data["shape"].append(column)
+                        plot_data["P"].append(matrix[row, column])
+                    elif j == 1:
+                        plot_data["lb"].append(matrix[row, column])
+                    elif j == 2:
+                        plot_data["ub"].append(matrix[row, column])
+
+    plot_data = pd.DataFrame(plot_data)
+    mapping = {0: "u", 1: "l", 2: "d", 3: "c"}
+    plot_data["first_cat"].replace(mapping, inplace=True)
+    plot_data["shape"].replace(mapping, inplace=True)
+    # replace any upper bound value greater than 1 with 1 (because they are probabilities)
+    plot_data["ub"] = plot_data["ub"].clip(upper=1)
+    print(plot_data)
+    plot_data_long = pd.melt(
+        plot_data,
+        id_vars=["t", "first_cat", "shape"],
+        value_vars=["P", "lb", "ub"],
+        var_name="variable",
+        value_name="value",
+    )
+    print(plot_data_long)
+
+    cmap = matplotlib.colors.ListedColormap(sns.color_palette("colorblind"))
+
+    # Create subplots
+    fig, axs = plt.subplots(
+        nrows=len(order) // 2, ncols=2, figsize=(12, 8), layout="constrained"
+    )
+
+    # Flatten axs for easy iteration
+    axs = axs.flatten()
+
+    # Plot for each category in first_cat
+    lines = []
+    for i, cat in enumerate(order):
+        ax = axs[i]
+        cat_data = plot_data[plot_data["first_cat"] == cat]
+        timeseries_cat_data = timeseries[timeseries["first_cat"] == cat]
+        for j, shape in enumerate(order):
+            shape_data = cat_data[cat_data["shape"] == shape]
+            timeseries_shape_data = timeseries_cat_data[
+                timeseries_cat_data["shape"] == shape
+            ]
+            (line1,) = ax.plot(
+                timeseries_shape_data["step"],
+                timeseries_shape_data["proportion"],
+                label=shape,
+                c=sns_palette[j],
+                linestyle="--",
+            )
+            (line,) = ax.plot(
+                shape_data["t"],
+                shape_data["P"],
+                label=shape,
+                c=sns_palette[j],
+                linestyle="-",  # cmap=cmap
+            )
+            ax.fill_between(
+                shape_data["t"],
+                shape_data["lb"],
+                shape_data["ub"],
+                alpha=0.3,
+                # cmap=cmap,
+            )
+            lines.append(line)
+        ax.spines[["right", "top"]].set_visible(False)
+        ax.set_title(f"Initial shape: {cat}")
+        ax.set_xlabel("t")
+        ax.set_ylabel("P")
+
+    fig.legend(lines, order, loc="outside right", title="shape")
+    plt.show()
+
+
+def curves_CTMC_mcmcsimfit():
+    # Get mcmc data
+    data_dir = "markov_fitter_reports/10000steps/unif11-04-24_t1everystep_burnin2000_acceptance0.99"
+    dfs = []
+    mcmc_reports = [file for file in os.listdir(data_dir) if file.endswith(".csv")]
+    for i, file in enumerate(mcmc_reports):
+        df = pd.read_csv(os.path.join(data_dir, file))
+        df["chain_id"] = i
+        dfs.append(df)
+    mcmc_data = pd.concat(dfs, ignore_index=True)
+    # exclude rows before the burnin of 2000
+    mcmc_data = mcmc_data[mcmc_data["step"] >= 2000].reset_index(drop=True)
+    # mcmc_data = mcmc_data.drop(columns=["q00", "q11", "q22", "q33"])
+    print(mcmc_data)
+    # print(mcmc_data.iloc[:, 2:-1].sem() * 1.96)
+    # print(mcmc_data.iloc[:, 2:-1].max())
+    # print(mcmc_data.iloc[:, 2:-1].min())
+    # Calculate means
+    mcmc_summary = mcmc_data.iloc[:, 2:-1].mean().reset_index()
+    mcmc_summary.columns = ["transition", "mean_rate"]
+    # Calculate confidence intervals
+    confidence_intervals = {}
+    for col in mcmc_data.columns[2:-1]:
+        data = mcmc_data[col].dropna()
+        print(data)
+        print(len(data))
+        exit()
+        confidence_intervals[col] = (
+            np.mean(data) - (1.96 * stats.sem(data)),
+            np.mean(data) + (1.96 * stats.sem(data)),
+        )
+
+        # stats.norm.interval(
+        #    0.95, loc=np.mean(data), scale=np.std(data) / np.sqrt(len(data))
+        # )
+    mcmc_summary["lb"] = [i[0] for i in confidence_intervals.values()]
+    mcmc_summary["ub"] = [i[1] for i in confidence_intervals.values()]
+    print(mcmc_summary)
+    # exit()
+
+    # Get timeseries data
+    dfs = concatenator()
+    for walk in dfs:
+        walk["step"] = walk.index.values
+    concat = pd.concat(dfs, ignore_index=True)
+    concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    timeseries = (
+        concat.groupby(["first_cat", "step", "shape"])
+        .size()
+        .reset_index(name="total_shape_firstcat")
+    )
+    timeseries_total = (
+        timeseries.groupby(["first_cat", "step"])
+        .agg(total_firstcat=("total_shape_firstcat", "sum"))
+        .reset_index()
+    )
+    timeseries = timeseries.merge(timeseries_total, on=["first_cat", "step"])
+    timeseries["proportion"] = (
+        timeseries["total_shape_firstcat"] / timeseries["total_firstcat"]
+    )
+    # add initial state to the timeseries
+    timeseries["step"] = timeseries["step"] + 1
+    for i in order:
+        timeseries.loc[-1] = {
+            "first_cat": i,
+            "step": 0,
+            "shape": i,
+            "total_shape_firstcat": np.nan,
+            "total_firstcat": np.nan,
+            "proportion": 1,
+        }
+        timeseries.index = timeseries.index + 1
+        timeseries = timeseries.sort_index()
+    print(timeseries)
+
+    # produce curves from mcmc inferred rates
+    t_vals = np.linspace(0, 120, 120)
+    curves = []
+    Q = np.array(mcmc_summary["mean_rate"].values).reshape(4, 4)
+    QL = np.array(mcmc_summary["lb"].values).reshape(4, 4)
+    QU = np.array(mcmc_summary["ub"].values).reshape(4, 4)
     for t in t_vals:
         Pt = linalg.expm(Q * t)
         PLt = linalg.expm(QL * t)
@@ -1269,8 +1440,62 @@ def randomwalk_rates_allswitch():
     # leafwalk = step60.groupby(["leafid", "walkid"])
 
 
+def MLE_rates_barplot():
+    data = pd.read_csv("MUT2.2_MLE_rates.csv")
+    replacement = {
+        "State 1": "u",
+        "State 2": "l",
+        "State 3": "d",
+        "State 4": "c",
+        "State.1": "u",
+        "State.2": "l",
+        "State.3": "d",
+        "State.4": "c",
+    }
+    data["initial_shape"] = data["initial_shape"].replace(replacement)
+    data["final_shape"] = data["final_shape"].replace(replacement)
+    data = data[data["initial_shape"] != data["final_shape"]]
+    data.rename(
+        columns={
+            "rate": "MLE",
+            "initial_shape": "Initial Shape",
+            "final_shape": "Final Shape",
+        },
+        inplace=True,
+    )
+    print(data)
+    # yerr = (data["SE"] * 1.96).to_list()
+    # print(yerr)
+    # plt.figure(figsize=(10, 6))
+    # plt.bar(data["transition"], data["rate"], yerr=yerr)
+    # plt.show()
+    melt = pd.melt(
+        data,
+        id_vars=["Initial Shape", "Final Shape", "SE", "transition"],
+        value_vars=["MLE", "LB", "UB"],
+        value_name="rate",
+    )
+    print(melt)
+    order_full = ["unlobed", "lobed", "dissected", "compound"]
+    labels = ["unlobed(u)", "lobed(l)", "dissected(d)", "compound(c)"]
+    g = sns.catplot(
+        data=melt,
+        y="rate",
+        x="Initial Shape",
+        hue="Final Shape",
+        kind="bar",
+        errorbar=lambda x: (x.min(), x.max()),
+        order=order,
+        hue_order=order,
+    )
+    g.set_xticklabels(labels=labels)
+    plt.ylabel("Evolutionary Rate")
+    plt.show()
+
+
 if __name__ == "__main__":
-    curves_CTMC_simfit()
+    # curves_CTMC_mcmcsimfit()
+    MLE_rates_barplot()
     # randomwalk_rates_firstswitch()
 
     # stack_plot()
