@@ -19,6 +19,7 @@ step_size = 0.05  # random numbers are picked uniformly between + and - this num
 # step parameters
 mean = 0
 stdev = 0.005
+# for acceptance=0.99 stdev=0.005 seems to work well
 
 
 transition_map_rates = {
@@ -145,7 +146,7 @@ def likelihood_rates_t1(Q):
                     prev = steps[i - 1]
                     transition = prev + curr
                     L_walk += np.log(Pt[transition_map_rates[transition]])
-        L_data += L_walk
+            L_data += L_walk
 
     return L_data
 
@@ -195,12 +196,15 @@ def metropolis_hastings_rates(chain_id):
         # location_l += 10000
         # proposal_l += 10000
         # acceptance_ratio = proposal_l / location_l  # for maximising likelihood
-        acceptance_ratio = location_l / proposal_l  # for maximising log_likelihood
-        # acceptance_ratio = np.exp(proposal_l - location_l)
+        # acceptance_ratio = location_l / proposal_l  # for maximising log_likelihood
+        # acceptance_ratio = proposal_l / location_l
+        acceptance_ratio = np.exp(proposal_l - location_l)
+        # location_l -= 10000
+        # proposal_l -= 10000
         # print(proposal_l / location_l)
         print(step, location_l, proposal_l, acceptance_ratio)
-        acceptance_threshold = np.random.uniform(0.99, 1)
-        # acceptance_threshold = np.random.uniform(0, 1)
+        # acceptance_threshold = np.random.uniform(0.99, 1)
+        acceptance_threshold = np.random.uniform(0, 1)
         if acceptance_ratio > acceptance_threshold:
             location = copy.deepcopy(proposal)
             location_l = copy.deepcopy(proposal_l)

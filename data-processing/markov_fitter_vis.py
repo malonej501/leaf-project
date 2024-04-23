@@ -4,7 +4,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 order = ["u", "l", "d", "c"]
-burnin = 500  # no. steps to discard when calculating posteriors
+burnin = 2000  # proportion of steps to discard from the beginning of each chain when calculating posteriors
+sns.set_palette("colorblind")
 
 
 def get_data():
@@ -81,10 +82,23 @@ def get_posterior_overall():
         y="rate",
         x="initial_shape",
         hue="final_shape",
-        kind="box",
+        kind="bar",
         palette="colorblind",
         hue_order=order,
         col_order=order,
+    )
+    plt.show()
+
+
+def posterior_overall_pertransition_hist():
+    data_post_burnin_nondiag_long = get_data_post_burnin_long()
+
+    sns.displot(
+        data=data_post_burnin_nondiag_long,
+        x="rate",
+        kind="hist",
+        col="transition",
+        col_wrap=4,
     )
     plt.show()
 
@@ -136,8 +150,21 @@ def rate_against_frequency():
     plt.show()
 
 
-# plot_LL()
-# get_posterior_by_chain()
-# get_posterior_overall()
-# rate_convergence()
-rate_against_frequency()
+def relative_rates():
+    data = get_data_post_burnin_long()
+    data.groupby(["transition", "chain_id", "step"]).apply()
+
+    # data["total_rate"] =
+
+    print(data)
+
+
+if __name__ == "__main__":
+    # posterior_overall_pertransition_hist()
+    # plot_LL()
+    # get_posterior_by_chain()
+    get_posterior_overall()
+    # rate_convergence()
+    # rate_against_frequency()
+
+    # relative_rates()
