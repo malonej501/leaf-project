@@ -90,7 +90,7 @@ def sample_families(sample_fams):
 def img_from_sample():
     print("Reading data...")
     sample = pd.read_csv(
-        "sample_eud_13-1-24/Naturalis_occurrence_eud_sample_13-01-24.csv"
+        "sample_eud_22-4-24/Naturalis_occurrence_eud_sample_22-04-24.csv"
     )
     print("Done!")
 
@@ -127,5 +127,5 @@ def download_imgs():
 
 
 if __name__ == "__main__":
-    # sample_families(eud_fams)
+    #sample_families(eud_fams)
     img_from_sample()

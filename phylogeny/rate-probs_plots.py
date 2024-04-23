@@ -9,8 +9,8 @@ import copy
 import sympy as sp
 from sympy import *
 
-wd = "mcmc/unif_geeta_21-02-24/"
-filename = "mcmc_unif_21-02-24_geeta.csv"
+wd = "Geeta/mcmc/Geeta_23-04-24/"
+filename = "561AngLf09_D.csv"
 
 ##### Getting Probs #####
 
