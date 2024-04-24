@@ -356,6 +356,14 @@ def kruskal_test(rates_full):
 
 def plot_rates_batch(rates):
     mapping = {"0": "u", "1": "l", "2": "d", "3": "c"}
+    col_order = [
+        "geeta_phylo_geeta_class",
+        "solt_phylo_geeta_class",
+        "jan_phylo_geeta_class",
+        "geeta_phylo_nat_class",
+        "solt_phylo_nat_class",
+        "jan_phylo_nat_class",
+    ]
 
     rates_long = pd.melt(
         rates, id_vars=["phylo-class"], var_name="transition", value_name="rate"
@@ -375,13 +383,30 @@ def plot_rates_batch(rates):
         col_wrap=3,
         order=order,
         hue_order=order,
+        col_order=col_order,
         palette="colorblind",
         kind="box",
+        # height=3,
+        # aspect=1.4,
     )
-    g.set_xticklabels(labels=labels)
-    g.set_axis_labels("Initial Shape", "Normalised Evolutionary Rate")
-    g._legend.set_title("Final Shape")
+    g.set_xticklabels(labels=labels, fontsize=12)
+    g.set_axis_labels("Initial Shape", "Normalised Evolutionary Rate", fontsize=16)
+    g._legend.set_title("Final Shape", prop={"size": 16})
+    g.set_titles(size=12)
+    for text in g._legend.get_texts():
+        text.set_fontsize(12)
+    for ax in g.axes.flat:
+        ax.tick_params(axis="y", labelsize=12)
+    plt.subplots_adjust(right=0.92)
+    # plt.tight_layout()
     plt.show()
+
+
+def rates_batch_stats(rates):
+    print(rates)
+    stats = rates.groupby("phylo-class").agg(["mean", "sem"])
+    statsT = stats.T
+    statsT.to_csv("phylogenetic_rates_norm_stats.csv")
 
 
 def plot_rates_trace_hist(rates):
@@ -427,7 +452,8 @@ if __name__ == "__main__":
     # curves_phylogeny()
     # catplot1()
     # catplot2()
-    rates = get_rates_batch(directory="all_rates/1000steps")
+    rates = get_rates_batch(directory="all_rates/uniform_1010000steps")
     # plot_rates_trace_hist(rates)
     rates_norm = normalise_rates(rates)
-    plot_rates_batch(rates_norm)
+    rates_batch_stats(rates_norm)
+    # plot_rates_batch(rates_norm)
