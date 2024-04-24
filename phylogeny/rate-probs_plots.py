@@ -30,12 +30,12 @@ def get_rates_single():
     return rates_full, rates_full_wstat
 
 
-def get_rates_batch():
+def get_rates_batch(directory):
     data = []
 
-    for filename in os.listdir("all_rates"):
+    for filename in os.listdir(directory):
         if filename.endswith(".csv"):
-            path = os.path.join("all_rates", filename)
+            path = os.path.join(directory, filename)
             df = pd.read_csv(path)
             df["phylo-class"] = filename[:-4]
             data.append(df)
@@ -376,11 +376,40 @@ def plot_rates_batch(rates):
         order=order,
         hue_order=order,
         palette="colorblind",
-        kind="bar",
+        kind="box",
     )
     g.set_xticklabels(labels=labels)
-    g.set_axis_labels("Initial Shape", "Evolutionary rate")
+    g.set_axis_labels("Initial Shape", "Normalised Evolutionary Rate")
     g._legend.set_title("Final Shape")
+    plt.show()
+
+
+def plot_rates_trace_hist(rates):
+    # rates_sub = rates[rates["phylo-class"] == "jan_phylo_nat_class"].reset_index(
+    #     drop=True
+    # )
+    rates_sub = rates[
+        rates["phylo-class"] == "solt_phylo_geeta_class_norm_prior"
+    ].reset_index(drop=True)
+    rates_sub.reset_index(inplace=True)
+    rates_sub.drop(columns=["phylo-class"], inplace=True)
+    rates_sub_long = pd.melt(
+        rates_sub, id_vars=["index"], var_name="transition", value_name="rate"
+    )
+    print(rates_sub_long)
+
+    sns.displot(
+        data=rates_sub_long, x="rate", col="transition", col_wrap=4, kind="hist"
+    )
+    plt.show()
+    sns.relplot(
+        data=rates_sub_long,
+        y="rate",
+        x="index",
+        col="transition",
+        col_wrap=4,
+        kind="line",
+    )
     plt.show()
 
 
@@ -398,6 +427,7 @@ if __name__ == "__main__":
     # curves_phylogeny()
     # catplot1()
     # catplot2()
-    rates = get_rates_batch()
+    rates = get_rates_batch(directory="all_rates/1000steps")
+    # plot_rates_trace_hist(rates)
     rates_norm = normalise_rates(rates)
     plot_rates_batch(rates_norm)
