@@ -6,19 +6,67 @@ import pandas as pd
 from scipy.stats import kruskal
 from scipy import linalg
 import copy
+import os
 import sympy as sp
 from sympy import *
 
-wd = "Geeta/mcmc/Geeta_23-04-24/"
-filename = "561AngLf09_D.csv"
+##### Getting Rates #####
+
+
+def get_rates_single():
+    wd = "Geeta/mcmc/Geeta_23-04-24/"
+    filename = "561AngLf09_D.csv"
+    rates_full = pd.read_csv(wd + filename)
+
+    #### Insert new columns for stationary rates
+
+    rates_full_wstat = copy.deepcopy(rates_full)
+    rates_full_wstat.insert(0, "q00", 0 - rates_full.iloc[:, 0:3].sum(axis=1))
+    rates_full_wstat.insert(5, "q11", 0 - rates_full.iloc[:, 3:6].sum(axis=1))
+    rates_full_wstat.insert(10, "q22", 0 - rates_full.iloc[:, 6:9].sum(axis=1))
+    rates_full_wstat.insert(15, "q33", 0 - rates_full.iloc[:, 9:12].sum(axis=1))
+    # print(rates_full_wstat)
+
+    return rates_full, rates_full_wstat
+
+
+def get_rates_batch():
+    data = []
+
+    for filename in os.listdir("all_rates"):
+        if filename.endswith(".csv"):
+            path = os.path.join("all_rates", filename)
+            df = pd.read_csv(path)
+            df["phylo-class"] = filename[:-4]
+            data.append(df)
+
+    data_concat = pd.concat(data, ignore_index=True)
+    print(data_concat)
+    return data_concat
+
+
+def normalise_rates(all_rates):
+    all_rates["group_max"] = (
+        all_rates.groupby("phylo-class").transform("max").max(axis=1)
+    )
+    print(all_rates)
+    print(set(all_rates["group_max"]))
+
+    norm = all_rates.iloc[:, 0:11].div(all_rates["group_max"], axis=0)
+    norm["phylo-class"] = all_rates["phylo-class"]
+    print(norm)
+    return norm
+
 
 ##### Getting Probs #####
 
 
 T = 0.1  # set value of T to enumerate probabilities
 N_trees = 1  # declare the number of trees used to estimate the parameters
+order = ["u", "l", "d", "c"]
+labels = ["unlobed(u)", "lobed(l)", "dissected(d)", "compound(c)"]
 
-rates_full = pd.read_csv(wd + filename)
+
 # print(rates_full)
 prob_tab = pd.DataFrame(
     {
@@ -40,15 +88,6 @@ prob_tab = pd.DataFrame(
         "p33": [],
     }
 )
-
-#### Insert new columns for stationary rates
-
-rates_full_wstat = copy.deepcopy(rates_full)
-rates_full_wstat.insert(0, "q00", 0 - rates_full.iloc[:, 0:3].sum(axis=1))
-rates_full_wstat.insert(5, "q11", 0 - rates_full.iloc[:, 3:6].sum(axis=1))
-rates_full_wstat.insert(10, "q22", 0 - rates_full.iloc[:, 6:9].sum(axis=1))
-rates_full_wstat.insert(15, "q33", 0 - rates_full.iloc[:, 9:12].sum(axis=1))
-# print(rates_full_wstat)
 
 #### Calculate Probabilities give t=0.1
 
@@ -82,7 +121,7 @@ def getprobs(Q):
     return Peval
 
 
-def rates_probs_mean(prob_tab):
+def rates_probs_mean(prob_tab, rates_full_wstat, wd, filename):
 
     for i in range(0, len(rates_full_wstat)):
         rates = matrixfromrow(rates_full_wstat, i)
@@ -96,7 +135,7 @@ def rates_probs_mean(prob_tab):
     return prob_tab
 
 
-def rates_mean_probs(prob_tab):
+def rates_mean_probs(prob_tab, rates_full_wstat, wd, filename):
     print(rates_full_wstat)
     print(rates_full_wstat.mean())
     means = rates_full_wstat.mean()
@@ -147,17 +186,12 @@ def translong(data, dtype):
     return full_trans, full_long
 
 
-probs_full = rates_probs_mean(prob_tab)
-rates_full_trans, rates_full_long = translong(rates_full, "rate")
-probs_full_trans, probs_full_long = translong(probs_full, "prob")
-print(rates_full_long)
-
 #### Plot Uncertainty of Probabilities
 
 colours = sns.color_palette("colorblind")
 
 
-def box1():
+def box1(probs_full, wd, filename):
     sns.boxplot(data=probs_full, orient="v", palette=colours)
     plt.xlabel("Transition type")
     plt.ylabel(f"Probability (t={T})")
@@ -168,7 +202,7 @@ def box1():
     plt.clf()
 
 
-def catplot1():
+def catplot1(probs_full_long, wd, filename):
     order = ["u", "l", "d", "c"]
     labels = ["unlobed(u)", "lobed(l)", "dissected(d)", "compound(c)"]
 
@@ -207,9 +241,7 @@ def catplot1():
 #### Plot Uncertainty of Rates
 
 
-def catplot2():
-    order = ["u", "l", "d", "c"]
-    labels = ["unlobed(u)", "lobed(l)", "dissected(d)", "compound(c)"]
+def catplot2(rates_full_long, wd, filename):
 
     rates_full_long_sorted = rates_full_long.sort_values(
         by=["last_cat"], key=lambda x: x.map({v: i for i, v in enumerate(order)})
@@ -240,7 +272,7 @@ def catplot2():
     plt.clf()
 
 
-def box2():
+def box2(rates_full, wd, filename):
     sns.boxplot(data=rates_full, orient="v", palette=colours)
     plt.xlabel("Rate parameter")
     plt.ylabel("Evolutionary rate")
@@ -251,7 +283,7 @@ def box2():
     plt.clf()
 
 
-def curves_phylogeny():
+def curves_phylogeny(rates_full, rates_full_wstat, wd, filename):
 
     tee = sp.symbols("t")
 
@@ -322,10 +354,50 @@ def kruskal_test(rates_full):
     print(kruskal_result)
 
 
-# rates_probs_mean(prob_tab)
-# catplot1()
-# catplot2()
+def plot_rates_batch(rates):
+    mapping = {"0": "u", "1": "l", "2": "d", "3": "c"}
 
-curves_phylogeny()
-catplot1()
-catplot2()
+    rates_long = pd.melt(
+        rates, id_vars=["phylo-class"], var_name="transition", value_name="rate"
+    )
+    rates_long["first_cat"] = [str[1] for str in rates_long["transition"]]
+    rates_long["first_cat"] = rates_long["first_cat"].replace(mapping)
+    rates_long["last_cat"] = [str[2] for str in rates_long["transition"]]
+    rates_long["last_cat"] = rates_long["last_cat"].replace(mapping)
+
+    print(rates_long)
+    g = sns.catplot(
+        data=rates_long,
+        y="rate",
+        x="first_cat",
+        hue="last_cat",
+        col="phylo-class",
+        col_wrap=3,
+        order=order,
+        hue_order=order,
+        palette="colorblind",
+        kind="bar",
+    )
+    g.set_xticklabels(labels=labels)
+    g.set_axis_labels("Initial Shape", "Evolutionary rate")
+    g._legend.set_title("Final Shape")
+    plt.show()
+
+
+if __name__ == "__main__":
+    # rates_full, rates_full_wstat = get_rates_single()
+    # probs_full = rates_probs_mean(prob_tab)
+    # rates_full_trans, rates_full_long = translong(rates_full, "rate")
+    # probs_full_trans, probs_full_long = translong(probs_full, "prob")
+    # print(rates_full_long)
+
+    # rates_probs_mean(prob_tab)
+    # catplot1()
+    # catplot2()
+
+    # curves_phylogeny()
+    # catplot1()
+    # catplot2()
+    rates = get_rates_batch()
+    rates_norm = normalise_rates(rates)
+    plot_rates_batch(rates_norm)
