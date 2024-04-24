@@ -44,7 +44,7 @@ def get_transition_count(dfs):
     return count_df
 
 
-def log_prob_old(params):
+def log_prob_old(params, dfs):
     Q = np.array(
         [
             [-(params[0] + params[1] + params[2]), params[0], params[1], params[2]],
@@ -92,69 +92,117 @@ def log_prob(params):
     return log_prob
 
 
-dfs = get_data()
-transitions = get_transition_count(dfs)
-print(transitions)
-init_params = np.random.rand(nwalkers, ndim)
+def run_mcmc():
+    dfs = get_data()
+    global transitions
+    transitions = get_transition_count(dfs)
+    print(transitions)
+    init_params = np.random.rand(nwalkers, ndim)
+
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob)
+    state = sampler.run_mcmc(
+        init_params, 25000, skip_initial_state_check=True, progress=True
+    )
+
+    samples = sampler.get_chain(flat=True, discard=15000)
+    samples = pd.DataFrame(samples)
+    samples.to_csv("emcee_run_log.csv", index=False)
+
+    return samples, sampler
 
 
-sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob)
-state = sampler.run_mcmc(
-    init_params, 25000, skip_initial_state_check=True, progress=True
-)
+def plot_posterior(samples, sampler):
 
-# plot posterior distributions
-samples = sampler.get_chain(flat=True, discard=15000)
-samples = pd.DataFrame(samples)
-samples.to_csv("emcee_run_log.csv")
-exit()
-samples_long = pd.melt(samples, var_name="parameter", value_name="rate")
-samples_long["initial_shape"], samples_long["final_shape"] = zip(
-    *samples_long["parameter"].map(rates_map)
-)
-samples_long["transition"] = samples_long["initial_shape"] + samples_long["final_shape"]
-summary = samples_long.groupby("transition").agg({"rate": ["mean", "sem"]})
-summary.to_csv("MUT2.2_emcee_rates.csv")
+    samples_long = pd.melt(samples, var_name="parameter", value_name="rate")
+    samples_long["initial_shape"], samples_long["final_shape"] = zip(
+        *samples_long["parameter"].map(rates_map)
+    )
+    samples_long["transition"] = (
+        samples_long["initial_shape"] + samples_long["final_shape"]
+    )
+    summary = samples_long.groupby("transition").agg({"rate": ["mean", "sem"]})
+    summary.to_csv("MUT2.2_emcee_rates.csv")
 
-sns.displot(
-    data=samples_long,
-    x="rate",
-    col="transition",
-    col_wrap=4,
-    kind="hist",
-)
-plt.show()
-plt.clf()
+    sns.displot(
+        data=samples_long,
+        x="rate",
+        col="transition",
+        col_wrap=4,
+        kind="hist",
+    )
+    plt.show()
+    plt.clf()
 
-order = ["u", "l", "d", "c"]
-labels = ["unlobed(u)", "lobed(l)", "dissected(d)", "compound(c)"]
-g = sns.catplot(
-    data=samples_long,
-    y="rate",
-    x="initial_shape",
-    hue="final_shape",
-    kind="bar",
-    palette="colorblind",
-    order=order,
-    hue_order=order,
-)
-g.set_xticklabels(labels=labels)
-g._legend.set_title("Final Shape")
-plt.ylabel("Evolutionary Rate")
-plt.xlabel("Initial Shape")
+    order = ["u", "l", "d", "c"]
+    labels = ["unlobed(u)", "lobed(l)", "dissected(d)", "compound(c)"]
+    g = sns.catplot(
+        data=samples_long,
+        y="rate",
+        x="initial_shape",
+        hue="final_shape",
+        kind="bar",
+        palette="colorblind",
+        order=order,
+        hue_order=order,
+    )
+    g.set_xticklabels(labels=labels)
+    g._legend.set_title("Final Shape")
+    plt.ylabel("Evolutionary Rate")
+    plt.xlabel("Initial Shape")
 
-plt.show()
+    plt.show()
 
-chain = sampler.get_chain()[
-    :, 1, :
-]  # from the left to right the indicies represent: step, chain, parameter
-# here we take all steps for all parameters from one chain
-chain = pd.DataFrame(chain)
-chain["step"] = chain.index
-chain_long = pd.melt(chain, id_vars=["step"], var_name="parameter", value_name="rate")
-sns.relplot(
-    data=chain_long, x="step", y="rate", col="parameter", col_wrap=4, kind="line"
-)
-plt.show()
-plt.clf()
-chain = []
+    chain = sampler.get_chain()[
+        :, 1, :
+    ]  # from the left to right the indicies represent: step, chain, parameter
+    # here we take all steps for all parameters from one chain
+    chain = pd.DataFrame(chain)
+    chain["step"] = chain.index
+    chain_long = pd.melt(
+        chain, id_vars=["step"], var_name="parameter", value_name="rate"
+    )
+    sns.relplot(
+        data=chain_long, x="step", y="rate", col="parameter", col_wrap=4, kind="line"
+    )
+    plt.show()
+    plt.clf()
+    chain = []
+
+
+def plot_posterior_fromfile(file):
+    samples = pd.read_csv(file)
+    samples_norm = samples.div(samples.max(axis=None))
+    norm_long = pd.melt(samples_norm, var_name="parameter", value_name="rate")
+    norm_long["parameter"] = norm_long["parameter"].astype(int)
+    norm_long["initial_shape"], norm_long["final_shape"] = zip(
+        *norm_long["parameter"].map(rates_map)
+    )
+    print(samples)
+    print(norm_long)
+    order = ["u", "l", "d", "c"]
+    labels = ["unlobed(u)", "lobed(l)", "dissected(d)", "compound(c)"]
+    g = sns.catplot(
+        data=norm_long,
+        y="rate",
+        x="initial_shape",
+        hue="final_shape",
+        kind="bar",
+        palette="colorblind",
+        order=order,
+        hue_order=order,
+    )
+    g.set(ylim=(0, 1))
+    g.set_xticklabels(labels=labels)
+    g._legend.set_title("Final Shape")
+    plt.ylabel("Normalised Evolutionary Rate")
+    plt.xlabel("Initial Shape")
+
+    plt.show()
+
+
+if __name__ == "__main__":
+    # samples, sampler = runmcmc()
+    # plot_posterior(samples, sampler)
+    plot_posterior_fromfile(
+        "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
+    )
