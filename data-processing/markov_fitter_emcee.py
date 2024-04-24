@@ -106,13 +106,15 @@ state = sampler.run_mcmc(
 # plot posterior distributions
 samples = sampler.get_chain(flat=True, discard=15000)
 samples = pd.DataFrame(samples)
+samples.to_csv("emcee_run_log.csv")
+exit()
 samples_long = pd.melt(samples, var_name="parameter", value_name="rate")
 samples_long["initial_shape"], samples_long["final_shape"] = zip(
     *samples_long["parameter"].map(rates_map)
 )
 samples_long["transition"] = samples_long["initial_shape"] + samples_long["final_shape"]
 summary = samples_long.groupby("transition").agg({"rate": ["mean", "sem"]})
-summary.to_csv("MUT2.2_emcee_rates_16-04-24.csv")
+summary.to_csv("MUT2.2_emcee_rates.csv")
 
 sns.displot(
     data=samples_long,
