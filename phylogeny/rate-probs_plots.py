@@ -52,7 +52,7 @@ def normalise_rates(all_rates):
     print(all_rates)
     print(set(all_rates["group_max"]))
 
-    norm = all_rates.iloc[:, 0:11].div(all_rates["group_max"], axis=0)
+    norm = all_rates.iloc[:, 0:12].div(all_rates["group_max"], axis=0)
     norm["phylo-class"] = all_rates["phylo-class"]
     print(norm)
     return norm
@@ -406,7 +406,23 @@ def rates_batch_stats(rates):
     print(rates)
     stats = rates.groupby("phylo-class").agg(["mean", "sem"])
     statsT = stats.T
-    statsT.to_csv("phylogenetic_rates_norm_stats.csv")
+    # statsT.to_csv("phylogenetic_rates_norm_stats.csv")
+    means = rates.groupby("phylo-class").agg(["mean"])
+    meansdiff = pd.DataFrame()
+    meansdiff["q01"] = means["q01"] - means["q10"]
+    meansdiff["q02"] = means["q02"] - means["q20"]
+    meansdiff["q03"] = means["q03"] - means["q30"]
+    meansdiff["q10"] = means["q10"] - means["q01"]
+    meansdiff["q12"] = means["q12"] - means["q21"]
+    meansdiff["q13"] = means["q13"] - means["q31"]
+    meansdiff["q20"] = means["q20"] - means["q02"]
+    meansdiff["q21"] = means["q21"] - means["q12"]
+    meansdiff["q23"] = means["q23"] - means["q32"]
+    meansdiff["q30"] = means["q30"] - means["q03"]
+    meansdiff["q31"] = means["q31"] - means["q13"]
+    meansdiff["q32"] = means["q32"] - means["q23"]
+    print(meansdiff)
+    meansdiff.T.to_csv("phylogenetic_meanrates_diff_norm.csv")
 
 
 def plot_rates_trace_hist(rates):
