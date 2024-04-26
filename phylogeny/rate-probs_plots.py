@@ -12,6 +12,21 @@ from sympy import *
 
 ##### Getting Rates #####
 
+rates_map = {
+    "q01": ("u", "l"),
+    "q02": ("u", "d"),
+    "q03": ("u", "c"),
+    "q10": ("l", "u"),
+    "q12": ("l", "d"),
+    "q13": ("l", "c"),
+    "q20": ("d", "u"),
+    "q21": ("d", "l"),
+    "q23": ("d", "c"),
+    "q30": ("c", "u"),
+    "q31": ("c", "l"),
+    "q32": ("c", "d"),
+}
+
 
 def get_rates_single():
     wd = "Geeta/mcmc/Geeta_23-04-24/"
@@ -385,7 +400,7 @@ def plot_rates_batch(rates):
         hue_order=order,
         col_order=col_order,
         palette="colorblind",
-        kind="box",
+        kind="bar",
         # height=3,
         # aspect=1.4,
     )
@@ -454,6 +469,127 @@ def plot_rates_trace_hist(rates):
     plt.show()
 
 
+def plot_phylo_and_sim_rates(phylo_rates):
+    sim_rates = pd.read_csv(
+        "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
+    )
+    sim_rates_norm = sim_rates.div(sim_rates.max(axis=None))
+    sim_rates_norm["phylo-class"] = "MUT2.2_simulation"
+    name_map = {
+        "0": "q01",
+        "1": "q02",
+        "2": "q03",
+        "3": "q10",
+        "4": "q12",
+        "5": "q13",
+        "6": "q20",
+        "7": "q21",
+        "8": "q23",
+        "9": "q30",
+        "10": "q31",
+        "11": "q32",
+    }
+    sim_rates_norm = sim_rates_norm.rename(columns=name_map)
+    phylo_sim = pd.concat([sim_rates_norm, phylo_rates]).reset_index(drop=True)
+    phylo_sim = phylo_sim.rename(columns={"phylo-class": "Dataset"})
+    phylo_sim_long = pd.melt(
+        phylo_sim, id_vars=["Dataset"], var_name="transition", value_name="rate"
+    )
+    phylo_sim_long["initial_shape"], phylo_sim_long["final_shape"] = zip(
+        *phylo_sim_long["transition"].map(rates_map)
+    )
+
+    # Select the datasets to plot e.g. MUT2.2 simulation and 2 phylogenies
+
+    phylo_sim_sub = phylo_sim_long[
+        phylo_sim_long["Dataset"].isin(
+            ["MUT2.2_simulation", "geeta_phylo_geeta_class", "jan_phylo_nat_class"]
+        )
+    ].reset_index(drop=True)
+    phylo_sim_sub["Dataset"] = phylo_sim_sub["Dataset"].replace(
+        {
+            "MUT2.2_simulation": "Simulation",
+            "jan_phylo_nat_class": "Phylogeny 1",
+            "geeta_phylo_geeta_class": "Phylogeny 2",
+        }
+    )
+    # g = sns.catplot(
+    #     data=phylo_sim_sub,
+    #     y="rate",
+    #     x="transition",
+    #     col="Dataset",
+    #     col_wrap=3,
+    #     # hue="final_shape",
+    #     # order=order,
+    #     # hue_order=order,
+    #     palette="colorblind",
+    #     kind="box",
+    #     # height=3,
+    #     # aspect=1.4,
+    # )
+    # # g.set_xticklabels(labels=labels, fontsize=12)
+    # g.set_axis_labels("Transition", "Normalised Evolutionary Rate", fontsize=13)
+    # # g._legend.set_title("Final Shape", prop={"size": 16})
+    # g.set_titles(size=13)
+    # # for text in g._legend.get_texts():
+    # #     text.set_fontsize(12)
+    # for ax in g.axes.flat:
+    #     ax.tick_params(axis="y", labelsize=12)
+    #     ax.tick_params(axis="x", labelsize=12)
+    # # plt.subplots_adjust(right=0.92)
+    # # # plt.tight_layout()
+    # plt.show()
+
+    plot_order = ["Simulation", "Phylogeny 1", "Phylogeny 2"]
+    fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(8, 8))
+
+    counter = -1
+    for i, row in enumerate(axes):
+        for j, ax in enumerate(row):
+            if i == j:
+                axes[i, j].axis("off")
+            if i != j:
+                counter += 1
+                transition = list(rates_map)[counter]
+                plot_data = phylo_sim_sub[phylo_sim_sub["transition"] == transition]
+                bar_data = []
+                for dataset in plot_order:
+                    bar_data.append(plot_data["rate"][plot_data["Dataset"] == dataset])
+                bp = ax.boxplot(
+                    bar_data,
+                    patch_artist=True,
+                    showmeans=True,
+                    meanline=True,
+                    showfliers=False,
+                )
+                for mean in bp["means"]:
+                    mean.set(color="black")
+                for median in bp["medians"]:
+                    median.set_visible(False)
+                for k, box in enumerate(bp["boxes"]):
+                    box.set_facecolor(sns.color_palette("colorblind")[k])
+                ax.set_title(transition)
+                ax.set_ylim(0, 1)
+            if j == 0:
+                ax.set_ylabel("Rate")
+            if i == 3:
+                ax.set_xticklabels(["S", "P1", "P2"])
+                ax.set_xlabel("Dataset")
+            if j == 3 and i == 2:
+                ax.set_xticklabels(["S", "P1", "P2"])
+            if (i, j) == (0, 1):
+                ax.set_ylabel("Rate")
+            if j != 0 and (i, j) != (0, 1):
+                ax.set_yticklabels([])
+            if i != 3 and (i, j) != (2, 3):
+                ax.set_xticklabels([])
+            if (i, j) == (2, 3):
+                ax.set_xlabel("Dataset")
+    plt.tight_layout()
+    plt.subplots_adjust(hspace=0.2, wspace=0.2)
+    plt.show()
+
+
 if __name__ == "__main__":
     # rates_full, rates_full_wstat = get_rates_single()
     # probs_full = rates_probs_mean(prob_tab)
@@ -468,8 +604,9 @@ if __name__ == "__main__":
     # curves_phylogeny()
     # catplot1()
     # catplot2()
-    rates = get_rates_batch(directory="all_rates/uniform_1010000steps")
+    phylo_rates = get_rates_batch(directory="all_rates/uniform_1010000steps")
     # plot_rates_trace_hist(rates)
-    rates_norm = normalise_rates(rates)
-    rates_batch_stats(rates_norm)
+    phylo_rates_norm = normalise_rates(phylo_rates)
+    plot_phylo_and_sim_rates(phylo_rates_norm)
+    # rates_batch_stats(rates_norm)
     # plot_rates_batch(rates_norm)
