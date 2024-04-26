@@ -544,6 +544,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
     fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(8, 8))
 
     counter = -1
+    legend_labels = []
     for i, row in enumerate(axes):
         for j, ax in enumerate(row):
             if i == j:
@@ -555,6 +556,8 @@ def plot_phylo_and_sim_rates(phylo_rates):
                 bar_data = []
                 for dataset in plot_order:
                     bar_data.append(plot_data["rate"][plot_data["Dataset"] == dataset])
+                    if dataset not in legend_labels:
+                        legend_labels.append(dataset)
                 bp = ax.boxplot(
                     bar_data,
                     patch_artist=True,
@@ -586,6 +589,17 @@ def plot_phylo_and_sim_rates(phylo_rates):
             if (i, j) == (2, 3):
                 ax.set_xlabel("Dataset")
     plt.tight_layout()
+    legend_handles = [
+        plt.Rectangle((0, 0), 1, 1, color=sns.color_palette("colorblind")[i])
+        for i, label in enumerate(legend_labels)
+    ]
+    plt.legend(
+        legend_handles,
+        legend_labels,
+        loc="lower right",
+        # loc="outside center right",
+        # bbox_to_anchor=(1.2, 0.5),
+    )
     plt.subplots_adjust(hspace=0.2, wspace=0.2)
     plt.show()
 
