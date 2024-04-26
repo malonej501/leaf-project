@@ -1110,21 +1110,25 @@ def curves_CTMC_MLEsimfit():
 
 def curves_CTMC_mcmcsimfit():
     # Get mcmc data
-    data_dir = "markov_fitter_reports/10000steps/unif11-04-24_t1everystep_burnin2000_acceptance0.99"
-    dfs = []
-    mcmc_reports = [file for file in os.listdir(data_dir) if file.endswith(".csv")]
-    for i, file in enumerate(mcmc_reports):
-        df = pd.read_csv(os.path.join(data_dir, file))
-        df["chain_id"] = i
-        dfs.append(df)
-    mcmc_data = pd.concat(dfs, ignore_index=True)
-    # exclude rows before the burnin of 2000
-    mcmc_data = mcmc_data[mcmc_data["step"] >= 2000].reset_index(drop=True)
-    # mcmc_data = mcmc_data.drop(columns=["q00", "q11", "q22", "q33"])
+    mcmc_data = pd.read_csv(
+        "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
+    )
+    name_map = {
+        "0": "q01",
+        "1": "q02",
+        "2": "q03",
+        "3": "q10",
+        "4": "q12",
+        "5": "q13",
+        "6": "q20",
+        "7": "q21",
+        "8": "q23",
+        "9": "q30",
+        "10": "q31",
+        "11": "q32",
+    }
+    mcmc_data = mcmc_data.rename(columns=name_map)
     print(mcmc_data)
-    # print(mcmc_data.iloc[:, 2:-1].sem() * 1.96)
-    # print(mcmc_data.iloc[:, 2:-1].max())
-    # print(mcmc_data.iloc[:, 2:-1].min())
     # Calculate means
     mcmc_summary = mcmc_data.iloc[:, 2:-1].mean().reset_index()
     mcmc_summary.columns = ["transition", "mean_rate"]
@@ -1132,9 +1136,6 @@ def curves_CTMC_mcmcsimfit():
     confidence_intervals = {}
     for col in mcmc_data.columns[2:-1]:
         data = mcmc_data[col].dropna()
-        print(data)
-        print(len(data))
-        exit()
         confidence_intervals[col] = (
             np.mean(data) - (1.96 * stats.sem(data)),
             np.mean(data) + (1.96 * stats.sem(data)),
@@ -1146,7 +1147,6 @@ def curves_CTMC_mcmcsimfit():
     mcmc_summary["lb"] = [i[0] for i in confidence_intervals.values()]
     mcmc_summary["ub"] = [i[1] for i in confidence_intervals.values()]
     print(mcmc_summary)
-    # exit()
 
     # Get timeseries data
     dfs = concatenator()
@@ -1494,8 +1494,8 @@ def MLE_rates_barplot():
 
 
 if __name__ == "__main__":
-    # curves_CTMC_mcmcsimfit()
-    MLE_rates_barplot()
+    curves_CTMC_mcmcsimfit()
+    # MLE_rates_barplot()
     # randomwalk_rates_firstswitch()
 
     # stack_plot()
