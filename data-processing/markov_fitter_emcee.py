@@ -44,6 +44,93 @@ def get_transition_count(dfs):
     return count_df
 
 
+def get_transition_count_avg(dfs):
+    count_dfs = []
+    for walk in dfs:
+        walk_transitions = []
+        if not walk.empty:
+            leafid = walk["leafid"][0]
+            initial_state = walk["first_cat"][0]
+            steps = walk["shape"].tolist()
+            for i, curr in enumerate(steps):
+                if i == 0:
+                    prev = initial_state
+                else:
+                    prev = steps[i - 1]
+                    transition = prev + curr
+                    walk_transitions.append(transition)
+            count_df = (
+                ((pd.Series(walk_transitions)).value_counts())
+                .to_frame()
+                .reset_index(names="transition")
+            )
+            count_df.insert(loc=0, column="leafid", value=leafid)
+            count_df.insert(loc=0, column="first_cat", value=initial_state)
+            count_dfs.append(count_df)
+
+    # total of each transition per walkid per leafid
+    counts = pd.concat(count_dfs).reset_index(drop=True)
+    # total of each transition per leafid
+    counts = (
+        counts.groupby(["leafid", "first_cat", "transition"])["count"]
+        .sum()
+        .reset_index(name="count")
+    )
+    print(counts)
+    # average no. counts for each transition per first_cat
+    avg_counts = (
+        counts.groupby(["transition"])["count"].agg(["mean", "sem"]).reset_index()
+    )
+    avg_counts["ub"] = avg_counts["mean"] + 1.96 * avg_counts["sem"]
+    avg_counts["lb"] = avg_counts["mean"] - 1.96 * avg_counts["sem"]
+    print(avg_counts)
+    # exit()
+
+    # concat = pd.concat(dfs, ignore_index=True)
+    # print(concat)
+    # # no. leaves in each shape category per leafid per step
+    # grouped_by_leaf = (
+    #     concat.groupby(["leafid", "first_cat", "step", "shape"])
+    #     .size()
+    #     .reset_index(name="total_shape_leafid")
+    # )
+    # # total no. leaves per leafid per step
+    # grouped_by_leaf_total = (
+    #     grouped_by_leaf.groupby(["leafid", "step"])
+    #     .agg(total_leafid=("total_shape_leafid", "sum"))
+    #     .reset_index()
+    # )
+    # grouped_by_leaf = grouped_by_leaf.merge(
+    #     grouped_by_leaf_total, on=["leafid", "step"]
+    # )
+    # # proportion of each shape per leafid per step
+    # grouped_by_leaf["proportion"] = (
+    #     grouped_by_leaf["total_shape_leafid"] / grouped_by_leaf["total_leafid"]
+    # )
+    # print(grouped_by_leaf)
+    # print(set(grouped_by_leaf["proportion"]))
+    # # proportion of each shape per leafid per step averaged over first_cat
+    # grouped_by_leaf_avg = (
+    #     grouped_by_leaf.groupby(["first_cat", "shape", "step"])["proportion"]
+    #     .agg(["mean", "sem"])
+    #     .reset_index()
+    # )
+    # grouped_by_leaf_avg["ub"] = (
+    #     grouped_by_leaf_avg["mean"] + 1.96 * grouped_by_leaf_avg["sem"]
+    # )
+    # grouped_by_leaf_avg["lb"] = (
+    #     grouped_by_leaf_avg["mean"] - 1.96 * grouped_by_leaf_avg["sem"]
+    # )
+    # grouped_by_leaf_avg["transition"] =
+    # print(grouped_by_leaf_avg)
+
+    mean = avg_counts[["transition", "mean"]].rename(columns={"mean": "count"})
+    ub = avg_counts[["transition", "ub"]].rename(columns={"ub": "count"})
+    lb = avg_counts[["transition", "lb"]].rename(columns={"lb": "count"})
+
+    return mean, ub, lb
+
+
 def log_prob_old(params, dfs):
     Q = np.array(
         [
@@ -95,7 +182,10 @@ def log_prob(params):
 def run_mcmc():
     dfs = get_data()
     global transitions
-    transitions = get_transition_count(dfs)
+    transitions_total = get_transition_count(dfs)
+    # mean, ub, lb = get_transition_count_avg(dfs)
+    transitions = transitions_total
+
     print(transitions)
     init_params = np.random.rand(nwalkers, ndim)
 
@@ -201,8 +291,14 @@ def plot_posterior_fromfile(file):
 
 
 if __name__ == "__main__":
-    # samples, sampler = runmcmc()
-    # plot_posterior(samples, sampler)
-    plot_posterior_fromfile(
-        "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
-    )
+    # dfs = get_data()
+    # get_transition_count_avg(dfs)
+    samples, sampler = run_mcmc()
+    plot_posterior(samples, sampler)
+    # plot_posterior_fromfile(
+    #     "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
+    # )
+    # plot_posterior_fromfile("emcee_run_log.csv")
+    # print(get_transition_count(get_data()))
+
+    # Hi Berta, I got your feedback for the report! Thanks for your kind words, I'm glad you liked it!
