@@ -470,11 +470,24 @@ def plot_rates_trace_hist(rates):
 
 
 def plot_phylo_and_sim_rates(phylo_rates):
-    sim_rates = pd.read_csv(
-        "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
+    sim_rates1 = pd.read_csv(
+        "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT1_emcee_run_log_01-05-24.csv"
     )
-    sim_rates_norm = sim_rates.div(sim_rates.max(axis=None))
-    sim_rates_norm["phylo-class"] = "MUT2.2_simulation"
+    sim_rates1_norm = sim_rates1.div(sim_rates1.max(axis=None))
+    sim_rates1_norm["phylo-class"] = "MUT1_simulation"
+
+    sim_rates2 = pd.read_csv(
+        "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT2.2_emcee_run_log_24-04-24.csv"
+    )
+    sim_rates2_norm = sim_rates2.div(sim_rates2.max(axis=None))
+    sim_rates2_norm["phylo-class"] = "MUT2.2_simulation"
+
+    sim_rates_norm = pd.concat([sim_rates1_norm, sim_rates2_norm]).reset_index(
+        drop=True
+    )
+    # sim_rates = pd.read_csv("../data-processing/emcee_run_log.csv")
+    # sim_rates_norm = sim_rates.div(sim_rates.max(axis=None))
+    # sim_rates_norm["phylo-class"] = "MUT2.2_simulation"
     name_map = {
         "0": "q01",
         "1": "q02",
@@ -500,15 +513,20 @@ def plot_phylo_and_sim_rates(phylo_rates):
     )
 
     # Select the datasets to plot e.g. MUT2.2 simulation and 2 phylogenies
-
     phylo_sim_sub = phylo_sim_long[
         phylo_sim_long["Dataset"].isin(
-            ["MUT2.2_simulation", "geeta_phylo_geeta_class", "jan_phylo_nat_class"]
+            [
+                "MUT2.2_simulation",
+                "MUT1_simulation",
+                "geeta_phylo_geeta_class",
+                "jan_phylo_nat_class",
+            ]
         )
     ].reset_index(drop=True)
     phylo_sim_sub["Dataset"] = phylo_sim_sub["Dataset"].replace(
         {
-            "MUT2.2_simulation": "Simulation",
+            "MUT1_simulation": "Simulation 1",
+            "MUT2.2_simulation": "Simulation 2",
             "jan_phylo_nat_class": "Phylogeny 1",
             "geeta_phylo_geeta_class": "Phylogeny 2",
         }
@@ -540,7 +558,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
     # # # plt.tight_layout()
     # plt.show()
 
-    plot_order = ["Simulation", "Phylogeny 1", "Phylogeny 2"]
+    plot_order = ["Simulation 1", "Simulation 2", "Phylogeny 1", "Phylogeny 2"]
     fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(8, 8))
 
     counter = -1
@@ -576,10 +594,10 @@ def plot_phylo_and_sim_rates(phylo_rates):
             if j == 0:
                 ax.set_ylabel("Rate")
             if i == 3:
-                ax.set_xticklabels(["S", "P1", "P2"])
+                ax.set_xticklabels(["S1", "S2", "P1", "P2"])
                 ax.set_xlabel("Dataset")
             if j == 3 and i == 2:
-                ax.set_xticklabels(["S", "P1", "P2"])
+                ax.set_xticklabels(["S1", "S2", "P1", "P2"])
             if (i, j) == (0, 1):
                 ax.set_ylabel("Rate")
             if j != 0 and (i, j) != (0, 1):
