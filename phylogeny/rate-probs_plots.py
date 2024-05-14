@@ -523,6 +523,13 @@ def plot_phylo_and_sim_rates(phylo_rates):
             ]
         )
     ].reset_index(drop=True)
+
+    # print(sim_rates2_norm.describe())
+    summary = phylo_sim_long.groupby(["Dataset", "transition"])["rate"].agg(
+        ["mean", "std", "count", scipy.stats.sem]
+    )
+    # summary.to_csv("sim_phylo_rates_summary_statistics.csv")
+
     phylo_sim_sub["Dataset"] = phylo_sim_sub["Dataset"].replace(
         {
             "MUT1_simulation": "Simulation 1",
@@ -615,6 +622,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
         legend_handles,
         legend_labels,
         loc="lower right",
+        # title="Dataset",
         # loc="outside center right",
         # bbox_to_anchor=(1.2, 0.5),
     )
