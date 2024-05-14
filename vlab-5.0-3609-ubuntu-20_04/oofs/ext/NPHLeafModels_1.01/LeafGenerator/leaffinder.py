@@ -93,7 +93,7 @@ def runsim(step, templist, wid, leafid):
         if process.poll() is not None:
             # process has completed
             break
-        # This next block will kill lpfg if more than 20 seconds elapses between lines output to the console
+        # This next block will kill lpfg if more than "timeout" seconds elapses between lines output to the console
         # The readline function was where it was where the while loop was getting stuck previously, as there were no new lines being produced
         # We essentially implement a timeout for the readline function
         ready, _, _ = select.select([process.stdout], [], [], timeout)
@@ -927,7 +927,8 @@ def start():
 
 
 if __name__ == "__main__":
-    start()
+    # start()
+    pass
 
 ######################################################################################################################
 #################################### The Remaining Code is for debugging Purposes ####################################
@@ -951,13 +952,15 @@ def generatedefaults():
 def generatedefault():
     """Generates starting leaf from default parameter values"""
 
-    leafid = "p8ae"
+    leafid = "p12f"
     step = 0
     wid = 0
     print(f"############## LEAF {leafid} ##############")
 
     leafid_index = leafids.index(leafid)
     templist = [ele[leafid_index] for ele in list(pdict.values())]
+    # set morphogens to visible
+    templist[-7] = 0
 
     runsim(step, templist, wid, leafid)
 
