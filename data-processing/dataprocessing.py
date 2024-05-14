@@ -5,7 +5,7 @@ import re
 import seaborn as sns
 import matplotlib
 import matplotlib.pyplot as plt
-from scipy import stats, linalg
+from scipy import stats, linalg, spatial
 import sys
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
@@ -20,6 +20,7 @@ import sympy as sp
 from scipy.integrate import odeint
 
 wd = "leaves_full_21-9-23_MUT2.2_CLEAN"
+# wd = "leaves_full_15-9-23_MUT1_CLEAN"
 # resd = "/home/m/malone/leaf_storage/random_walks"
 wd1 = "../vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01/LeafGenerator"
 
@@ -564,6 +565,14 @@ def paramspace():
     data = data.loc[:, ~data.apply(lambda col: any("#define" in str(x) for x in col))]
     data = data.dropna(axis=1, how="any")
     print(f"No. starting leaves {len(starting_leaves)}")
+    # shapes_all = list(first_cats["first_cat"].values) + list(shapes["shape"])
+    # data["shape"] = shapes_all
+
+    # for shape in order:
+    #     data_sub = data[data["shape"] == shape]
+    #     data_sub = data_sub.iloc[:, :-1]
+    #     hull = spatial.ConvexHull(data_sub, qhull_options="QJ")
+    #     print(hull.volume)
 
     data.to_csv("/home/m/malone/leaf_storage/random_walks/result.csv", index=False)
     scaled_data = StandardScaler().fit_transform(data)
@@ -574,10 +583,114 @@ def paramspace():
     princip_df = pd.DataFrame(data=princip_params, columns=["pc1", "pc2"])
     princip_df_starting_leaves = princip_df.iloc[: len(starting_leaves)]
     princip_df_starting_leaves["shape"] = list(first_cats["first_cat"].values)
-    princip_df_result = princip_df.iloc[len(starting_leaves) :]
+    princip_df_result = princip_df.iloc[len(starting_leaves) :].reset_index(drop=True)
     princip_df_result["shape"] = shapes["shape"]
     print(len(shapes), len(princip_df_result))
-    # sns.displot( # for heatplot
+    # Generate convex hulls
+    hulls = []
+    for shape in order:
+        PCA_sub = princip_df_result[princip_df_result["shape"] == shape]
+        PCA_sub = PCA_sub[["pc1", "pc2"]]
+        hull = spatial.ConvexHull(PCA_sub)
+        hulls.append(hull)
+
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    fig, axs = plt.subplots(
+        2, 2, figsize=(9, 10), sharex="all", sharey="all", layout="constrained"
+    )
+    counter = -1
+    for i, row in enumerate(axs):
+        for j, ax in enumerate(row):
+            counter += 1
+            shape = order[counter]
+            plot_data = princip_df_result[
+                princip_df_result["shape"] == shape
+            ].reset_index(drop=True)
+            # plot walk_data
+            ax.scatter(
+                plot_data["pc1"],
+                plot_data["pc2"],
+                s=10,
+                # color="black",
+                color=sns_palette[counter],
+                alpha=0.1,
+            )
+            # plot initial points
+            ax.scatter(
+                x=princip_df_starting_leaves["pc1"],
+                y=princip_df_starting_leaves["pc2"],
+                c=princip_df_starting_leaves["shape"].map(
+                    {
+                        "u": sns_palette[0],
+                        "l": sns_palette[1],
+                        "d": sns_palette[2],
+                        "c": sns_palette[3],
+                    }
+                ),
+                edgecolor="white",
+                linewidth=0.8,
+            )
+            # plot convex hulls for walk data
+            hull = hulls[counter]
+            for simplex in hull.simplices:
+                # print(simplex)
+                # print(princip_df_result["pc1"][simplex])
+                ax.plot(
+                    plot_data["pc1"][simplex],
+                    plot_data["pc2"][simplex],
+                    color="red",
+                )
+            ax.set_title(
+                f"{order_full[counter]} h-vol:{round(hull.volume, 2)}", fontsize=14
+            )
+            # if j > 0:
+            # ax.set_yticklabels([])
+            if j == 0:
+                ax.set_ylabel(
+                    f"PC2 ({(explained_variance_ratio[1] * 100):.2f}%)", fontsize=14
+                )
+            # if i == 0:
+            # ax.set_xticklabels([])
+            if i == 1:
+                ax.set_xlabel(
+                    f"PC1 ({(explained_variance_ratio[0] * 100):.2f}%)", fontsize=14
+                )
+    legend_handles = [
+        plt.Line2D(
+            [0], [0], marker="o", color="w", markerfacecolor=color, markersize=10
+        )
+        for color in sns_palette
+    ]
+    legend = fig.legend(
+        legend_handles,
+        ["unlobed", "lobed", "dissected", "compound"],
+        loc="outside lower center",
+        title="Shape",
+        fontsize=13,
+        ncol=4,
+    )
+    title = legend.get_title()
+    title.set_fontsize(14)
+
+    plt.show()
+    exit()
+
+    # for hull in hulls:
+    #     for simplex in hull.simplices:
+    #         plt.plot(
+    #             princip_df_result[simplex, 0],
+    #             princip_df_result[simplex, 1],
+    #             "r--",
+    #             lw=2,
+    #         )
+
+    # plt.show()
+    # exit()
+
+    # Plot the convex hulls
+    # for hull in hulls:
+    #     for simplex in hull.simplices:
+    #         plt.plot(pca_data[simplex, 0], pca_data[simplex, 1], "r--", lw=2)
     g = sns.displot(
         x="pc1",
         y="pc2",
@@ -596,20 +709,6 @@ def paramspace():
         f"PC1 ({(explained_variance_ratio[0] * 100):.2f}%)",
         f"PC2 ({(explained_variance_ratio[1] * 100):.2f}%)",
     )
-
-    # sns.relplot(
-    #     x="pc1",
-    #     y="pc2",
-    #     hue="shape",
-    #     col="shape",
-    #     col_wrap=2,
-    #     col_order=order,
-    #     hue_order=order,
-    #     kind="scatter",
-    #     data=princip_df_starting_leaves,
-    #     palette="colorblind",
-    #     ax=g.axes,
-    # )
 
     # overlay starting leaves on the heatmap
     for ax in g.axes.flat:
@@ -1113,6 +1212,7 @@ def curves_CTMC_mcmcsimfit():
     mcmc_data = pd.read_csv(
         "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
     )
+    # mcmc_data = pd.read_csv("emcee_run_log.csv")
     name_map = {
         "0": "q01",
         "1": "q02",
@@ -1315,7 +1415,7 @@ def plot_sim_and_phylogeny_curves():
 
     # Get phylo-rates
     phylo_dir = "../phylogeny/all_rates/uniform_1010000steps"
-    phylo = "geeta_phylo_geeta_class"  # the phylo-class to use for the curves
+    phylo = "jan_phylo_nat_class"  # the phylo-class to use for the curves
     phylo_xlim = 0.1
     phylo_rates_list = []
 
@@ -1368,9 +1468,18 @@ def plot_sim_and_phylogeny_curves():
     phylo_summary["ub"] = [i[1] for i in confidence_intervals.values()]
 
     # Get sim-rates
+    # sim_rates = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
+    # )
     sim_rates = pd.read_csv(
-        "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
+        "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT2.2_emcee_run_log_24-04-24.csv"
     )
+    # mean = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_mean.csv")
+    # ub = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_ub.csv")
+    # lb = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_lb.csv")
+
+    # sim_rates = pd.concat([mean, ub, lb])
+    # sim_rates = ub
 
     name_map = {
         "0": "q01",
@@ -1410,6 +1519,8 @@ def plot_sim_and_phylogeny_curves():
         confidence_intervals[col] = (
             np.mean(data) - (1.96 * stats.sem(data)),
             np.mean(data) + (1.96 * stats.sem(data)),
+            # np.mean(data) - (200 * np.var(data, ddof=1)),
+            # np.mean(data) + (200 * np.var(data, ddof=1)),
         )
     sim_summary["lb"] = [i[0] for i in confidence_intervals.values()]
     sim_summary["ub"] = [i[1] for i in confidence_intervals.values()]
@@ -1425,15 +1536,23 @@ def plot_sim_and_phylogeny_curves():
         .size()
         .reset_index(name="total_shape_firstcat")
     )
+
     timeseries_total = (
         timeseries.groupby(["first_cat", "step"])
         .agg(total_firstcat=("total_shape_firstcat", "sum"))
         .reset_index()
     )
+
     timeseries = timeseries.merge(timeseries_total, on=["first_cat", "step"])
     timeseries["proportion"] = (
         timeseries["total_shape_firstcat"] / timeseries["total_firstcat"]
     )
+    # timeseries = (
+    #     timeseries.groupby(["first_cat", "step", "shape"])
+    #     .agg(mean_prop=("proportion", "mean"))
+    #     .reset_index()
+    # )
+
     # add initial state to the timeseries
     timeseries["step"] = timeseries["step"] + 1
     for i in order:
@@ -1448,11 +1567,11 @@ def plot_sim_and_phylogeny_curves():
         timeseries.index = timeseries.index + 1
         timeseries = timeseries.sort_index()
 
-    print(phylo_rates)
-    print(phylo_summary)
-    print(sim_rates)
-    print(sim_summary)
-    print(timeseries)
+    # print(phylo_rates)
+    # print(phylo_summary)
+    # print(sim_rates)
+    # print(sim_summary)
+    # print(timeseries)
 
     # produce phylo-curves
     t_vals = np.linspace(0, phylo_xlim, 120)
@@ -1491,6 +1610,7 @@ def plot_sim_and_phylogeny_curves():
     fig, axs = plt.subplots(nrows=2, ncols=4, figsize=(15, 8), layout="constrained")
 
     lines = []
+    order_full = ["unlobed", "lobed", "dissected", "compound"]
     phylo_cat_i = -1
     sim_cat_i = -1
     for i, row in enumerate(axs):
@@ -1500,12 +1620,19 @@ def plot_sim_and_phylogeny_curves():
                 sim_cat = order[sim_cat_i]
                 cat_data = sim_plot[sim_plot["first_cat"] == sim_cat]
                 timeseries_cat_data = timeseries[timeseries["first_cat"] == sim_cat]
+                ax.set_title(
+                    f"Simulation, initial shape: {order_full[sim_cat_i]}", fontsize=10
+                )
 
             if j == 1 or j == 3:  # phylogeny data on the right and centre left
                 phylo_cat_i += 1
                 phylo_cat = order[phylo_cat_i]
                 cat_data = phylo_plot[phylo_plot["first_cat"] == phylo_cat]
                 timeseries_cat_data = None
+                ax.set_title(
+                    f"Phylogeny, initial shape: {order_full[phylo_cat_i]}", fontsize=10
+                )
+
             for s, shape in enumerate(order):
                 shape_data = cat_data[cat_data["shape"] == shape]
                 if isinstance(timeseries_cat_data, pd.DataFrame):
@@ -1537,12 +1664,21 @@ def plot_sim_and_phylogeny_curves():
             if j > 0:
                 ax.set_yticklabels([])
             if j == 0:
-                ax.set_ylabel("P")
+                ax.set_ylabel("P", fontsize=13)
             if i == 0:
                 ax.set_xticklabels([])
             if i == 1:
-                ax.set_xlabel("t")
-    fig.legend(lines, order, loc="outside right", title="shape")
+                ax.set_xlabel("t", fontsize=13)
+    legend = fig.legend(
+        lines,
+        ["unlobed", "lobed", "dissected", "compound"],
+        loc="outside lower center",
+        title="Final shape",
+        fontsize=11,
+        ncol=4,
+    )
+    title = legend.get_title()
+    title.set_fontsize(11)
     plt.show()
 
 
