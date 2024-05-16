@@ -84,79 +84,12 @@ def get_transition_count_avg(dfs):
     avg_counts["ub"] = avg_counts["mean"] + 1.96 * avg_counts["sem"]
     avg_counts["lb"] = avg_counts["mean"] - 1.96 * avg_counts["sem"]
     print(avg_counts)
-    # exit()
-
-    # concat = pd.concat(dfs, ignore_index=True)
-    # print(concat)
-    # # no. leaves in each shape category per leafid per step
-    # grouped_by_leaf = (
-    #     concat.groupby(["leafid", "first_cat", "step", "shape"])
-    #     .size()
-    #     .reset_index(name="total_shape_leafid")
-    # )
-    # # total no. leaves per leafid per step
-    # grouped_by_leaf_total = (
-    #     grouped_by_leaf.groupby(["leafid", "step"])
-    #     .agg(total_leafid=("total_shape_leafid", "sum"))
-    #     .reset_index()
-    # )
-    # grouped_by_leaf = grouped_by_leaf.merge(
-    #     grouped_by_leaf_total, on=["leafid", "step"]
-    # )
-    # # proportion of each shape per leafid per step
-    # grouped_by_leaf["proportion"] = (
-    #     grouped_by_leaf["total_shape_leafid"] / grouped_by_leaf["total_leafid"]
-    # )
-    # print(grouped_by_leaf)
-    # print(set(grouped_by_leaf["proportion"]))
-    # # proportion of each shape per leafid per step averaged over first_cat
-    # grouped_by_leaf_avg = (
-    #     grouped_by_leaf.groupby(["first_cat", "shape", "step"])["proportion"]
-    #     .agg(["mean", "sem"])
-    #     .reset_index()
-    # )
-    # grouped_by_leaf_avg["ub"] = (
-    #     grouped_by_leaf_avg["mean"] + 1.96 * grouped_by_leaf_avg["sem"]
-    # )
-    # grouped_by_leaf_avg["lb"] = (
-    #     grouped_by_leaf_avg["mean"] - 1.96 * grouped_by_leaf_avg["sem"]
-    # )
-    # grouped_by_leaf_avg["transition"] =
-    # print(grouped_by_leaf_avg)
 
     mean = avg_counts[["transition", "mean"]].rename(columns={"mean": "count"})
     ub = avg_counts[["transition", "ub"]].rename(columns={"ub": "count"})
     lb = avg_counts[["transition", "lb"]].rename(columns={"lb": "count"})
 
     return mean, ub, lb
-
-
-def log_prob_old(params, dfs):
-    Q = np.array(
-        [
-            [-(params[0] + params[1] + params[2]), params[0], params[1], params[2]],
-            [params[3], -(params[3] + params[4] + params[5]), params[4], params[5]],
-            [params[6], params[7], -(params[6] + params[7] + params[8]), params[8]],
-            [params[9], params[10], params[11], -(params[9] + params[10] + params[11])],
-        ]
-    )
-    log_prob = 0
-    t = 1  # between each state
-    Pt = scipy.linalg.expm(Q * t)
-    for walk in dfs:
-        if not walk.empty:
-            initial_state = walk["first_cat"][0]
-            steps = walk["shape"].tolist()
-            for i, curr in enumerate(steps):
-                if i == 0:
-                    prev = initial_state
-                else:
-                    prev = steps[i - 1]
-                    transition = prev + curr
-                    log_prob += np.log(Pt[transition_map_rates[transition]])
-    if np.isnan(log_prob):
-        log_prob = -np.inf
-    return log_prob
 
 
 def log_prob(params):

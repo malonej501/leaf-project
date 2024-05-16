@@ -213,8 +213,7 @@ def morphometrics(
         # print(len(local_minima_indices_buffered))
 
         for i, value in enumerate(local_maxima_indices):
-            # PROBLEM: THE BELOW AND ABOVE ARE NOT ALWAYS RIGHT - NEED TO MAKE IT ROBUST TO DIFFERENT NO. EXTREMA
-            # THINK IT MIGHT HAVE BEEN SOLVED
+
             # For the first maxima, the adjacent minima are the 0th and 1st of the buffered list
             if i == 0:
                 below = local_minima_indices_buffered[i]
@@ -514,72 +513,6 @@ def main_batch(directory):
     report.to_csv(directory + "/" + "shape_report.csv", index=False)
 
 
-# def main(file):
-
-#     # remove all previous pertinent points images
-#     for filename in os.listdir(wd1):
-#         if "-points" in filename or "-graph" in filename:
-#             os.remove(wd1 + filename)
-
-#     report = pd.DataFrame(columns=["leaf","shape","no.extrema",
-#                                    "minmax_dist_avg","refmax_dist_avg",
-#                                    "unlobed_ub","lobed_ub"])
-
-#     print(f"#### Leaf: {file}")
-
-#     leaf = cv2.imread(wd1 + file, cv2.IMREAD_GRAYSCALE)
-#     print(np.shape(leaf))
-#     #cv2.imwrite("grey.png", leaf)
-
-
-#     contour, veins, img, thresh = imageprocessing(leaf)
-#     barrow, _ = barfinder(thresh)
-#     centre_col = middlefinder(thresh, barrow)
-#     refpoint = centreveinsfinder_alt(veins, centre_col)
-#     refdist = dist_to_point(contour, refpoint)
-#     #exit()
-#     local_maxima, local_minima, local_maxima_indices, local_minima_indices  = getextrema(contour, refdist)
-
-#     #annotate the silhouette of the leaf with the pertinent points and write to file
-#     for points in local_maxima:
-#         for x,y in points:
-#             cv2.circle(img, (x,y), 4, (0,0,255), -1)
-#     for points in local_minima:
-#         for x,y in points:
-#             cv2.circle(img, (x,y), 4, (0,255,0), -1)
-#     cv2.circle(img, refpoint, 4, (255,0,0), -1)
-#     cv2.imwrite(wd1 + f"{file[:-4]}-points.png", img)
-
-#     #print(local_maxima[1][0][0], local_maxima[1][0][1])
-
-#     minmax_dist_avg, refmax_dist_avg, minmax_angle_avg, minmax_angle_min, unlobed_ub, lobed_ub, all_extrema = morphometrics(contour, local_maxima_indices, local_minima_indices, refpoint)
-#     category = classifier(minmax_dist_avg, minmax_angle_avg, minmax_angle_min, unlobed_ub, lobed_ub, all_extrema)
-#     print(category)
-
-#     report = report.append({"leaf": file,
-#                             "shape": category,
-#                             "no.extrema": len(all_extrema),
-#                             "minmax_dist_avg": minmax_dist_avg,
-#                             "refmax_dist_avg": refmax_dist_avg,
-#                             "unlobed_ub": unlobed_ub,
-#                             "lobed_ub": lobed_ub}, ignore_index=True)
-
-#     print(report)
-#     report.to_csv(wd1 + "shape_report.csv", index=False)
-
-#     seaborn.scatterplot(refdist, color="black", edgecolor="none")
-#     seaborn.scatterplot(y=refdist[local_maxima_indices+20], x=local_maxima_indices+20, color="red", edgecolor="none")
-#     seaborn.scatterplot(y=refdist[local_minima_indices+20], x=local_minima_indices+20, color="lightgreen", edgecolor="none")
-#     plt.savefig(wd1 + f"{file[:-4]}-graph.png")
-#     plt.clf()
-
-# def main_batch(directory):
-#     if "shape_report.csv" not in os.listdir(directory):
-#         print(f"#### {directory} Missing Shape Report!")
-#     # else:
-#     #     print(f"#### {directory} Shape Report Found!")
-
-
 def categorise(leaf):
     contour, contour_compressed, veins, img, thresh = imageprocessing(leaf)
     barrow, _ = barfinder(thresh)
@@ -649,13 +582,6 @@ def refdistout(directory):
     report.to_csv(directory + "/" + "refdist_report.csv", header=False)
 
 
-# seaborn.set(style="ticks", rc={"figure.figsize":(10,7)})
-# main("leaf1-1.png")
-
-
-# main_batch(wd1)
-
-
 def contour_out(directory):
     # load all the leaf image files
     files = os.listdir(directory)
@@ -698,28 +624,5 @@ def parallel(wd, function):
             for process in processes:
                 process.join()
 
-
-# parallel(randomwalkleaves, main_batch)
-# parallel(randomwalkleaves, refdistout)
-
-# refdistout("/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/LeafGenerator/trainingdata")
-
-# path = randomwalkleaves + "/p7_277/walk9"
-
-# if __name__ == "__main__":
-#     for walkdirectory in os.listdir(path):
-#         walkdirectory_path = os.path.join(path, walkdirectory)
-#         process = multiprocessing.Process(target=main_batch, args=(walkdirectory_path,))
-#         process.start()
-
-# main_batch(wd1)
-# main_batch("/home/m/malone/leaf_storage/accuracy_test_500")
-
-# refdistout("/home/m/malone/leaf_storage/accuracy_test_200")
-# main_batch("/home/m/malone/leaf_storage/Official Starting Sample/12-9-23")
-# main_batch("/home/m/malone/leaf_storage/Official Starting Sample/more-symmetric_12-7-23")
-# main_batch(
-#     "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/LeafGenerator/starting_sample_12-9-23"
-# )
 
 parallel(randomwalkleaves, contour_out)

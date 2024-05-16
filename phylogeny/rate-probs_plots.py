@@ -530,40 +530,30 @@ def plot_phylo_and_sim_rates(phylo_rates):
     )
     # summary.to_csv("sim_phylo_rates_summary_statistics.csv")
 
-    phylo_sim_sub["Dataset"] = phylo_sim_sub["Dataset"].replace(
-        {
-            "MUT1_simulation": "Simulation 1",
-            "MUT2.2_simulation": "Simulation 2",
-            "jan_phylo_nat_class": "Phylogeny 1",
-            "geeta_phylo_geeta_class": "Phylogeny 2",
-        }
-    )
-    # g = sns.catplot(
-    #     data=phylo_sim_sub,
-    #     y="rate",
-    #     x="transition",
-    #     col="Dataset",
-    #     col_wrap=3,
-    #     # hue="final_shape",
-    #     # order=order,
-    #     # hue_order=order,
-    #     palette="colorblind",
-    #     kind="box",
-    #     # height=3,
-    #     # aspect=1.4,
+    # phylo_sim_sub["Dataset"] = phylo_sim_sub["Dataset"].replace(
+    #     {
+    #         "MUT1_simulation": "Simulation 1",
+    #         "MUT2.2_simulation": "Simulation 2",
+    #         "jan_phylo_nat_class": "Phylogeny 1",
+    #         "geeta_phylo_geeta_class": "Phylogeny 2",
+    #     }
     # )
-    # # g.set_xticklabels(labels=labels, fontsize=12)
-    # g.set_axis_labels("Transition", "Normalised Evolutionary Rate", fontsize=13)
-    # # g._legend.set_title("Final Shape", prop={"size": 16})
-    # g.set_titles(size=13)
-    # # for text in g._legend.get_texts():
-    # #     text.set_fontsize(12)
-    # for ax in g.axes.flat:
-    #     ax.tick_params(axis="y", labelsize=12)
-    #     ax.tick_params(axis="x", labelsize=12)
-    # # plt.subplots_adjust(right=0.92)
-    # # # plt.tight_layout()
-    # plt.show()
+    rate_map = {
+        "q01": "q_ul",
+        "q02": "q_ud",
+        "q03": "q_uc",
+        "q10": "q_lu",
+        "q12": "q_ld",
+        "q13": "q_lc",
+        "q20": "q_du",
+        "q21": "q_dl",
+        "q23": "q_dc",
+        "q30": "q_cu",
+        "q31": "q_cl",
+        "q32": "q_cd",
+    }
+    phylo_sim_sub["transition"] = phylo_sim_sub["transition"].replace(rate_map)
+    print(phylo_sim_sub)
 
     plot_order = ["Simulation 1", "Simulation 2", "Phylogeny 1", "Phylogeny 2"]
     fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(8, 8))
@@ -576,7 +566,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
                 axes[i, j].axis("off")
             if i != j:
                 counter += 1
-                transition = list(rates_map)[counter]
+                transition = list(rate_map.values())[counter]
                 plot_data = phylo_sim_sub[phylo_sim_sub["transition"] == transition]
                 bar_data = []
                 for dataset in plot_order:
@@ -631,19 +621,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
 
 
 if __name__ == "__main__":
-    # rates_full, rates_full_wstat = get_rates_single()
-    # probs_full = rates_probs_mean(prob_tab)
-    # rates_full_trans, rates_full_long = translong(rates_full, "rate")
-    # probs_full_trans, probs_full_long = translong(probs_full, "prob")
-    # print(rates_full_long)
 
-    # rates_probs_mean(prob_tab)
-    # catplot1()
-    # catplot2()
-
-    # curves_phylogeny()
-    # catplot1()
-    # catplot2()
     phylo_rates = get_rates_batch(directory="all_rates/uniform_1010000steps")
     # plot_rates_trace_hist(rates)
     phylo_rates_norm = normalise_rates(phylo_rates)

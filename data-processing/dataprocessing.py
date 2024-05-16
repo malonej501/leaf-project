@@ -673,58 +673,6 @@ def paramspace():
     title.set_fontsize(14)
 
     plt.show()
-    exit()
-
-    # for hull in hulls:
-    #     for simplex in hull.simplices:
-    #         plt.plot(
-    #             princip_df_result[simplex, 0],
-    #             princip_df_result[simplex, 1],
-    #             "r--",
-    #             lw=2,
-    #         )
-
-    # plt.show()
-    # exit()
-
-    # Plot the convex hulls
-    # for hull in hulls:
-    #     for simplex in hull.simplices:
-    #         plt.plot(pca_data[simplex, 0], pca_data[simplex, 1], "r--", lw=2)
-    g = sns.displot(
-        x="pc1",
-        y="pc2",
-        hue="shape",
-        col="shape",
-        col_wrap=2,
-        col_order=order,
-        hue_order=order,
-        kind="hist",
-        data=princip_df_result,
-        palette="colorblind",
-        bins=100,
-        # alpha=0.5,
-    )
-    g.set_axis_labels(
-        f"PC1 ({(explained_variance_ratio[0] * 100):.2f}%)",
-        f"PC2 ({(explained_variance_ratio[1] * 100):.2f}%)",
-    )
-
-    # overlay starting leaves on the heatmap
-    for ax in g.axes.flat:
-        sns.scatterplot(
-            x="pc1",
-            y="pc2",
-            hue="shape",
-            hue_order=order,
-            data=princip_df_starting_leaves,
-            palette="colorblind",
-            legend=False,
-            # linewidth=0,
-            # edgecolor="black",
-            ax=ax,
-        )
-    plt.show()
 
 
 def overallfreq():
@@ -757,68 +705,6 @@ def overallfreq():
 
 def stack_plot():
     dfs = concatenator()
-    print(dfs)
-
-    # mapping = {"u":0, "l":1, "c":2, "d":3}
-    # concat = pd.concat(dfs, ignore_index=True)
-    # concat = pd.merge(concat, first_cats[['leafid', 'first_cat']], on='leafid')
-    # concat["dummy"] = concat["shape"].map(mapping)
-    # concat["step"] = concat.index.values
-
-    # sns.lineplot(data=concat, x="step", y="dummy", hue="first_cat")
-    # plt.xlabel("Step")
-    # plt.ylabel("Shape")
-    # plt.show()
-
-    # for i, walk in enumerate(dfs):
-    #     mapping = {"u":0, "l":1, "c":2, "d":3}
-    #     color_map = {"u":"blue", "l":"red", "c":"green", "d":"yellow"}
-
-    #     walk["first_cat"] = first_cats[first_cats["leafid"] == walk.iloc[0]["leafid"]]["first_cat"].values[0]
-    #     #walk["first_cat"] = walk["first_cat"].map(color_map)
-    #     #walk["first_cat"] = walk["first_cat"].map(mapping)
-    #     walk["dummy"] = walk["shape"].map(mapping)
-    #     walk["step"] = walk.index.values
-    #     #print(walk)
-
-    #     if walk["first_cat"][0] == "u":
-    #         sns.lineplot(data=walk, x="step", y="dummy", color="blue", alpha=0.1)
-    #     if walk["first_cat"][0]  == "l":
-    #         sns.lineplot(data=walk, x="step", y="dummy", color="red", alpha=0.1)
-    #     if walk["first_cat"][0]  == "d":
-    #         sns.lineplot(data=walk, x="step", y="dummy", color="green", alpha=0.1)
-    #     if walk["first_cat"][0]  == "c":
-    #         sns.lineplot(data=walk, x="step", y="dummy", color="yellow", alpha=0.1)
-
-    #     #plt.plot(walk.index.values, walk["dummy"].values, c=walk["first_cat"], alpha=0.1)
-    #     #sns.lineplot(x=walk.index.values, y=walk["dummy"].values, hue=walk["first_cat"].to_numpy(), alpha=0.1)
-    #     #sns.lineplot(data=walk, x="step", y="dummy", hue="first_cat", alpha=0.1)
-
-    # plt.legend()
-    # plt.xlabel("Step")
-    # plt.ylabel("Shape")
-    # plt.show()
-
-    # Normalise by the length of each walk
-    # fig, axs = plt.subplots(2, 2, figsize=(8, 8))
-
-    # for i, cat in enumerate(["u", "l", "d", "c"]):
-    #     ax = axs[i//2, i%2]
-    #     for walk in dfs:
-    #         walk = pd.merge(walk, first_cats[['leafid', 'first_cat']], on='leafid')
-    #         if walk["first_cat"][0] == cat:
-    #             mapping = {"u":0, "l":1, "d":2, "c":3}
-    #             walk["dummy"] = walk["shape"].map(mapping)
-    #             walk["frac_through_walk"] = (walk.reset_index().index)/len(walk)
-    #             walk["step"] = walk.index.values
-    #             ax.plot(walk["frac_through_walk"], walk["dummy"], color="black", alpha=0.1)
-    #     ax.set_xlabel("Frac. through walk")
-    #     ax.set_ylabel("Shape")
-    #     ax.set_title(f"First Category: {cat}")
-    #     ax.set_yticks(range(4))
-
-    # plt.tight_layout()
-    # plt.show()
 
     for walk in dfs:
         walk["step"] = walk.index.values
@@ -831,25 +717,9 @@ def stack_plot():
     grouped = (
         concat.groupby(["first_cat", "step", "shape"]).size().reset_index(name="count")
     )
-    print(grouped)
-
-    # https://seaborn.pydata.org/generated/seaborn.objects.Area.html
-    # colours = ["#41342C","#158471","#97AF25","#CAC535"]
-    # (
-    #     so.Plot(grouped, "step", "count").facet("first_cat", wrap=2)
-    #     .add(so.Area(alpha=.7), so.Stack(), legend=True, color="shape")
-    #     .layout(engine = None)
-    #     .show()
-    # )
 
     lfirst = grouped[grouped["first_cat"] == "l"]
     print(lfirst)
-
-    # (
-    #     so.Plot(lfirst, "step", "count")
-    #     .add(so.Area(alpha=.7), so.Stack(), legend=False, color="shape")
-    #     .show()
-    # )
 
     sns.set_theme()
     # plots = []
@@ -986,18 +856,6 @@ def prop_curves():
         col_order=order,
         errorbar="ci",  # 95% confidence interval calculated with bootstrapping see https://seaborn.pydata.org/tutorial/error_bars.html
     ).set_axis_labels("step", "average proportion").set(xlim=(0, 60))
-
-    # sns.relplot(
-    #     data=grouped_by_first_cat,
-    #     x="step",
-    #     y="proportion",
-    #     col="first_cat",
-    #     hue="shape",
-    #     kind="line",
-    #     col_wrap=2,
-    #     col_order=order,
-    #     hue_order=order,
-    # )
 
     plt.show()
 

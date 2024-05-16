@@ -1,5 +1,4 @@
 import numpy as np
-import pwriter
 
 #Default
 p6af = [0.4, 0.5, 10, 2.5, 13200, 600, 5, 30,np.nan,np.nan, 1, 1, 1, 1, 0, 1, 1, 1, 1,np.nan,np.nan, 0.15, 0.1, 6.25, 6.25, 500, 12.5, 'false', 4, 0.625, 5.625, 7.5, 9.375, 1.25, 1.25, 0.1, 0.0, 0.1, 0.0, 0.0, 0.0007, 12.5, 1.0, 'true', 0, 'true', 1e+20, -1, 1e-06, 0, 0.05, 0, 0, 0.0007, 1e+20, 0.01, 'false', 0, 'true', 60000, -1, 2e-07, 0.1, 0.05, 0.1, 0, 0.0007, 37500, 0.75, 'false', 1, 'false', 1000, -1, 1e-09, 0.1, 0.05, 0.1, 0, 0.0007, 37500, 1, 'false', 2, 'true', 15000, -1, '0.5*M_PI', 'M_PI*0.14', 0.0, 0.0, 0, 1e+20, 0, 1e+20, 0.0005, 0, 1e+20, 0.0, 600.0, 0.0, 500.0, 0.0, 'false', 0.175, 15.0, 'false', 'false', 1, 'true', 1e+20, 3.0, 6.0, 1.8, 'false', 4, 5.0, 1.0, 10.5, 20,'','']
@@ -102,17 +101,6 @@ pdict = {}
 for i, key in enumerate(keys):
     pdict[key] = [lst[i] for lst in values]
 
-#for key, value in pdict.items():
-#    print(key, value, "\n")
-
-#leafid_index = 0
-#print([ele[leafid_index] for ele in list(pdict.values())])
-
-# wd = "/home/jamesmalone/Documents/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01"
-# input_parameters = dict(zip(pdict.keys(), p2_78_alt))
-# print(input_parameters)
-# pwriter.Input(input_parameters,wd,0)
-
 #This specifies the parameters that we want to allow to change with 1 and those we want to leave
 prange10_alt = {'pspace1': 1, 'pspace2': 1, 'DISPSTEP': 1, 'GDT': 1, 'FINALFRAME': 1, 'NUMFLOW': 1, 'NSAMP': 1, 'SAMPDIST': 1, 'I0': 1, 'I1': 1, 'I2': 1, 'I3': 1, 
                 'I4': 1, 'I5': 1, 'I6': 1, 'I7': 1, 'I8': 1, 'I9': 1, 'I10': 1, 'I11': 1, 'I12': 1, 'PRIMSCALEX': 1, 'PRIMSCALEY': 1, 'LASSYMETRY': 1, 'RASSYMETRY': 1, 
@@ -128,12 +116,6 @@ prange10_alt = {'pspace1': 1, 'pspace2': 1, 'DISPSTEP': 1, 'GDT': 1, 'FINALFRAME
                 'ASYMMETRIC_FAIRING': 1, 'ASYMM_PRE': 0, 'ASYMM_POST': 0, 'SHARP_LEAF_TIP': 1, 'INTERNAL_FLOW': 1, 'PETIOLE_COMPOUND': 0, 'PETIOLE_EXTEND': 0, 
                 'QUADD_ERR_THRESH': 0, 'COMPWIDTH': 0, 'BB_WIDTH_MULT': 0, 'MARGIN_WIDTH': 1, 'SCALE_WIDTH_BY_BB': 0, 'SUPRESSED_COMP': 0, 'PM_POW': 0, 'PM_WIDTH': 0, 
                 'PM_INC': 0, 'PM_SAMP': 0, 'DEFINE_TERMINAL_LEAFLET_BASE' : 0, 'BOUNDARY_MORPHOGEN' : 0}
-
-leafids_old = ["p6af","p6i","p7a","p7g","p8ae","p8i","p9b","p10c7","p12b","p12c7","p12de","p12f",
-          "p1_414","p4_510","p6_163","p8_1235","p7_277","p6_1155","p5_909","p7_437","p1_122","p2_149",
-          "p6_22","p1_35","p5_249","p2_346_alt","p6_81","p7_43","p1_82","p2_78","p3_60","p3_147",
-          "p5_122","p7_92","p0_121","p2_195","p4_121","p9_129","pc1","pc3","pc4","pc5","pd1",
-          "pl1","pl2","pl3","pl4","pu1","pu2","pu3"]
 
 leafids = ["p6af","p6i","p7a","p7g","p8ae","p8i","p9b","p10c7","p12b","p12c7","p12de","p12f",
           "p1_414","p4_510","p6_163_alt","p8_1235","p7_277","p6_1155","p5_909","p7_437","p1_122_alt","p2_149_alt",

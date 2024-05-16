@@ -1,18 +1,17 @@
 import os
 import random
 import shutil
-import csv
 
 # Set the paths to the input directory and the output directory
-input_dir = '/home/m/malone/leaf_storage/random_walks/leaves_full_1-5-23'
-output_dir = '/home/m/malone/leaf_storage/accuracy_test_500'
+input_dir = "/home/m/malone/leaf_storage/random_walks/leaves_full_1-5-23"
+output_dir = "/home/m/malone/leaf_storage/accuracy_test_500"
 
 # Get a list of all files in the input directory
 files = os.listdir(input_dir)
 
 n = 10
 
-for i in range(0,n):
+for i in range(0, n):
     # Loop through each file in the input directory
     for file in files:
         # Create the full path to the file
@@ -32,7 +31,7 @@ for i in range(0,n):
             # Check if the subfile is a directory
             if os.path.isdir(subfile_path):
                 # Get a list of all .png files in the subdirectory
-                png_files = [f for f in os.listdir(subfile_path) if f.endswith('.png')]
+                png_files = [f for f in os.listdir(subfile_path) if f.endswith(".png")]
 
                 # Choose a random .png file from the subdirectory
                 png_file = random.choice(png_files)
