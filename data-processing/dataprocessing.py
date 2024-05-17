@@ -1329,15 +1329,16 @@ def plot_sim_and_phylogeny_curves():
     # sim_rates = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
     # )
-    sim_rates = pd.read_csv(
-        "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT2.2_emcee_run_log_24-04-24.csv"
-    )
-    # mean = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_mean.csv")
-    # ub = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_ub.csv")
-    # lb = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_lb.csv")
+    # sim_rates = pd.read_csv(
+    #     "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT2.2_emcee_run_log_24-04-24.csv"
+    # )
+    mean = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_mean.csv")
+    ub = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_ub.csv")
+    lb = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_lb.csv")
 
     # sim_rates = pd.concat([mean, ub, lb])
     # sim_rates = ub
+    avg_list = [lb, mean, ub]
 
     name_map = {
         "0": "q01",
@@ -1353,35 +1354,56 @@ def plot_sim_and_phylogeny_curves():
         "10": "q31",
         "11": "q32",
     }
-    sim_rates = sim_rates.rename(columns=name_map)
-    sim_rates.insert(0, "q00", -sim_rates["q01"] - sim_rates["q02"] - sim_rates["q03"])
-    sim_rates.insert(5, "q11", -sim_rates["q10"] - sim_rates["q12"] - sim_rates["q13"])
-    sim_rates.insert(
-        10,
-        "q22",
-        -sim_rates["q20"] - sim_rates["q21"] - sim_rates["q23"],
-    )
-    sim_rates.insert(
-        15,
-        "q33",
-        -sim_rates["q30"] - sim_rates["q31"] - sim_rates["q32"],
-    )
 
-    # Calculate means
-    sim_summary = sim_rates.mean().reset_index()
-    sim_summary.columns = ["transition", "mean_rate"]
-    # Calculate confidence intervals
-    confidence_intervals = {}
-    for col in sim_rates.columns:
-        data = sim_rates[col].dropna()
-        confidence_intervals[col] = (
-            np.mean(data) - (1.96 * stats.sem(data)),
-            np.mean(data) + (1.96 * stats.sem(data)),
-            # np.mean(data) - (200 * np.var(data, ddof=1)),
-            # np.mean(data) + (200 * np.var(data, ddof=1)),
+    sim_summaries = []
+
+    for sim_rates in avg_list:
+        sim_rates = sim_rates.rename(columns=name_map)
+        sim_rates.insert(
+            0, "q00", -sim_rates["q01"] - sim_rates["q02"] - sim_rates["q03"]
         )
-    sim_summary["lb"] = [i[0] for i in confidence_intervals.values()]
-    sim_summary["ub"] = [i[1] for i in confidence_intervals.values()]
+        sim_rates.insert(
+            5, "q11", -sim_rates["q10"] - sim_rates["q12"] - sim_rates["q13"]
+        )
+        sim_rates.insert(
+            10,
+            "q22",
+            -sim_rates["q20"] - sim_rates["q21"] - sim_rates["q23"],
+        )
+        sim_rates.insert(
+            15,
+            "q33",
+            -sim_rates["q30"] - sim_rates["q31"] - sim_rates["q32"],
+        )
+
+        # Calculate means
+        sim_summary = sim_rates.mean().reset_index()
+        sim_summary.columns = ["transition", "mean_rate"]
+        # Calculate confidence intervals
+        confidence_intervals = {}
+        for col in sim_rates.columns:
+            data = sim_rates[col].dropna()
+            confidence_intervals[col] = (
+                np.mean(data) - (1.96 * stats.sem(data)),
+                np.mean(data) + (1.96 * stats.sem(data)),
+                # np.mean(data) - (200 * np.var(data, ddof=1)),
+                # np.mean(data) + (200 * np.var(data, ddof=1)),
+            )
+        sim_summary["lb"] = [i[0] for i in confidence_intervals.values()]
+        sim_summary["ub"] = [i[1] for i in confidence_intervals.values()]
+        sim_summaries.append(sim_summary)
+
+    print(sim_summaries)
+
+    # Use the mean of the emcee mean, ub of emcee ub, lb of emcee lb
+    sim_summary = pd.DataFrame(
+        {
+            "transition": sim_summaries[1]["transition"],
+            "mean_rate": sim_summaries[1]["mean_rate"],
+            "lb": sim_summaries[0]["lb"],
+            "ub": sim_summaries[2]["ub"],
+        }
+    )
 
     # Get sim timeseries data
     dfs = concatenator()
@@ -1389,27 +1411,35 @@ def plot_sim_and_phylogeny_curves():
         walk["step"] = walk.index.values
     concat = pd.concat(dfs, ignore_index=True)
     concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    # total of each shape per step for each leafid
     timeseries = (
-        concat.groupby(["first_cat", "step", "shape"])
+        concat.groupby(["leafid", "first_cat", "step", "shape"])
         .size()
         .reset_index(name="total_shape_firstcat")
     )
+    print(timeseries)
 
+    # no. active walks per step for each leafid
     timeseries_total = (
-        timeseries.groupby(["first_cat", "step"])
+        timeseries.groupby(["leafid", "first_cat", "step"])
         .agg(total_firstcat=("total_shape_firstcat", "sum"))
         .reset_index()
     )
+    print(timeseries_total)
 
-    timeseries = timeseries.merge(timeseries_total, on=["first_cat", "step"])
+    # proportion of active walks in each shape category for each leafid
+    timeseries = timeseries.merge(timeseries_total, on=["leafid", "first_cat", "step"])
     timeseries["proportion"] = (
         timeseries["total_shape_firstcat"] / timeseries["total_firstcat"]
     )
-    # timeseries = (
-    #     timeseries.groupby(["first_cat", "step", "shape"])
-    #     .agg(mean_prop=("proportion", "mean"))
-    #     .reset_index()
-    # )
+    print(timeseries)
+
+    # mean proportion of active walks in each shape category for all leaves in each first_cat
+    timeseries = (
+        timeseries.groupby(["first_cat", "step", "shape"])
+        .agg(mean_prop=("proportion", "mean"))
+        .reset_index()
+    )
 
     # add initial state to the timeseries
     timeseries["step"] = timeseries["step"] + 1
@@ -1418,9 +1448,10 @@ def plot_sim_and_phylogeny_curves():
             "first_cat": i,
             "step": 0,
             "shape": i,
-            "total_shape_firstcat": np.nan,
-            "total_firstcat": np.nan,
-            "proportion": 1,
+            # "total_shape_firstcat": np.nan,
+            # "total_firstcat": np.nan,
+            # "proportion": 1,
+            "mean_prop": 1,
         }
         timeseries.index = timeseries.index + 1
         timeseries = timeseries.sort_index()
@@ -1465,7 +1496,7 @@ def plot_sim_and_phylogeny_curves():
     print(sim_plot)
 
     # Create subplots
-    fig, axs = plt.subplots(nrows=2, ncols=4, figsize=(15, 8), layout="constrained")
+    fig, axs = plt.subplots(nrows=2, ncols=4, figsize=(10, 5), layout="constrained")
 
     lines = []
     order_full = ["unlobed", "lobed", "dissected", "compound"]
@@ -1478,9 +1509,8 @@ def plot_sim_and_phylogeny_curves():
                 sim_cat = order[sim_cat_i]
                 cat_data = sim_plot[sim_plot["first_cat"] == sim_cat]
                 timeseries_cat_data = timeseries[timeseries["first_cat"] == sim_cat]
-                ax.set_title(
-                    f"Simulation, initial shape: {order_full[sim_cat_i]}", fontsize=10
-                )
+                ax.set_title(f"MUT2, {order_full[sim_cat_i]}", fontsize=10)
+                ax.set_xlim(0, 70)
 
             if j == 1 or j == 3:  # phylogeny data on the right and centre left
                 phylo_cat_i += 1
@@ -1488,7 +1518,8 @@ def plot_sim_and_phylogeny_curves():
                 cat_data = phylo_plot[phylo_plot["first_cat"] == phylo_cat]
                 timeseries_cat_data = None
                 ax.set_title(
-                    f"Phylogeny, initial shape: {order_full[phylo_cat_i]}", fontsize=10
+                    f"jan_phylo_nat_class, {order_full[phylo_cat_i]}",
+                    fontsize=10,
                 )
 
             for s, shape in enumerate(order):
@@ -1499,7 +1530,7 @@ def plot_sim_and_phylogeny_curves():
                     ]
                     (line1,) = ax.plot(
                         timeseries_shape_data["step"],
-                        timeseries_shape_data["proportion"],
+                        timeseries_shape_data["mean_prop"],
                         label=shape,
                         c=sns_palette[s],
                         linestyle="--",
@@ -1522,17 +1553,17 @@ def plot_sim_and_phylogeny_curves():
             if j > 0:
                 ax.set_yticklabels([])
             if j == 0:
-                ax.set_ylabel("P", fontsize=13)
+                ax.set_ylabel("P")  # , fontsize=13)
             if i == 0:
                 ax.set_xticklabels([])
             if i == 1:
-                ax.set_xlabel("t", fontsize=13)
+                ax.set_xlabel("t")  # , fontsize=13)
     legend = fig.legend(
         lines,
         ["unlobed", "lobed", "dissected", "compound"],
         loc="outside lower center",
         title="Final shape",
-        fontsize=11,
+        # fontsize=11,
         ncol=4,
     )
     title = legend.get_title()
