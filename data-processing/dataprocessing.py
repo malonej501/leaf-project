@@ -1437,24 +1437,42 @@ def plot_sim_and_phylogeny_curves():
     # mean proportion of active walks in each shape category for all leaves in each first_cat
     timeseries = (
         timeseries.groupby(["first_cat", "step", "shape"])
-        .agg(mean_prop=("proportion", "mean"))
+        .agg(mean_prop=("proportion", "mean"), sterr=("proportion", "sem"))
         .reset_index()
     )
+    timeseries["lb"] = timeseries["mean_prop"] - 1.96 * timeseries["sterr"]
+    timeseries["ub"] = timeseries["mean_prop"] + 1.96 * timeseries["sterr"]
 
     # add initial state to the timeseries
     timeseries["step"] = timeseries["step"] + 1
     for i in order:
-        timeseries.loc[-1] = {
-            "first_cat": i,
-            "step": 0,
-            "shape": i,
-            # "total_shape_firstcat": np.nan,
-            # "total_firstcat": np.nan,
-            # "proportion": 1,
-            "mean_prop": 1,
-        }
-        timeseries.index = timeseries.index + 1
-        timeseries = timeseries.sort_index()
+        for j in order:
+            if i == j:
+                timeseries.loc[-1] = {
+                    "first_cat": i,
+                    "step": 0,
+                    "shape": i,
+                    # "total_shape_firstcat": np.nan,
+                    # "total_firstcat": np.nan,
+                    # "proportion": 1,
+                    "mean_prop": 1,
+                    "sterr": 0,
+                    "lb": 1,
+                    "ub": 1,
+                }
+            else:
+                timeseries.loc[-1] = {
+                    "first_cat": i,
+                    "step": 0,
+                    "shape": j,
+                    "mean_prop": 0,
+                    "sterr": 0,
+                    "lb": 0,
+                    "ub": 0,
+                }
+            timeseries.index = timeseries.index + 1
+            timeseries = timeseries.sort_index()
+    print(timeseries)
 
     # print(phylo_rates)
     # print(phylo_summary)
@@ -1496,45 +1514,49 @@ def plot_sim_and_phylogeny_curves():
     print(sim_plot)
 
     # Create subplots
-    fig, axs = plt.subplots(nrows=2, ncols=4, figsize=(10, 5), layout="constrained")
+    fig, axs = plt.subplots(nrows=4, ncols=3, figsize=(9, 9), sharey=True)
 
     lines = []
     order_full = ["unlobed", "lobed", "dissected", "compound"]
-    phylo_cat_i = -1
-    sim_cat_i = -1
+
     for i, row in enumerate(axs):
         for j, ax in enumerate(row):
-            if j == 0 or j == 2:  # simulation data on the left and centre right
-                sim_cat_i += 1
-                sim_cat = order[sim_cat_i]
-                cat_data = sim_plot[sim_plot["first_cat"] == sim_cat]
-                timeseries_cat_data = timeseries[timeseries["first_cat"] == sim_cat]
-                ax.set_title(f"MUT2, {order_full[sim_cat_i]}", fontsize=10)
-                ax.set_xlim(0, 70)
-
-            if j == 1 or j == 3:  # phylogeny data on the right and centre left
-                phylo_cat_i += 1
-                phylo_cat = order[phylo_cat_i]
-                cat_data = phylo_plot[phylo_plot["first_cat"] == phylo_cat]
-                timeseries_cat_data = None
-                ax.set_title(
-                    f"jan_phylo_nat_class, {order_full[phylo_cat_i]}",
-                    fontsize=10,
+            cat = order[i]
+            ax.set_ylim(0, 1)
+            if j == 0:  # timeseries data on the left
+                cat_data = timeseries[timeseries["first_cat"] == cat]
+                cat_data = cat_data.rename(columns={"mean_prop": "P", "step": "t"})
+                # ax.set_title(order_full[i])
+                if i == 0:
+                    ax.set_title("MUT2 Data")
+                ax.set_ylabel("Mean Prop.")
+                ax.annotate(  # This adds the row labels
+                    order_full[i],
+                    xy=(0, 0.5),
+                    xytext=(-ax.yaxis.labelpad - 5, 0),
+                    xycoords=ax.yaxis.label,
+                    textcoords="offset points",
+                    size="large",
+                    ha="right",
+                    va="center",
                 )
+                ax.set_xlim(0, 60)
+            if j == 1:  # simulation ctmc in centre column
+                cat_data = sim_plot[sim_plot["first_cat"] == cat]
+                # ax.set_title(order_full[i])
+                if i == 0:
+                    ax.set_title("MUT2 CTMC")
+                ax.set_ylabel("P")
+                ax.set_xlim(0, 60)
+            if j == 2:  # phylogeny data on the right
+                cat_data = phylo_plot[phylo_plot["first_cat"] == cat]
+                ax.set_ylabel("P")
+                # ax.set_title(order_full[i])
+                if i == 0:
+                    ax.set_title("jan_phylo_nat_class CTMC")
 
             for s, shape in enumerate(order):
                 shape_data = cat_data[cat_data["shape"] == shape]
-                if isinstance(timeseries_cat_data, pd.DataFrame):
-                    timeseries_shape_data = timeseries_cat_data[
-                        timeseries_cat_data["shape"] == shape
-                    ]
-                    (line1,) = ax.plot(
-                        timeseries_shape_data["step"],
-                        timeseries_shape_data["mean_prop"],
-                        label=shape,
-                        c=sns_palette[s],
-                        linestyle="--",
-                    )
                 (line,) = ax.plot(
                     shape_data["t"],
                     shape_data["P"],
@@ -1550,24 +1572,25 @@ def plot_sim_and_phylogeny_curves():
                     # cmap=cmap,
                 )
                 lines.append(line)
-            if j > 0:
-                ax.set_yticklabels([])
-            if j == 0:
-                ax.set_ylabel("P")  # , fontsize=13)
-            if i == 0:
+            if i < 3:
                 ax.set_xticklabels([])
-            if i == 1:
-                ax.set_xlabel("t")  # , fontsize=13)
+            if i == 3:
+                if j == 0:
+                    ax.set_xlabel("Step")
+                else:
+                    ax.set_xlabel("t")
     legend = fig.legend(
         lines,
         ["unlobed", "lobed", "dissected", "compound"],
-        loc="outside lower center",
+        loc="outside right",
         title="Final shape",
         # fontsize=11,
-        ncol=4,
+        ncol=1,
     )
     title = legend.get_title()
     title.set_fontsize(11)
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.84)
     plt.show()
 
 
