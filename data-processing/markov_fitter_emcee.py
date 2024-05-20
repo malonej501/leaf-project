@@ -1,4 +1,4 @@
-from markov_fitter import get_data, transition_map_rates
+from dataprocessing import concatenator, first_cats
 import numpy as np
 import pandas as pd
 import scipy
@@ -24,6 +24,47 @@ rates_map = {
     10: ("c", "l"),
     11: ("c", "d"),
 }
+
+transition_map_rates = {
+    "uu": (0, 0),
+    "ul": (0, 1),
+    "ud": (0, 2),
+    "uc": (0, 3),
+    "lu": (1, 0),
+    "ll": (1, 1),
+    "ld": (1, 2),
+    "lc": (1, 3),
+    "du": (2, 0),
+    "dl": (2, 1),
+    "dd": (2, 2),
+    "dc": (2, 3),
+    "cu": (3, 0),
+    "cl": (3, 1),
+    "cd": (3, 2),
+    "cc": (3, 3),
+}
+
+
+def get_data():
+    dfs = concatenator()
+
+    dfs_new = []
+    for walk in dfs:
+        walk["step"] = walk.index.values
+        walk = pd.merge(walk, first_cats[["leafid", "first_cat"]], on="leafid")
+        walk.drop(
+            columns=walk.columns.difference(
+                ["leafid", "walkid", "first_cat", "shape", "step"]
+            ),
+            inplace=True,
+        )
+        dfs_new.append(walk)
+    # concat = pd.concat(dfs, ignore_index=True)
+    # concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    # mapping = {"u": 0, "l": 1, "d": 2, "c": 3}
+    # concat["shape_id"] = concat["shape"].map(mapping)
+
+    return dfs_new
 
 
 def get_transition_count(dfs):
@@ -115,8 +156,12 @@ def log_prob(params):
 def run_mcmc():
     dfs = get_data()
     global transitions
-    transitions_total = get_transition_count(dfs)
-    # mean, ub, lb = get_transition_count_avg(dfs)
+    # transitions_total = get_transition_count(dfs)
+    mean, ub, lb = get_transition_count_avg(dfs)
+    print(mean)
+    print(ub)
+    print(lb)
+    exit()
     transitions = transitions_total
 
     print(transitions)
@@ -233,5 +278,3 @@ if __name__ == "__main__":
     # )
     # plot_posterior_fromfile("emcee_run_log.csv")
     # print(get_transition_count(get_data()))
-
-    # Hi Berta, I got your feedback for the report! Thanks for your kind words, I'm glad you liked it!
