@@ -513,16 +513,17 @@ def plot_phylo_and_sim_rates(phylo_rates):
     )
 
     # Select the datasets to plot e.g. MUT2.2 simulation and 2 phylogenies
-    phylo_sim_sub = phylo_sim_long[
-        phylo_sim_long["Dataset"].isin(
-            [
-                "MUT2.2_simulation",
-                "MUT1_simulation",
-                "geeta_phylo_geeta_class",
-                "jan_phylo_nat_class",
-            ]
-        )
-    ].reset_index(drop=True)
+    # phylo_sim_sub = phylo_sim_long[
+    #     phylo_sim_long["Dataset"].isin(
+    #         [
+    #             "MUT2.2_simulation",
+    #             "MUT1_simulation",
+    #             "geeta_phylo_geeta_class",
+    #             "jan_phylo_nat_class",
+    #         ]
+    #     )
+    # ].reset_index(drop=True)
+    phylo_sim_sub = phylo_sim_long
 
     # print(sim_rates2_norm.describe())
     summary = phylo_sim_long.groupby(["Dataset", "transition"])["rate"].agg(
@@ -555,8 +556,20 @@ def plot_phylo_and_sim_rates(phylo_rates):
     phylo_sim_sub["transition"] = phylo_sim_sub["transition"].replace(rate_map)
     print(phylo_sim_sub)
 
-    plot_order = ["Simulation 1", "Simulation 2", "Phylogeny 1", "Phylogeny 2"]
-    fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(8, 8))
+    # plot_order = ["Simulation 1", "Simulation 2", "Phylogeny 1", "Phylogeny 2"]
+    plot_order = [
+        "MUT1_simulation",
+        "MUT2.2_simulation",
+        "jan_phylo_nat_class",
+        "jan_phylo_geeta_class",
+        "solt_phylo_nat_class",
+        "solt_phylo_geeta_class",
+        "geeta_phylo_nat_class",
+        "geeta_phylo_geeta_class",
+    ]
+    fig, axes = plt.subplots(
+        nrows=4, ncols=4, figsize=(10, 8)
+    )  # , layout="constrained")
 
     counter = -1
     legend_labels = []
@@ -591,10 +604,14 @@ def plot_phylo_and_sim_rates(phylo_rates):
             if j == 0:
                 ax.set_ylabel("Rate")
             if i == 3:
-                ax.set_xticklabels(["S1", "S2", "P1", "P2"])
+                ax.set_xticklabels(
+                    ["M1", "M2", "P1", "P2", "P3", "P4", "P5", "P6"], fontsize=9
+                )
                 ax.set_xlabel("Dataset")
             if j == 3 and i == 2:
-                ax.set_xticklabels(["S1", "S2", "P1", "P2"])
+                ax.set_xticklabels(
+                    ["M1", "M2", "P1", "P2", "P3", "P4", "P5", "P6"], fontsize=9
+                )
             if (i, j) == (0, 1):
                 ax.set_ylabel("Rate")
             if j != 0 and (i, j) != (0, 1):
@@ -603,20 +620,35 @@ def plot_phylo_and_sim_rates(phylo_rates):
                 ax.set_xticklabels([])
             if (i, j) == (2, 3):
                 ax.set_xlabel("Dataset")
-    plt.tight_layout()
+    labels_alt = [
+        "M1 (MUT1)",
+        "M2 (MUT2)",
+        "P1 (jan_phylo_nat_class)",
+        "P2 (jan_phylo_geeta_class)",
+        "P3 (solt_phylo_nat_class)",
+        "P4 (solt_phylo_geeta_class)",
+        "P5 (geeta_phylo_nat_class)",
+        "P6 (geeta_phylo_geeta_class)",
+    ]
     legend_handles = [
         plt.Rectangle((0, 0), 1, 1, color=sns.color_palette("colorblind")[i])
-        for i, label in enumerate(legend_labels)
+        for i, label in enumerate(
+            labels_alt
+        )  # change back to legend_labels if you want the default
     ]
-    plt.legend(
+    fig.legend(
         legend_handles,
-        legend_labels,
-        loc="lower right",
+        labels_alt,
+        loc="right",
         # title="Dataset",
         # loc="outside center right",
         # bbox_to_anchor=(1.2, 0.5),
+        # fontsize=11,
+        ncol=1,
     )
-    plt.subplots_adjust(hspace=0.2, wspace=0.2)
+    plt.tight_layout()
+    # plt.subplots_adjust(hspace=0.25, wspace=0.2, bottom=0.18)
+    plt.subplots_adjust(hspace=0.2, wspace=0.2, right=0.72)
     plt.show()
 
 
