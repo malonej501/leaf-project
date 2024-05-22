@@ -574,10 +574,11 @@ def plot_phylo_and_sim_rates(phylo_rates):
     phylo_sim_long["mean_rate"] = phylo_sim_long.groupby(["Dataset", "transition"])[
         "rate"
     ].transform("mean")
-    phylo_sim_long["max_mean"] = phylo_sim_long.groupby(["Dataset"])[
+
+    phylo_sim_long["mean_mean"] = phylo_sim_long.groupby(["Dataset"])[
         "mean_rate"
-    ].transform("max")
-    phylo_sim_long["rate_norm"] = phylo_sim_long["rate"] / phylo_sim_long["max_mean"]
+    ].transform("mean")
+    phylo_sim_long["rate_norm"] = phylo_sim_long["rate"] / phylo_sim_long["mean_mean"]
     phylo_sim_long["initial_shape"], phylo_sim_long["final_shape"] = zip(
         *phylo_sim_long["transition"].map(rates_map)
     )
@@ -654,7 +655,9 @@ def plot_phylo_and_sim_rates(phylo_rates):
                 plot_data = phylo_sim_sub[phylo_sim_sub["transition"] == transition]
                 bar_data = []
                 for dataset in plot_order:
-                    bar_data.append(plot_data["rate"][plot_data["Dataset"] == dataset])
+                    bar_data.append(
+                        plot_data["rate_norm"][plot_data["Dataset"] == dataset]
+                    )
                     if dataset not in legend_labels:
                         legend_labels.append(dataset)
                 bp = ax.boxplot(
@@ -671,7 +674,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
                 for k, box in enumerate(bp["boxes"]):
                     box.set_facecolor(sns.color_palette("colorblind")[k])
                 ax.set_title(transition)
-                ax.set_ylim(0, 2.1)
+                ax.set_ylim(0, 4.5)
             if j == 0:
                 ax.set_ylabel("Rate")
             if i == 3:
