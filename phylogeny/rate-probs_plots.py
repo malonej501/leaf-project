@@ -27,6 +27,21 @@ rates_map = {
     "q32": ("c", "d"),
 }
 
+rates_map1 = {
+    "0": ("u", "l"),
+    "1": ("u", "d"),
+    "2": ("u", "c"),
+    "3": ("l", "u"),
+    "4": ("l", "d"),
+    "5": ("l", "c"),
+    "6": ("d", "u"),
+    "7": ("d", "l"),
+    "8": ("d", "c"),
+    "9": ("c", "u"),
+    "10": ("c", "l"),
+    "11": ("c", "d"),
+}
+
 
 def get_rates_single():
     wd = "Geeta/mcmc/Geeta_23-04-24/"
@@ -145,7 +160,7 @@ def rates_probs_mean(prob_tab, rates_full_wstat, wd, filename):
         prob_tab = pd.concat([prob_tab, row], ignore_index=True)
 
     print(prob_tab)
-    prob_tab.to_csv(wd + f"probs_t{T}_{filename}", index=false)
+    prob_tab.to_csv(wd + f"probs_t{T}_{filename}.csv", index=false)
 
     return prob_tab
 
@@ -470,21 +485,67 @@ def plot_rates_trace_hist(rates):
 
 
 def plot_phylo_and_sim_rates(phylo_rates):
-    sim_rates1 = pd.read_csv(
-        "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT1_emcee_run_log_01-05-24.csv"
-    )
-    sim_rates1_norm = sim_rates1.div(sim_rates1.max(axis=None))
-    sim_rates1_norm["phylo-class"] = "MUT1_simulation"
+    # s1_lb = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_lb.csv"
+    # )
+    # s1_lb = s1_lb.div(s1_lb.max(axis=None))
+    # s1_mean = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_mean.csv"
+    # )
+    # s1_mean = s1_mean.div(s1_lb.max(axis=None))
+    # s1_ub = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_ub.csv"
+    # )
+    # s1_ub = s1_ub.div(s1_lb.max(axis=None))
+    # sim_rates1_norm = pd.concat([s1_lb, s1_mean, s1_ub])
+    # sim_rates1_norm["phylo-class"] = "MUT1_simulation"
 
-    sim_rates2 = pd.read_csv(
-        "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT2.2_emcee_run_log_24-04-24.csv"
-    )
-    sim_rates2_norm = sim_rates2.div(sim_rates2.max(axis=None))
-    sim_rates2_norm["phylo-class"] = "MUT2.2_simulation"
+    # s2_lb = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_lb.csv"
+    # )
+    # s2_lb = s2_lb.div(s2_lb.max(axis=None))
+    # s2_mean = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_mean.csv"
+    # )
+    # s2_mean = s2_mean.div(s2_lb.max(axis=None))
+    # s2_ub = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_ub.csv"
+    # )
+    # s2_ub = s2_ub.div(s2_lb.max(axis=None))
+    # sim_rates2_norm = pd.concat([s2_lb, s2_mean, s2_ub])
+    # sim_rates2_norm["phylo-class"] = "MUT2.2_simulation"
 
-    sim_rates_norm = pd.concat([sim_rates1_norm, sim_rates2_norm]).reset_index(
-        drop=True
+    sim_rates1 = pd.concat(
+        [
+            pd.read_csv(
+                "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_lb.csv"
+            ),
+            pd.read_csv(
+                "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_mean.csv"
+            ),
+            pd.read_csv(
+                "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_ub.csv"
+            ),
+        ]
     )
+    sim_rates1["phylo-class"] = "MUT1_simulation"
+
+    sim_rates2 = pd.concat(
+        [
+            pd.read_csv(
+                "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_lb.csv"
+            ),
+            pd.read_csv(
+                "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_mean.csv"
+            ),
+            pd.read_csv(
+                "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_ub.csv"
+            ),
+        ]
+    )
+    sim_rates2["phylo-class"] = "MUT2.2_simulation"
+
+    sim_rates = pd.concat([sim_rates1, sim_rates2]).reset_index(drop=True)
     # sim_rates = pd.read_csv("../data-processing/emcee_run_log.csv")
     # sim_rates_norm = sim_rates.div(sim_rates.max(axis=None))
     # sim_rates_norm["phylo-class"] = "MUT2.2_simulation"
@@ -502,15 +563,25 @@ def plot_phylo_and_sim_rates(phylo_rates):
         "10": "q31",
         "11": "q32",
     }
-    sim_rates_norm = sim_rates_norm.rename(columns=name_map)
-    phylo_sim = pd.concat([sim_rates_norm, phylo_rates]).reset_index(drop=True)
+    sim_rates = sim_rates.rename(columns=name_map)
+
+    phylo_sim = pd.concat([sim_rates, phylo_rates]).reset_index(drop=True)
     phylo_sim = phylo_sim.rename(columns={"phylo-class": "Dataset"})
     phylo_sim_long = pd.melt(
         phylo_sim, id_vars=["Dataset"], var_name="transition", value_name="rate"
     )
+    # Normalise by dividing by the maximum mean transition rate for each dataset
+    phylo_sim_long["mean_rate"] = phylo_sim_long.groupby(["Dataset", "transition"])[
+        "rate"
+    ].transform("mean")
+    phylo_sim_long["max_mean"] = phylo_sim_long.groupby(["Dataset"])[
+        "mean_rate"
+    ].transform("max")
+    phylo_sim_long["rate_norm"] = phylo_sim_long["rate"] / phylo_sim_long["max_mean"]
     phylo_sim_long["initial_shape"], phylo_sim_long["final_shape"] = zip(
         *phylo_sim_long["transition"].map(rates_map)
     )
+    print(phylo_sim_long)
 
     # Select the datasets to plot e.g. MUT2.2 simulation and 2 phylogenies
     # phylo_sim_sub = phylo_sim_long[
@@ -526,7 +597,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
     phylo_sim_sub = phylo_sim_long
 
     # print(sim_rates2_norm.describe())
-    summary = phylo_sim_long.groupby(["Dataset", "transition"])["rate"].agg(
+    summary = phylo_sim_long.groupby(["Dataset", "transition"])["rate_norm"].agg(
         ["mean", "std", "count", scipy.stats.sem]
     )
     # summary.to_csv("sim_phylo_rates_summary_statistics.csv")
@@ -540,18 +611,18 @@ def plot_phylo_and_sim_rates(phylo_rates):
     #     }
     # )
     rate_map = {
-        "q01": "q_ul",
-        "q02": "q_ud",
-        "q03": "q_uc",
-        "q10": "q_lu",
-        "q12": "q_ld",
-        "q13": "q_lc",
-        "q20": "q_du",
-        "q21": "q_dl",
-        "q23": "q_dc",
-        "q30": "q_cu",
-        "q31": "q_cl",
-        "q32": "q_cd",
+        "q01": "u→l",
+        "q02": "u→d",
+        "q03": "u→c",
+        "q10": "l→u",
+        "q12": "l→d",
+        "q13": "l→c",
+        "q20": "d→u",
+        "q21": "d→l",
+        "q23": "d→c",
+        "q30": "c→u",
+        "q31": "c→l",
+        "q32": "c→d",
     }
     phylo_sim_sub["transition"] = phylo_sim_sub["transition"].replace(rate_map)
     print(phylo_sim_sub)
@@ -600,7 +671,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
                 for k, box in enumerate(bp["boxes"]):
                     box.set_facecolor(sns.color_palette("colorblind")[k])
                 ax.set_title(transition)
-                ax.set_ylim(0, 1)
+                ax.set_ylim(0, 2.1)
             if j == 0:
                 ax.set_ylabel("Rate")
             if i == 3:
@@ -621,14 +692,14 @@ def plot_phylo_and_sim_rates(phylo_rates):
             if (i, j) == (2, 3):
                 ax.set_xlabel("Dataset")
     labels_alt = [
-        "M1 (MUT1)",
-        "M2 (MUT2)",
-        "P1 (jan_phylo_nat_class)",
-        "P2 (jan_phylo_geeta_class)",
-        "P3 (solt_phylo_nat_class)",
-        "P4 (solt_phylo_geeta_class)",
-        "P5 (geeta_phylo_nat_class)",
-        "P6 (geeta_phylo_geeta_class)",
+        "M1: MUT1",
+        "M2: MUT2",
+        "P1: Janssens et al. (2020)\nphylogeny, Naturalis\nclassification",
+        "P2: Janssens et al. (2020)\nphylogeny, Geeta et al.\n(2012) classification",
+        "P3: Soltis et al. (2011)\nphylogeny, Naturalis\nclassification",
+        "P4: Soltis et al. (2011)\nphylogeny, Geeta et al.\n(2012) classification",
+        "P5: Geeta et al. (2012)\nphylogeny, Naturalis\nclassification",
+        "P6: Geeta et al. (2012)\nphylogeny, Geeta et al.\n(2012) classification",
     ]
     legend_handles = [
         plt.Rectangle((0, 0), 1, 1, color=sns.color_palette("colorblind")[i])
@@ -640,7 +711,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
         legend_handles,
         labels_alt,
         loc="right",
-        # title="Dataset",
+        title="Dataset",
         # loc="outside center right",
         # bbox_to_anchor=(1.2, 0.5),
         # fontsize=11,
@@ -648,7 +719,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
     )
     plt.tight_layout()
     # plt.subplots_adjust(hspace=0.25, wspace=0.2, bottom=0.18)
-    plt.subplots_adjust(hspace=0.2, wspace=0.2, right=0.72)
+    plt.subplots_adjust(hspace=0.2, wspace=0.2, right=0.745)
     plt.show()
 
 
@@ -656,7 +727,7 @@ if __name__ == "__main__":
 
     phylo_rates = get_rates_batch(directory="all_rates/uniform_1010000steps")
     # plot_rates_trace_hist(rates)
-    phylo_rates_norm = normalise_rates(phylo_rates)
-    plot_phylo_and_sim_rates(phylo_rates_norm)
+    # phylo_rates_norm = normalise_rates(phylo_rates)
+    plot_phylo_and_sim_rates(phylo_rates)
     # rates_batch_stats(rates_norm)
     # plot_rates_batch(rates_norm)
