@@ -90,6 +90,7 @@ def get_transition_count_avg(dfs):
     for walk in dfs:
         walk_transitions = []
         if not walk.empty:
+            walkid = walk["walkid"][0]
             leafid = walk["leafid"][0]
             initial_state = walk["first_cat"][0]
             steps = walk["shape"].tolist()
@@ -105,30 +106,38 @@ def get_transition_count_avg(dfs):
                 .to_frame()
                 .reset_index(names="transition")
             )
+            count_df.insert(loc=0, column="walkid", value=walkid)
             count_df.insert(loc=0, column="leafid", value=leafid)
             count_df.insert(loc=0, column="first_cat", value=initial_state)
             count_dfs.append(count_df)
 
     # total of each transition per walkid per leafid
     counts = pd.concat(count_dfs).reset_index(drop=True)
-    # total of each transition per leafid
-    counts = (
-        counts.groupby(["leafid", "first_cat", "transition"])["count"]
-        .sum()
-        .reset_index(name="count")
-    )
     print(counts)
-    # average no. counts for each transition per first_cat
-    avg_counts = (
-        counts.groupby(["transition"])["count"].agg(["mean", "sem"]).reset_index()
-    )
-    avg_counts["ub"] = avg_counts["mean"] + 1.96 * avg_counts["sem"]
-    avg_counts["lb"] = avg_counts["mean"] - 1.96 * avg_counts["sem"]
-    print(avg_counts)
 
-    mean = avg_counts[["transition", "mean"]].rename(columns={"mean": "count"})
-    ub = avg_counts[["transition", "ub"]].rename(columns={"ub": "count"})
-    lb = avg_counts[["transition", "lb"]].rename(columns={"lb": "count"})
+    # total no. each transition per leafid
+    leaf_sum = (
+        counts.groupby(["first_cat", "leafid", "transition"])["count"]
+        .agg(["sum"])
+        .reset_index()
+    )
+    leaf_sum
+    print(leaf_sum)
+    # average no. each transition across leafids
+    leaf_avg = (
+        leaf_sum.groupby(["transition"])["sum"].agg(["mean", "sem"]).reset_index()
+    )
+    print(leaf_avg)
+    # avg_counts["sem"] = avg_counts["sem"].fillna(
+    #     0
+    # )  # Beware this will give spuriously tight confidence interval - technically the interval is infinite
+    leaf_avg["ub"] = leaf_avg["mean"] + 1.96 * leaf_avg["sem"]
+    leaf_avg["lb"] = leaf_avg["mean"] - 1.96 * leaf_avg["sem"]
+    # print(leaf_avg)
+
+    mean = leaf_avg[["transition", "mean"]].rename(columns={"mean": "count"})
+    ub = leaf_avg[["transition", "ub"]].rename(columns={"ub": "count"})
+    lb = leaf_avg[["transition", "lb"]].rename(columns={"lb": "count"})
 
     return mean, ub, lb
 
@@ -143,7 +152,7 @@ def log_prob(params):
         ]
     )
     log_prob = 0
-    Pt = scipy.linalg.expm(Q)  # t=1 for every transition
+    Pt = scipy.linalg.expm(Q * 0.1)  # t=1 for every transition
     for i, transition in enumerate(transitions["transition"]):
         log_prob += transitions["count"][i] * np.log(
             Pt[transition_map_rates[transition]]
@@ -158,11 +167,8 @@ def run_mcmc():
     global transitions
     # transitions_total = get_transition_count(dfs)
     mean, ub, lb = get_transition_count_avg(dfs)
-    print(mean)
-    print(ub)
-    print(lb)
-    exit()
-    transitions = transitions_total
+    transitions = mean
+    # transitions = get_transition_count(dfs)
 
     print(transitions)
     init_params = np.random.rand(nwalkers, ndim)
