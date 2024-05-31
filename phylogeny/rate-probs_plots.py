@@ -488,64 +488,36 @@ def plot_phylo_and_sim_rates(phylo_rates):
     # s1_lb = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_lb.csv"
     # )
-    # s1_lb = s1_lb.div(s1_lb.max(axis=None))
+    # s1_lb["phylo-class"] = "MUT1_simulation_lb"
     # s1_mean = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_mean.csv"
     # )
-    # s1_mean = s1_mean.div(s1_lb.max(axis=None))
+    # s1_mean["phylo-class"] = "MUT1_simulation"
     # s1_ub = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_ub.csv"
     # )
-    # s1_ub = s1_ub.div(s1_lb.max(axis=None))
-    # sim_rates1_norm = pd.concat([s1_lb, s1_mean, s1_ub])
-    # sim_rates1_norm["phylo-class"] = "MUT1_simulation"
+    # s1_ub["phylo-class"] = "MUT1_simulation_ub"
 
     # s2_lb = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_lb.csv"
     # )
-    # s2_lb = s2_lb.div(s2_lb.max(axis=None))
+    # s2_lb["phylo-class"] = "MUT2_simulation_lb"
     # s2_mean = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_mean.csv"
     # )
-    # s2_mean = s2_mean.div(s2_lb.max(axis=None))
+    # s2_mean["phylo-class"] = "MUT2_simulation"
     # s2_ub = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_ub.csv"
     # )
-    # s2_ub = s2_ub.div(s2_lb.max(axis=None))
-    # sim_rates2_norm = pd.concat([s2_lb, s2_mean, s2_ub])
-    # sim_rates2_norm["phylo-class"] = "MUT2.2_simulation"
+    # s2_ub["phylo-class"] = "MUT2_simulation_ub"
 
-    sim_rates1 = pd.concat(
-        [
-            pd.read_csv(
-                "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_lb.csv"
-            ),
-            pd.read_csv(
-                "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_mean.csv"
-            ),
-            pd.read_csv(
-                "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_ub.csv"
-            ),
-        ]
-    )
-    sim_rates1["phylo-class"] = "MUT1_simulation"
+    s1 = pd.read_csv("../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT1.csv")
+    s2 = pd.read_csv("../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv")
+    s1["phylo-class"] = "MUT1_simulation"
+    s2["phylo-class"] = "MUT2_simulation"
+    sim_rates = pd.concat([s1, s2]).reset_index(drop=True)
 
-    sim_rates2 = pd.concat(
-        [
-            pd.read_csv(
-                "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_lb.csv"
-            ),
-            pd.read_csv(
-                "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_mean.csv"
-            ),
-            pd.read_csv(
-                "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_ub.csv"
-            ),
-        ]
-    )
-    sim_rates2["phylo-class"] = "MUT2.2_simulation"
-
-    sim_rates = pd.concat([sim_rates1, sim_rates2]).reset_index(drop=True)
+    # sim_rates = pd.concat([sim_rates1, sim_rates2]).reset_index(drop=True)
     # sim_rates = pd.read_csv("../data-processing/emcee_run_log.csv")
     # sim_rates_norm = sim_rates.div(sim_rates.max(axis=None))
     # sim_rates_norm["phylo-class"] = "MUT2.2_simulation"
@@ -570,7 +542,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
     phylo_sim_long = pd.melt(
         phylo_sim, id_vars=["Dataset"], var_name="transition", value_name="rate"
     )
-    # Normalise by dividing by the maximum mean transition rate for each dataset
+    # Normalise by dividing by the mean mean transition rate for each dataset
     phylo_sim_long["mean_rate"] = phylo_sim_long.groupby(["Dataset", "transition"])[
         "rate"
     ].transform("mean")
@@ -598,9 +570,7 @@ def plot_phylo_and_sim_rates(phylo_rates):
     phylo_sim_sub = phylo_sim_long
 
     # print(sim_rates2_norm.describe())
-    summary = phylo_sim_long.groupby(["Dataset", "transition"])["rate_norm"].agg(
-        ["mean", "std", "count", scipy.stats.sem]
-    )
+
     # summary.to_csv("sim_phylo_rates_summary_statistics.csv")
 
     # phylo_sim_sub["Dataset"] = phylo_sim_sub["Dataset"].replace(
@@ -627,11 +597,88 @@ def plot_phylo_and_sim_rates(phylo_rates):
     }
     phylo_sim_sub["transition"] = phylo_sim_sub["transition"].replace(rate_map)
     print(phylo_sim_sub)
+    # exit()
+
+    # summary = (
+    #     phylo_sim_sub.groupby(["Dataset", "transition"])["rate_norm"]
+    #     .agg(["mean", "std", "count", scipy.stats.sem])
+    #     .reset_index()
+    # )
+    # # summary["mcmc_std_frac"] = summary["std"] / summary["mean"]
+    # print(summary)
+
+    # load fractional errors from transition counts
+    # MUT1_std_frac = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/avg/MUT1/MUT1_counts.csv"
+    # )
+    # MUT1_std_frac["Dataset"] = "MUT1_simulation"
+    # MUT2_std_frac = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/avg/MUT2.2/MUT2.2_counts.csv"
+    # )
+    # MUT2_std_frac["Dataset"] = "MUT2_simulation"
+    # leaf_std_frac = pd.concat([MUT1_std_frac, MUT2_std_frac])
+    # leaf_std_frac.rename(columns={"std_frac": "leaf_std_frac"}, inplace=True)
+    # # drop stasis
+    # leaf_std_frac.drop(
+    #     leaf_std_frac[leaf_std_frac["transition"].isin(["uu", "ll", "dd", "cc"])].index,
+    #     inplace=True,
+    # )
+    # # merge leaf error with mcmc_error - only introduces data for simulation rows
+    # summary = pd.merge(
+    #     summary,
+    #     leaf_std_frac[["Dataset", "transition", "leaf_std_frac"]],
+    #     on=["Dataset", "transition"],
+    #     how="outer",
+    # )
+    # summary["std_frac_quad"] = np.sqrt(
+    #     (summary["mcmc_std_frac"] ** 2) + (summary["leaf_std_frac"] ** 2)
+    # )
+    # # Make an error column which contains mcmc std for phylogeny datasets and the leaf count std and mcmc std added in quadrature for simulation datasets
+    # summary["err"] = summary["std_frac_quad"] * summary["mean"]
+    # summary["err"].fillna(summary["std"], inplace=True)
+    # print(summary)
+
+    # summary["err"] = 1.96 * summary["sem"]
+    # print(summary)
+    # exit()
+
+    # summary["ub"] = summary["mean"] + (1.96 * summary["sem"])
+    # summary["lb"] = summary["mean"] - (1.96 * summary["sem"])
+    # summary["ub"] = summary["mean"] + summary["std"]
+    # summary["lb"] = summary["mean"] - summary["std"]
+
+    # print(summary)
+    # MUT1 = summary[summary["Dataset"].isin(["MUT1_simulation_mean"])][
+    #     ["Dataset", "transition", "mean"]
+    # ].reset_index(drop=True)
+    # MUT1["lb"] = summary[summary["Dataset"] == "MUT1_simulation_lb"]["lb"]
+    # MUT1["ub"] = summary[summary["Dataset"] == "MUT1_simulation_ub"]["ub"].reset_index(
+    #     drop=True
+    # )
+    # MUT1["Dataset"] = "MUT1_simulation"
+    # print(MUT1)
+
+    # MUT2 = summary[summary["Dataset"].isin(["MUT2_simulation_mean"])][
+    #     ["Dataset", "transition", "mean"]
+    # ].reset_index(drop=True)
+    # MUT2["lb"] = summary[summary["Dataset"] == "MUT2_simulation_lb"]["lb"].reset_index(
+    #     drop=True
+    # )
+    # MUT2["ub"] = summary[summary["Dataset"] == "MUT2_simulation_ub"]["ub"].reset_index(
+    #     drop=True
+    # )
+    # MUT2["Dataset"] = "MUT2_simulation"
+    # print(MUT2)
+
+    # summary = pd.concat([MUT1, MUT2, summary])
+    # summary["mean-lb"] = abs(summary["mean"] - summary["lb"])
+    # summary["ub-mean"] = abs(summary["ub"] - summary["mean"])
+    # print(summary)
 
     # plot_order = ["Simulation 1", "Simulation 2", "Phylogeny 1", "Phylogeny 2"]
     plot_order = [
         "MUT1_simulation",
-        "MUT2.2_simulation",
+        "MUT2_simulation",
         "jan_phylo_nat_class",
         "jan_phylo_geeta_class",
         "solt_phylo_nat_class",
@@ -653,28 +700,69 @@ def plot_phylo_and_sim_rates(phylo_rates):
                 counter += 1
                 transition = list(rate_map.values())[counter]
                 plot_data = phylo_sim_sub[phylo_sim_sub["transition"] == transition]
-                bar_data = []
-                for dataset in plot_order:
-                    bar_data.append(
-                        plot_data["rate_norm"][plot_data["Dataset"] == dataset]
-                    )
+                print(plot_data)
+                rates = []
+                for k, dataset in enumerate(plot_order):
+                    # dset.append(dataset)
+                    rates.append(plot_data["rate_norm"][plot_data["Dataset"] == dataset].squeeze())
+
+                    # err = plot_data["sem"][
+                    #     plot_data["Dataset"] == dataset
+                    # ].squeeze()  # rate_lb = plot_data["mean-lb"][
+                    #     plot_data["Dataset"] == dataset
+                    # ].squeeze()
+
+                    # rate_ub = plot_data["ub-mean"][
+                    #     plot_data["Dataset"] == dataset
+                    # ].squeeze()
+                    # ax.axvspan(
+                    #     # "MUT1_simulation",
+                    #     # "MUT2_simulation",
+                    #     -0.5,
+                    #     1.5,
+                    #     color="grey",
+                    #     alpha=0.04,
+                    #     linewidth=0,
+                    # )
+                    # ax.errorbar(
+                    #     x=dataset,
+                    #     y=rate,
+                    #     yerr=err,
+                    #     fmt="o",
+                    #     ms=4,
+                    #     color=sns.color_palette("colorblind")[k],
+                    #     capsize=2.5,
+                    #     capthick=1.5,
+                    #     elinewidth=1.5,
+                    # )
+
                     if dataset not in legend_labels:
                         legend_labels.append(dataset)
                 bp = ax.boxplot(
-                    bar_data,
+                    rates,
                     patch_artist=True,
-                    showmeans=True,
-                    meanline=True,
+                    # showmeans=True,
+                    # meanline=True,
                     showfliers=False,
                 )
-                for mean in bp["means"]:
-                    mean.set(color="black")
+                # bp = ax.violinplot(
+                #     rates,
+                #     showmedians=True,
+                #     showextrema=False,
+                # )
+
                 for median in bp["medians"]:
-                    median.set_visible(False)
+                    #median.set_visible(False)
+                    median.set(color="black")
                 for k, box in enumerate(bp["boxes"]):
                     box.set_facecolor(sns.color_palette("colorblind")[k])
+                # for k, pc in enumerate(bp['bodies']):
+                #     pc.set_facecolor(sns.color_palette("colorblind")[k])
+                #     pc.set_alpha(1)
+                # bp['cmedians'].set_colors("black")
+                ax.axvline(1.5, linestyle="--", color="grey", alpha=0.05)
                 ax.set_title(transition)
-                ax.set_ylim(0, 4.5)
+                ax.set_ylim(0, 5)
             if j == 0:
                 ax.set_ylabel("Rate")
             if i == 3:
