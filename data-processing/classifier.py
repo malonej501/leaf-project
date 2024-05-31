@@ -13,6 +13,7 @@ kernel_size = (5, 5)
 contourbuff_size = 40
 wd = "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01"
 wd1 = "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/LeafGenerator/testleaves/"
+wd2 = "/home/m/malone/leaf_storage/Fig"
 
 randomwalkleaves = "leaves_full_21-9-23_MUT2.2_CLEAN"
 
@@ -441,29 +442,34 @@ def main_batch(directory):
             for x, y in points:
                 cv2.circle(img, (x, y), 10, (255, 191, 0), -1)
         cv2.circle(img, refpoint, 10, (0, 165, 255), -1)
-        cv2.imwrite(directory + f"/{file[:-4]}-points.png", img)
+        # cv2.imwrite(directory + f"/{file[:-4]}-points.png", img)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Save the image as a PDF
+        plt.imsave(directory + f"/{file[:-4]}-points.pdf", img_rgb)
 
-        seaborn.scatterplot(refdist, color="black", edgecolor="none")
+        plt.figure(figsize=(3, 4))
+        seaborn.scatterplot(refdist, color="black", s=10, edgecolor="none")
         seaborn.scatterplot(
             y=refdist[local_maxima_indices + 40],
             x=local_maxima_indices + 40,
             color="red",
-            s=150,
+            s=100,
             edgecolor="none",
         )
         seaborn.scatterplot(
             y=refdist[local_minima_indices + 40],
             x=local_minima_indices + 40,
             color="#00bfff",
-            s=150,
+            s=100,
             edgecolor="none",
         )
-        plt.xlabel("Contour position", fontsize=16)
-        plt.ylabel("Distance from ref. point", fontsize=16)
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14)
+        plt.xlabel("Contour position")  # , fontsize=16)
+        plt.ylabel("Distance from ref. point")  # , fontsize=16)
+        # plt.xticks(fontsize=14)
+        # plt.yticks(fontsize=14)
         plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.95)
-        plt.savefig(directory + f"/{file[:-4]}-graph.png")
+        plt.show()
+        # plt.savefig(directory + f"/{file[:-4]}-graph.png")
         plt.clf()
 
         (
@@ -625,4 +631,5 @@ def parallel(wd, function):
                 process.join()
 
 
-parallel(randomwalkleaves, contour_out)
+main_batch(wd2)
+# parallel(randomwalkleaves, contour_out)
