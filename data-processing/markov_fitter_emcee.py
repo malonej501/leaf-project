@@ -119,7 +119,6 @@ def get_transition_count_avg(dfs):
     # total of each transition per walkid per leafid
     counts = pd.concat(count_dfs).reset_index(drop=True)
     print(counts)
-    exit()
     # counts["count_norm"] = counts["count"] / counts["walk_length"]
 
     # total no. each transition per leafid
@@ -141,30 +140,26 @@ def get_transition_count_avg(dfs):
     # )  # Beware this will give spuriously tight confidence interval - technically the interval is infinite
     # leaf_avg["ub"] = leaf_avg["mean"] + 1.96 * leaf_avg["sem"]
     # leaf_avg["lb"] = leaf_avg["mean"] - 1.96 * leaf_avg["sem"]
-    # leaf_avg["ub"] = leaf_avg["mean"] + leaf_avg["std"]
-    # leaf_avg["lb"] = leaf_avg["mean"] - leaf_avg["std"]
-    leaf_avg["std_frac"] = leaf_avg["std"] / leaf_avg["mean"]
-    transition_map = {
-        "ul": "u→l",
-        "ud": "u→d",
-        "uc": "u→c",
-        "lu": "l→u",
-        "ld": "l→d",
-        "lc": "l→c",
-        "du": "d→u",
-        "dl": "d→l",
-        "dc": "d→c",
-        "cu": "c→u",
-        "cl": "c→l",
-        "cd": "c→d",
-    }
-    leaf_avg["transition"] = leaf_avg["transition"].replace(transition_map)
+    leaf_avg["ub"] = leaf_avg["mean"] + leaf_avg["std"]
+    leaf_avg["lb"] = leaf_avg["mean"] - leaf_avg["std"]
+    # leaf_avg["std_frac"] = leaf_avg["std"] / leaf_avg["mean"]
+    # transition_map = {
+    #     "ul": "u→l",
+    #     "ud": "u→d",
+    #     "uc": "u→c",
+    #     "lu": "l→u",
+    #     "ld": "l→d",
+    #     "lc": "l→c",
+    #     "du": "d→u",
+    #     "dl": "d→l",
+    #     "dc": "d→c",
+    #     "cu": "c→u",
+    #     "cl": "c→l",
+    #     "cd": "c→d",
+    # }
+    # leaf_avg["transition"] = leaf_avg["transition"].replace(transition_map)
+    # leaf_avg.to_csv("MUT2_counts.csv", index=False)
     print(leaf_avg)
-    exit()
-    leaf_avg.to_csv("MUT2_counts.csv", index=False)
-    print(leaf_avg)
-    exit()
-
     mean = leaf_avg[["transition", "mean"]].rename(columns={"mean": "count"})
     ub = leaf_avg[["transition", "ub"]].rename(columns={"ub": "count"})
     lb = leaf_avg[["transition", "lb"]].rename(columns={"lb": "count"})
@@ -248,7 +243,7 @@ def log_prob(params):
         ]
     )
     log_prob = 0
-    Pt = scipy.linalg.expm(Q * 0.1)  # t=1 for every transition
+    Pt = scipy.linalg.expm(Q)  # * 0.1)  # t=1 for every transition
     for i, transition in enumerate(transitions["transition"]):
         log_prob += transitions["count"][i] * np.log(
             Pt[transition_map_rates[transition]]
@@ -262,9 +257,9 @@ def run_mcmc():
     dfs = get_data()
     global transitions
     # transitions_total = get_transition_count(dfs)
-    leaf_sum = get_leaf_transitions(dfs)
-    # mean, ub, lb, sem, std = get_transition_count_avg(dfs)
-    # transitions = std
+    # leaf_sum = get_leaf_transitions(dfs)
+    mean, ub, lb, sem, std = get_transition_count_avg(dfs)
+    transitions = mean
     # transitions = get_transition_count(dfs)
 
     print(transitions)
@@ -283,7 +278,7 @@ def run_mcmc():
 
 
 def run_mcmc_leaf_uncert(pid):
-    n_shuffle = 10
+    n_shuffle = 25
     dfs = get_data()
     global transitions
     leaf_sum = get_leaf_transitions(dfs)
@@ -324,6 +319,26 @@ def run_mcmc_leaf_uncert(pid):
         )
         samples = pd.DataFrame(samples)
         samples.to_csv(f"emcee_run_log_{sample}_{pid}_{i}.csv", index=False)
+
+        # chain = sampler.get_chain()[
+        #     :, 1, :
+        # ]  # from the left to right the indicies represent: step, chain, parameter
+        # # here we take all steps for all parameters from one chain
+        # chain = pd.DataFrame(chain)
+        # chain["step"] = chain.index
+        # chain_long = pd.melt(
+        #     chain, id_vars=["step"], var_name="parameter", value_name="rate"
+        # )
+        # sns.relplot(
+        #     data=chain_long,
+        #     x="step",
+        #     y="rate",
+        #     col="parameter",
+        #     col_wrap=4,
+        #     kind="line",
+        # )
+        # plt.show()
+        # plt.clf()
 
 
 def run_leaf_uncert_parallel():
@@ -474,8 +489,9 @@ def combine_posteriors_from_file():
 if __name__ == "__main__":
     # dfs = get_data()
     # get_transition_count_avg(dfs)
-    #run_leaf_uncert_parallel()
-    combine_posteriors_from_file()
+    run_leaf_uncert_parallel()
+    # run_mcmc_leaf_uncert(0)
+    # combine_posteriors_from_file()
     # samples, sampler = run_mcmc()
     # plot_posterior(samples, sampler)
     # plot_posterior_fromfile(
