@@ -434,7 +434,7 @@ def plot_rates_batch(rates):
 
 def rates_batch_stats(rates):
     print(rates)
-    stats = rates.groupby("phylo-class").agg(["mean", "sem"])
+    stats = rates.groupby("phylo-class").agg(["mean","median", "sem"])
     statsT = stats.T
     # statsT.to_csv("phylogenetic_rates_norm_stats.csv")
     means = rates.groupby("phylo-class").agg(["mean"])
@@ -484,7 +484,33 @@ def plot_rates_trace_hist(rates):
     plt.show()
 
 
-def plot_phylo_and_sim_rates(phylo_rates):
+def concat_posteriors():
+    wd = "../data-processing/markov_fitter_reports/emcee/err_MUT2_2"
+    files = []
+    for file in os.listdir(wd):
+        if file.endswith(".csv"):
+            posterior = pd.read_csv(os.path.join(wd, file))
+            files.append(posterior)
+    posterior_concat = pd.concat(files)
+    posterior_concat.to_csv("posterior_concat.csv", index=False)
+
+def med_diff(summary):
+    dfs = []
+    for dataset in set(summary["Dataset_"]):
+        dataset_sub = summary[summary["Dataset_"] == dataset].reset_index(drop=True)
+        # create column with reverse transition types for each row
+        dataset_sub["transition_rev"] = dataset_sub["transition_"].str[2] + "→" + dataset_sub["transition_"].str[0]
+        # order alphabetically by the reverse transition types and find the difference
+        dataset_sub_rev = dataset_sub.sort_values(by="transition_rev").reset_index(drop=True)
+        dataset_sub["rate_norm_median_diff"] = dataset_sub["rate_norm_median"] - dataset_sub_rev["rate_norm_median"]
+        dfs.append(dataset_sub)
+    summary_new = pd.concat(dfs).reset_index(drop=True)
+    return summary_new
+
+
+
+def plot_phylo_and_sim_rates():
+    phylo_rates = get_rates_batch(directory="all_rates/uniform_1010000steps")
     # s1_lb = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/avg/MUT1/emcee_run_log_lb.csv"
     # )
@@ -511,8 +537,12 @@ def plot_phylo_and_sim_rates(phylo_rates):
     # )
     # s2_ub["phylo-class"] = "MUT2_simulation_ub"
 
-    s1 = pd.read_csv("../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT1.csv")
-    s2 = pd.read_csv("../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv")
+    s1 = pd.read_csv(
+        "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT1.csv"
+    )
+    s2 = pd.read_csv(
+        "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv"
+    )
     s1["phylo-class"] = "MUT1_simulation"
     s2["phylo-class"] = "MUT2_simulation"
     sim_rates = pd.concat([s1, s2]).reset_index(drop=True)
@@ -599,11 +629,18 @@ def plot_phylo_and_sim_rates(phylo_rates):
     print(phylo_sim_sub)
     # exit()
 
-    # summary = (
-    #     phylo_sim_sub.groupby(["Dataset", "transition"])["rate_norm"]
-    #     .agg(["mean", "std", "count", scipy.stats.sem])
-    #     .reset_index()
-    # )
+    summary = (
+        phylo_sim_sub.groupby(["Dataset", "transition"])[["rate_norm", "rate"]]
+        .agg(["mean", "median", "count", "std", "sem"])
+        .reset_index()
+    )
+    summary.columns = ['_'.join(col).strip() for col in summary.columns.values]
+    
+    # get differences between back and forth median rates for arrow plots
+    summary = med_diff(summary)
+    print(summary)
+    #summary.to_csv("sim_phylo_rates_stats_11-06-24.csv", index=False)
+
     # # summary["mcmc_std_frac"] = summary["std"] / summary["mean"]
     # print(summary)
 
@@ -704,7 +741,11 @@ def plot_phylo_and_sim_rates(phylo_rates):
                 rates = []
                 for k, dataset in enumerate(plot_order):
                     # dset.append(dataset)
-                    rates.append(plot_data["rate_norm"][plot_data["Dataset"] == dataset].squeeze())
+                    rates.append(
+                        plot_data["rate_norm"][
+                            plot_data["Dataset"] == dataset
+                        ].squeeze()
+                    )
 
                     # err = plot_data["sem"][
                     #     plot_data["Dataset"] == dataset
@@ -738,29 +779,31 @@ def plot_phylo_and_sim_rates(phylo_rates):
 
                     if dataset not in legend_labels:
                         legend_labels.append(dataset)
-                bp = ax.boxplot(
-                    rates,
-                    patch_artist=True,
-                    # showmeans=True,
-                    # meanline=True,
-                    showfliers=False,
-                )
-                # bp = ax.violinplot(
-                #     rates,
-                #     showmedians=True,
-                #     showextrema=False,
-                # )
 
-                for median in bp["medians"]:
-                    #median.set_visible(False)
-                    median.set(color="black")
-                for k, box in enumerate(bp["boxes"]):
-                    box.set_facecolor(sns.color_palette("colorblind")[k])
-                # for k, pc in enumerate(bp['bodies']):
-                #     pc.set_facecolor(sns.color_palette("colorblind")[k])
-                #     pc.set_alpha(1)
-                # bp['cmedians'].set_colors("black")
-                ax.axvline(1.5, linestyle="--", color="grey", alpha=0.05)
+                ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
+                # bp = ax.boxplot(
+                #     rates,
+                #     patch_artist=True,
+                #     # showmeans=True,
+                #     # meanline=True,
+                #     showfliers=False,
+                # )
+                bp = ax.violinplot(
+                    rates,
+                    showmedians=True,
+                    showextrema=False,
+                )
+
+                # for median in bp["medians"]:
+                #     # median.set_visible(False)
+                #     median.set(color="black")
+                # for k, box in enumerate(bp["boxes"]):
+                #     box.set_facecolor(sns.color_palette("colorblind")[k])
+                for k, pc in enumerate(bp["bodies"]):
+                    pc.set_facecolor(sns.color_palette("colorblind")[k])
+                    pc.set_edgecolor("black")
+                    pc.set_alpha(1)
+                bp["cmedians"].set_colors("black")
                 ax.set_title(transition)
                 ax.set_ylim(0, 5)
             if j == 0:
@@ -816,9 +859,10 @@ def plot_phylo_and_sim_rates(phylo_rates):
 
 if __name__ == "__main__":
 
-    phylo_rates = get_rates_batch(directory="all_rates/uniform_1010000steps")
     # plot_rates_trace_hist(rates)
     # phylo_rates_norm = normalise_rates(phylo_rates)
-    plot_phylo_and_sim_rates(phylo_rates)
+    plot_phylo_and_sim_rates()
+    # concat_posteriors()
     # rates_batch_stats(rates_norm)
     # plot_rates_batch(rates_norm)
+    # concat_posteriors()
