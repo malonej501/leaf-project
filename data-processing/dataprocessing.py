@@ -19,8 +19,8 @@ from sklearn.preprocessing import StandardScaler
 import sympy as sp
 from scipy.integrate import odeint
 
-wd = "leaves_full_21-9-23_MUT2.2_CLEAN"
-# wd = "leaves_full_15-9-23_MUT1_CLEAN"
+# wd = "leaves_full_21-9-23_MUT2.2_CLEAN"
+wd = "leaves_full_15-9-23_MUT1_CLEAN"
 # resd = "/home/m/malone/leaf_storage/random_walks"
 wd1 = "../vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01/LeafGenerator"
 
@@ -140,6 +140,7 @@ first_cats = pd.DataFrame(
 
 def concatenator():
     dfs = []
+    print(f"\n\nCurrent directory: {wd}\n\n")
 
     for leafdirectory in os.listdir(wd):
         print(f"Current = {leafdirectory}")
@@ -596,7 +597,7 @@ def paramspace():
 
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
     fig, axs = plt.subplots(
-        2, 2, figsize=(9, 10), sharex="all", sharey="all", layout="constrained"
+        2, 2, figsize=(7, 8), sharex="all", sharey="all", layout="constrained"
     )
     counter = -1
     for i, row in enumerate(axs):
@@ -605,6 +606,9 @@ def paramspace():
             shape = order[counter]
             plot_data = princip_df_result[
                 princip_df_result["shape"] == shape
+            ].reset_index(drop=True)
+            unlobed_data = princip_df_result[
+                princip_df_result["shape"] == "u"
             ].reset_index(drop=True)
             # plot walk_data
             ax.scatter(
@@ -632,6 +636,13 @@ def paramspace():
             )
             # plot convex hulls for walk data
             hull = hulls[counter]
+            hull_unlobed = hulls[0]
+            for simplex in hull_unlobed.simplices:
+                ax.plot(
+                    unlobed_data["pc1"][simplex],
+                    unlobed_data["pc2"][simplex],
+                    color="grey",
+                )
             for simplex in hull.simplices:
                 # print(simplex)
                 # print(princip_df_result["pc1"][simplex])
@@ -1321,6 +1332,8 @@ def plot_sim_and_phylogeny_curves():
         confidence_intervals[col] = (
             np.mean(data) - (1.96 * stats.sem(data)),
             np.mean(data) + (1.96 * stats.sem(data)),
+            # np.mean(data) - np.std(data),
+            # np.mean(data) + np.std(data),
         )
     phylo_summary["lb"] = [i[0] for i in confidence_intervals.values()]
     phylo_summary["ub"] = [i[1] for i in confidence_intervals.values()]
@@ -1332,13 +1345,16 @@ def plot_sim_and_phylogeny_curves():
     # sim_rates = pd.read_csv(
     #     "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT2.2_emcee_run_log_24-04-24.csv"
     # )
-    mean = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_mean.csv")
-    ub = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_ub.csv")
-    lb = pd.read_csv("markov_fitter_reports/emcee/avg/emcee_run_log_lb.csv")
+    # mean = pd.read_csv("markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_mean.csv")
+    # ub = pd.read_csv("markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_ub.csv")
+    # lb = pd.read_csv("markov_fitter_reports/emcee/avg/MUT2.2/emcee_run_log_lb.csv")
+    sim_rates = (
+        pd.read_csv("markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv") * 0.1
+    )
 
     # sim_rates = pd.concat([mean, ub, lb])
     # sim_rates = ub
-    avg_list = [lb, mean, ub]
+    # avg_list = [lb, mean, ub]
 
     name_map = {
         "0": "q01",
@@ -1357,53 +1373,51 @@ def plot_sim_and_phylogeny_curves():
 
     sim_summaries = []
 
-    for sim_rates in avg_list:
-        sim_rates = sim_rates.rename(columns=name_map)
-        sim_rates.insert(
-            0, "q00", -sim_rates["q01"] - sim_rates["q02"] - sim_rates["q03"]
-        )
-        sim_rates.insert(
-            5, "q11", -sim_rates["q10"] - sim_rates["q12"] - sim_rates["q13"]
-        )
-        sim_rates.insert(
-            10,
-            "q22",
-            -sim_rates["q20"] - sim_rates["q21"] - sim_rates["q23"],
-        )
-        sim_rates.insert(
-            15,
-            "q33",
-            -sim_rates["q30"] - sim_rates["q31"] - sim_rates["q32"],
-        )
+    # for sim_rates in avg_list:
+    sim_rates = sim_rates.rename(columns=name_map)
+    sim_rates.insert(0, "q00", -sim_rates["q01"] - sim_rates["q02"] - sim_rates["q03"])
+    sim_rates.insert(5, "q11", -sim_rates["q10"] - sim_rates["q12"] - sim_rates["q13"])
+    sim_rates.insert(
+        10,
+        "q22",
+        -sim_rates["q20"] - sim_rates["q21"] - sim_rates["q23"],
+    )
+    sim_rates.insert(
+        15,
+        "q33",
+        -sim_rates["q30"] - sim_rates["q31"] - sim_rates["q32"],
+    )
 
-        # Calculate means
-        sim_summary = sim_rates.mean().reset_index()
-        sim_summary.columns = ["transition", "mean_rate"]
-        # Calculate confidence intervals
-        confidence_intervals = {}
-        for col in sim_rates.columns:
-            data = sim_rates[col].dropna()
-            confidence_intervals[col] = (
-                np.mean(data) - (1.96 * stats.sem(data)),
-                np.mean(data) + (1.96 * stats.sem(data)),
-                # np.mean(data) - (200 * np.var(data, ddof=1)),
-                # np.mean(data) + (200 * np.var(data, ddof=1)),
-            )
-        sim_summary["lb"] = [i[0] for i in confidence_intervals.values()]
-        sim_summary["ub"] = [i[1] for i in confidence_intervals.values()]
-        sim_summaries.append(sim_summary)
-
-    print(sim_summaries)
+    # Calculate means
+    sim_summary = sim_rates.mean().reset_index()
+    sim_summary.columns = ["transition", "mean_rate"]
+    # Calculate confidence intervals
+    confidence_intervals = {}
+    for col in sim_rates.columns:
+        data = sim_rates[col].dropna()
+        confidence_intervals[col] = (
+            np.mean(data) - (1.96 * stats.sem(data)),
+            np.mean(data) + (1.96 * stats.sem(data)),
+            # np.mean(data) - np.std(data),
+            # np.mean(data) + np.std(data),
+            # np.mean(data) - (200 * np.var(data, ddof=1)),
+            # np.mean(data) + (200 * np.var(data, ddof=1)),
+        )
+    sim_summary["lb"] = [i[0] for i in confidence_intervals.values()]
+    sim_summary["ub"] = [i[1] for i in confidence_intervals.values()]
+    # sim_summaries.append(sim_summary)
+    print(sim_summary)
 
     # Use the mean of the emcee mean, ub of emcee ub, lb of emcee lb
-    sim_summary = pd.DataFrame(
-        {
-            "transition": sim_summaries[1]["transition"],
-            "mean_rate": sim_summaries[1]["mean_rate"],
-            "lb": sim_summaries[0]["lb"],
-            "ub": sim_summaries[2]["ub"],
-        }
-    )
+    # sim_summary = pd.DataFrame(
+    #     {
+    #         "transition": sim_summaries[1]["transition"],
+    #         "mean_rate": sim_summaries[1]["mean_rate"],
+    #         "lb": sim_summaries[0]["lb"],
+    #         "ub": sim_summaries[2]["ub"],
+    #     }
+    # )
+    # print(sim_summary)
 
     # Get sim timeseries data
     dfs = concatenator()
@@ -1531,7 +1545,7 @@ def plot_sim_and_phylogeny_curves():
                     ax.set_title("MUT2 Data")
                 ax.set_ylabel("Mean Prop.")
                 ax.annotate(  # This adds the row labels
-                    order_full[i],
+                    f"Initial shape\n{order_full[i]}",
                     xy=(0, 0.5),
                     xytext=(-ax.yaxis.labelpad - 5, 0),
                     xycoords=ax.yaxis.label,
@@ -1553,7 +1567,10 @@ def plot_sim_and_phylogeny_curves():
                 ax.set_ylabel("P")
                 # ax.set_title(order_full[i])
                 if i == 0:
-                    ax.set_title("jan_phylo_nat_class CTMC")
+                    ax.set_title(
+                        "Janssens et al. (2020)\nphylogeny, Naturalis\nclassification CTMC"
+                    )
+                ax.set_xlim(0, 0.05)
 
             for s, shape in enumerate(order):
                 shape_data = cat_data[cat_data["shape"] == shape]
@@ -1581,7 +1598,7 @@ def plot_sim_and_phylogeny_curves():
                     ax.set_xlabel("t")
     legend = fig.legend(
         lines,
-        ["unlobed", "lobed", "dissected", "compound"],
+        order_full,
         loc="outside right",
         title="Final shape",
         # fontsize=11,
