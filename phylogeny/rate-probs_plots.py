@@ -434,7 +434,7 @@ def plot_rates_batch(rates):
 
 def rates_batch_stats(rates):
     print(rates)
-    stats = rates.groupby("phylo-class").agg(["mean","median", "sem"])
+    stats = rates.groupby("phylo-class").agg(["mean", "median", "sem"])
     statsT = stats.T
     # statsT.to_csv("phylogenetic_rates_norm_stats.csv")
     means = rates.groupby("phylo-class").agg(["mean"])
@@ -494,19 +494,25 @@ def concat_posteriors():
     posterior_concat = pd.concat(files)
     posterior_concat.to_csv("posterior_concat.csv", index=False)
 
+
 def med_diff(summary):
     dfs = []
     for dataset in set(summary["Dataset_"]):
         dataset_sub = summary[summary["Dataset_"] == dataset].reset_index(drop=True)
         # create column with reverse transition types for each row
-        dataset_sub["transition_rev"] = dataset_sub["transition_"].str[2] + "→" + dataset_sub["transition_"].str[0]
+        dataset_sub["transition_rev"] = (
+            dataset_sub["transition_"].str[2] + "→" + dataset_sub["transition_"].str[0]
+        )
         # order alphabetically by the reverse transition types and find the difference
-        dataset_sub_rev = dataset_sub.sort_values(by="transition_rev").reset_index(drop=True)
-        dataset_sub["rate_norm_median_diff"] = dataset_sub["rate_norm_median"] - dataset_sub_rev["rate_norm_median"]
+        dataset_sub_rev = dataset_sub.sort_values(by="transition_rev").reset_index(
+            drop=True
+        )
+        dataset_sub["rate_norm_median_diff"] = (
+            dataset_sub["rate_norm_median"] - dataset_sub_rev["rate_norm_median"]
+        )
         dfs.append(dataset_sub)
     summary_new = pd.concat(dfs).reset_index(drop=True)
     return summary_new
-
 
 
 def plot_phylo_and_sim_rates():
@@ -634,12 +640,12 @@ def plot_phylo_and_sim_rates():
         .agg(["mean", "median", "count", "std", "sem"])
         .reset_index()
     )
-    summary.columns = ['_'.join(col).strip() for col in summary.columns.values]
-    
+    summary.columns = ["_".join(col).strip() for col in summary.columns.values]
+
     # get differences between back and forth median rates for arrow plots
     summary = med_diff(summary)
     print(summary)
-    #summary.to_csv("sim_phylo_rates_stats_11-06-24.csv", index=False)
+    # summary.to_csv("sim_phylo_rates_stats_11-06-24.csv", index=False)
 
     # # summary["mcmc_std_frac"] = summary["std"] / summary["mean"]
     # print(summary)
@@ -801,11 +807,12 @@ def plot_phylo_and_sim_rates():
                 #     box.set_facecolor(sns.color_palette("colorblind")[k])
                 for k, pc in enumerate(bp["bodies"]):
                     pc.set_facecolor(sns.color_palette("colorblind")[k])
-                    pc.set_edgecolor("black")
+                    # pc.set_edgecolor("black")
                     pc.set_alpha(1)
                 bp["cmedians"].set_colors("black")
                 ax.set_title(transition)
                 ax.set_ylim(0, 5)
+                ax.xticks(plot_order)
             if j == 0:
                 ax.set_ylabel("Rate")
             if i == 3:
@@ -857,11 +864,29 @@ def plot_phylo_and_sim_rates():
     plt.show()
 
 
+def get_phylo_stats():
+    labels = []
+    wd = "phylogenies/final_data/labels"
+    for file in os.listdir(wd):
+        df = pd.read_csv(
+            os.path.join(wd, file), sep="\t", header=None, names=["taxa", "shape"]
+        )
+        dataset = file[:-4]
+        df.insert(0, "dataset", dataset)
+        labels.append(df)
+    labels_df = pd.concat(labels)
+    print(labels_df)
+    counts = labels_df.groupby("dataset")["shape"].value_counts().unstack(fill_value=0)
+    print(counts)
+    counts.to_csv("phylo_stats.csv")
+
+
 if __name__ == "__main__":
 
     # plot_rates_trace_hist(rates)
     # phylo_rates_norm = normalise_rates(phylo_rates)
     plot_phylo_and_sim_rates()
+    # get_phylo_stats()
     # concat_posteriors()
     # rates_batch_stats(rates_norm)
     # plot_rates_batch(rates_norm)
