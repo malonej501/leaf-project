@@ -11,7 +11,7 @@ source ./../../../../bin/sourceme.sh
 set -o xtrace
 
 #for running lpfg on plant.l and thus MyParameters.h
-./../../../../bin/lpfg -w 512 512 plantFig6_to_Fig7.map plant.a plant0_man.l plant.v -out leaf.png
+./../../../../bin/lpfg -w 512 512 plantFig6_to_Fig7.map plant.a plant0_man.l plant.v #-out leaf.png
 
 #The command below generates a black and white image
 #./../../../bin/lpfg -b plantFig6_to_Fig7.map plant.a plant.l plant.v -out leaf.png
