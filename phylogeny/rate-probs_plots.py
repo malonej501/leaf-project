@@ -71,7 +71,7 @@ def get_rates_batch(directory):
             data.append(df)
 
     data_concat = pd.concat(data, ignore_index=True)
-    print(data_concat)
+
     return data_concat
 
 
@@ -605,10 +605,6 @@ def plot_phylo_and_sim_rates():
     # ].reset_index(drop=True)
     phylo_sim_sub = phylo_sim_long
 
-    # print(sim_rates2_norm.describe())
-
-    # summary.to_csv("sim_phylo_rates_summary_statistics.csv")
-
     # phylo_sim_sub["Dataset"] = phylo_sim_sub["Dataset"].replace(
     #     {
     #         "MUT1_simulation": "Simulation 1",
@@ -645,7 +641,8 @@ def plot_phylo_and_sim_rates():
     # get differences between back and forth median rates for arrow plots
     summary = med_diff(summary)
     print(summary)
-    # summary.to_csv("sim_phylo_rates_stats_11-06-24.csv", index=False)
+    # summary.to_csv("sim_phylo_rates_stats_12-08-24.csv", index=False)
+    # exit()
 
     # # summary["mcmc_std_frac"] = summary["std"] / summary["mean"]
     # print(summary)
@@ -724,10 +721,15 @@ def plot_phylo_and_sim_rates():
         "MUT2_simulation",
         "jan_phylo_nat_class",
         "jan_phylo_geeta_class",
-        "solt_phylo_nat_class",
-        "solt_phylo_geeta_class",
+        "zuntini_phylo_nat_class",
+        "zuntini_phylo_geeta_class",
         "geeta_phylo_nat_class",
         "geeta_phylo_geeta_class",
+        # "geeta_phylo_geeta_class_23-04-24_17_each",
+        # "geeta_phylo_geeta_class_23-04-24_shuff",
+        # "geeta_phylo_geeta_class_23-04-24_mle",
+        # "geeta_phylo_geeta_class_23-04-24_17_each_mle",
+        # "geeta_phylo_geeta_class_23-04-24_shuff_mle",
     ]
     fig, axes = plt.subplots(
         nrows=4, ncols=4, figsize=(10, 8)
@@ -786,6 +788,9 @@ def plot_phylo_and_sim_rates():
                     if dataset not in legend_labels:
                         legend_labels.append(dataset)
 
+                # ax.axvline(3.5, linestyle="--", color="grey", alpha=0.5)
+                # ax.text(1, 5, "MCMC", color="grey")
+                # ax.text(4.5, 5, "MLE", color="grey")
                 ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
                 # bp = ax.boxplot(
                 #     rates,
@@ -806,23 +811,30 @@ def plot_phylo_and_sim_rates():
                 # for k, box in enumerate(bp["boxes"]):
                 #     box.set_facecolor(sns.color_palette("colorblind")[k])
                 for k, pc in enumerate(bp["bodies"]):
+                    # pc.set_facecolor(sns.color_palette("colorblind")[k % 3])
+                    # pc.set_facecolor(sns.color_palette("colorblind")[-((k - 1) // -2)])
                     pc.set_facecolor(sns.color_palette("colorblind")[k])
                     # pc.set_edgecolor("black")
                     pc.set_alpha(1)
                 bp["cmedians"].set_colors("black")
                 ax.set_title(transition)
-                ax.set_ylim(0, 5)
-                ax.xticks(plot_order)
+                ax.set_ylim(0, 6)
             if j == 0:
                 ax.set_ylabel("Rate")
             if i == 3:
-                ax.set_xticklabels(
-                    ["M1", "M2", "P1", "P2", "P3", "P4", "P5", "P6"], fontsize=9
+                ax.set_xticks(
+                    list(range(1, len(plot_order) + 1)),
+                    # plot_order,
+                    ["S1", "S2", "P1", "P2", "P3", "P4", "P5", "P6"],
+                    fontsize=9,
                 )
                 ax.set_xlabel("Dataset")
             if j == 3 and i == 2:
-                ax.set_xticklabels(
-                    ["M1", "M2", "P1", "P2", "P3", "P4", "P5", "P6"], fontsize=9
+                ax.set_xticks(
+                    list(range(1, len(plot_order) + 1)),
+                    # plot_order,
+                    ["S1", "S2", "P1", "P2", "P3", "P4", "P5", "P6"],
+                    fontsize=9,
                 )
             if (i, j) == (0, 1):
                 ax.set_ylabel("Rate")
@@ -833,17 +845,218 @@ def plot_phylo_and_sim_rates():
             if (i, j) == (2, 3):
                 ax.set_xlabel("Dataset")
     labels_alt = [
-        "M1: MUT1",
-        "M2: MUT2",
+        "S1: MUT1 Simulation",
+        "S2: MUT2 Simulation",
         "P1: Janssens et al. (2020)\nphylogeny, Naturalis\nclassification",
         "P2: Janssens et al. (2020)\nphylogeny, Geeta et al.\n(2012) classification",
-        "P3: Soltis et al. (2011)\nphylogeny, Naturalis\nclassification",
-        "P4: Soltis et al. (2011)\nphylogeny, Geeta et al.\n(2012) classification",
+        # "P3: Soltis et al. (2011)\nphylogeny, Naturalis\nclassification",
+        # "P4: Soltis et al. (2011)\nphylogeny, Geeta et al.\n(2012) classification",
+        "P3: Zuntini et al. (2024)\nphylogeny, Naturalis\nclassification",
+        "P4: Zuntini et al. (2024)\nphylogeny, Geeta et al.\n(2012) classification",
         "P5: Geeta et al. (2012)\nphylogeny, Naturalis\nclassification",
         "P6: Geeta et al. (2012)\nphylogeny, Geeta et al.\n(2012) classification",
+        # "P7: jan_phylo_nat_class\n21-01-24_95_each",
+        # "P8: jan_phylo_nat_class\n_21-01-24_shuff",
     ]
+    # labels_alt = [
+    #     "P1: Geeta et al. (2012)\nphylogeny, Geeta et al.\n(2012) classification",
+    #     "P2: geeta_phylo_geeta_\nclass_23-04-24_17_each\n_mcmc",
+    #     "P3: geeta_phylo_geeta_\nclass_23-04-24_17_each\n_mle",
+    #     "P4: geeta_phylo_geeta_\nclass_23-04-24_shuff\n_mcmc",
+    #     "P5: geeta_phylo_geeta_\nclass_23-04-24_shuff\n_mle",
+    # ]
+    # labels_alt = [
+    #     "P1: original mcmc",
+    #     "P2: 17 each, mcmc",
+    #     "P3: shuffled, mcmc",
+    #     "P4: original mle",
+    #     "P5: 17 each, mle",
+    #     "P6: shuffled, mle",
+    # ]
+    # labels_alt = [
+    #     "P1: jan_phylo_nat_class",
+    #     "P2: jan_phylo_geeta_class",
+    #     "P3: solt_phylo_nat_class",
+    #     "P4: solt_phylo_geeta_class",
+    #     "P5: geeta_phylo_nat_class",
+    #     "P6: geeta_phylo_geeta_class",
+    # ]
+
     legend_handles = [
-        plt.Rectangle((0, 0), 1, 1, color=sns.color_palette("colorblind")[i])
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            # color=sns.color_palette("colorblind")[i % 3],
+            # color=sns.color_palette("colorblind")[-((i - 1) // -2)],
+            color=sns.color_palette("colorblind")[i],
+        )
+        for i, label in enumerate(
+            labels_alt
+        )  # change back to legend_labels if you want the default
+    ]
+    fig.legend(
+        legend_handles,
+        labels_alt,
+        loc="right",
+        title="Dataset",
+        # loc="outside center right",
+        # bbox_to_anchor=(1.2, 0.5),
+        # fontsize=11,
+        ncol=1,
+    )
+    plt.tight_layout()
+    # plt.subplots_adjust(hspace=0.25, wspace=0.2, bottom=0.18)
+    plt.subplots_adjust(hspace=0.2, wspace=0.2, right=0.745)
+    plt.show()
+
+    #### For the Shuffle test
+
+    plot_order = [
+        # "MUT1_simulation",
+        # "MUT2_simulation",
+        # "jan_phylo_nat_class",
+        # "jan_phylo_geeta_class",
+        # "zuntini_phylo_nat_class",
+        # "zuntini_phylo_geeta_class",
+        # "geeta_phylo_nat_class",
+        "geeta_phylo_geeta_class",
+        "geeta_phylo_geeta_class_23-04-24_17_each",
+        "geeta_phylo_geeta_class_23-04-24_shuff",
+        "geeta_phylo_geeta_class_23-04-24_mle",
+        "geeta_phylo_geeta_class_23-04-24_17_each_mle",
+        "geeta_phylo_geeta_class_23-04-24_shuff_mle",
+    ]
+    fig, axes = plt.subplots(
+        nrows=4, ncols=4, figsize=(10, 8)
+    )  # , layout="constrained")
+
+    counter = -1
+    legend_labels = []
+    for i, row in enumerate(axes):
+        for j, ax in enumerate(row):
+            if i == j:
+                axes[i, j].axis("off")
+            if i != j:
+                counter += 1
+                transition = list(rate_map.values())[counter]
+                plot_data = phylo_sim_sub[phylo_sim_sub["transition"] == transition]
+                print(plot_data)
+                rates = []
+                for k, dataset in enumerate(plot_order):
+                    # dset.append(dataset)
+                    rates.append(
+                        plot_data["rate_norm"][
+                            plot_data["Dataset"] == dataset
+                        ].squeeze()
+                    )
+
+                    # err = plot_data["sem"][
+                    #     plot_data["Dataset"] == dataset
+                    # ].squeeze()  # rate_lb = plot_data["mean-lb"][
+                    #     plot_data["Dataset"] == dataset
+                    # ].squeeze()
+
+                    # rate_ub = plot_data["ub-mean"][
+                    #     plot_data["Dataset"] == dataset
+                    # ].squeeze()
+                    # ax.axvspan(
+                    #     # "MUT1_simulation",
+                    #     # "MUT2_simulation",
+                    #     -0.5,
+                    #     1.5,
+                    #     color="grey",
+                    #     alpha=0.04,
+                    #     linewidth=0,
+                    # )
+                    # ax.errorbar(
+                    #     x=dataset,
+                    #     y=rate,
+                    #     yerr=err,
+                    #     fmt="o",
+                    #     ms=4,
+                    #     color=sns.color_palette("colorblind")[k],
+                    #     capsize=2.5,
+                    #     capthick=1.5,
+                    #     elinewidth=1.5,
+                    # )
+
+                    if dataset not in legend_labels:
+                        legend_labels.append(dataset)
+
+                ax.axvline(3.5, linestyle="--", color="grey", alpha=0.5)
+                ax.text(1, 5, "MCMC", color="grey")
+                ax.text(4.5, 5, "MLE", color="grey")
+                # ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
+                # bp = ax.boxplot(
+                #     rates,
+                #     patch_artist=True,
+                #     # showmeans=True,
+                #     # meanline=True,
+                #     showfliers=False,
+                # )
+                bp = ax.violinplot(
+                    rates,
+                    showmedians=True,
+                    showextrema=False,
+                )
+
+                # for median in bp["medians"]:
+                #     # median.set_visible(False)
+                #     median.set(color="black")
+                # for k, box in enumerate(bp["boxes"]):
+                #     box.set_facecolor(sns.color_palette("colorblind")[k])
+                for k, pc in enumerate(bp["bodies"]):
+                    pc.set_facecolor(sns.color_palette("colorblind")[k % 3])
+                    # pc.set_facecolor(sns.color_palette("colorblind")[-((k - 1) // -2)])
+                    # pc.set_facecolor(sns.color_palette("colorblind")[k])
+                    # pc.set_edgecolor("black")
+                    pc.set_alpha(1)
+                bp["cmedians"].set_colors("black")
+                ax.set_title(transition)
+                ax.set_ylim(0, 6)
+            if j == 0:
+                ax.set_ylabel("Rate")
+            if i == 3:
+                ax.set_xticks(
+                    list(range(1, len(plot_order) + 1)),
+                    # plot_order,
+                    ["P1", "P2", "P3", "P4", "P5", "P6"],
+                    fontsize=9,
+                )
+                ax.set_xlabel("Dataset")
+            if j == 3 and i == 2:
+                ax.set_xticks(
+                    list(range(1, len(plot_order) + 1)),
+                    # plot_order,
+                    ["P1", "P2", "P3", "P4", "P5", "P6"],
+                    fontsize=9,
+                )
+            if (i, j) == (0, 1):
+                ax.set_ylabel("Rate")
+            if j != 0 and (i, j) != (0, 1):
+                ax.set_yticklabels([])
+            if i != 3 and (i, j) != (2, 3):
+                ax.set_xticklabels([])
+            if (i, j) == (2, 3):
+                ax.set_xlabel("Dataset")
+
+    labels_alt = [
+        "P1: original mcmc",
+        "P2: 17 each, mcmc",
+        "P3: shuffled, mcmc",
+        "P4: original mle",
+        "P5: 17 each, mle",
+        "P6: shuffled, mle",
+    ]
+
+    legend_handles = [
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            color=sns.color_palette("colorblind")[i % 3],
+        )
         for i, label in enumerate(
             labels_alt
         )  # change back to legend_labels if you want the default
