@@ -1077,11 +1077,29 @@ def plot_phylo_and_sim_rates():
     plt.show()
 
 
+def get_phylo_stats():
+    labels = []
+    wd = "phylogenies/final_data/labels"
+    for file in os.listdir(wd):
+        df = pd.read_csv(
+            os.path.join(wd, file), sep="\t", header=None, names=["taxa", "shape"]
+        )
+        dataset = file[:-4]
+        df.insert(0, "dataset", dataset)
+        labels.append(df)
+    labels_df = pd.concat(labels)
+    print(labels_df)
+    counts = labels_df.groupby("dataset")["shape"].value_counts().unstack(fill_value=0)
+    print(counts)
+    counts.to_csv("phylo_stats.csv")
+
+
 if __name__ == "__main__":
 
     # plot_rates_trace_hist(rates)
     # phylo_rates_norm = normalise_rates(phylo_rates)
     plot_phylo_and_sim_rates()
+    # get_phylo_stats()
     # concat_posteriors()
     # rates_batch_stats(rates_norm)
     # plot_rates_batch(rates_norm)
