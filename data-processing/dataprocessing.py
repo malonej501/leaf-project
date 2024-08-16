@@ -1284,9 +1284,10 @@ def plot_sim_and_phylogeny_curves():
 
     # Get phylo-rates
     phylo_dir = "../phylogeny/all_rates/uniform_1010000steps"
-    phylo = "jan_phylo_nat_class"  # the phylo-class to use for the curves
+    # phylo = "jan_phylo_nat_class"  # the phylo-class to use for the curves
     # phylo = "jan_phylo_nat_class_21-01-24_95_each"
     # phylo = "geeta_phylo_geeta_class_23-04-24_shuff"
+    phylo = "zuntini_phylo_nat_class"
     phylo_xlim = 0.1
     phylo_rates_list = []
 
@@ -1530,6 +1531,7 @@ def plot_sim_and_phylogeny_curves():
     print(sim_plot)
 
     # Create subplots
+    plt.rcParams["font.family"] = "CMU Serif"
     fig, axs = plt.subplots(nrows=4, ncols=3, figsize=(9, 9), sharey=True)
 
     lines = []
@@ -1570,9 +1572,9 @@ def plot_sim_and_phylogeny_curves():
                 # ax.set_title(order_full[i])
                 if i == 0:
                     ax.set_title(
-                        "Janssens et al. (2020)\nphylogeny, Naturalis\nclassification CTMC"
+                        "Zuntini et al. (2024)\nphylogeny, Naturalis\nclassification CTMC",
                         # "jan_phylo\n_nat_class_21\n-01-24_95_each"
-                        phylo
+                        phylo,
                     )
                 ax.set_xlim(0, 0.05)
 
