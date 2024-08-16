@@ -721,6 +721,8 @@ def plot_phylo_and_sim_rates():
         "MUT2_simulation",
         "jan_phylo_nat_class",
         "jan_phylo_geeta_class",
+        "solt_phylo_nat_class",
+        "solt_phylo_geeta_class",
         "zuntini_phylo_nat_class",
         "zuntini_phylo_geeta_class",
         "geeta_phylo_nat_class",
@@ -731,6 +733,7 @@ def plot_phylo_and_sim_rates():
         # "geeta_phylo_geeta_class_23-04-24_17_each_mle",
         # "geeta_phylo_geeta_class_23-04-24_shuff_mle",
     ]
+    plt.rcParams["font.family"] = "CMU Serif"
     fig, axes = plt.subplots(
         nrows=4, ncols=4, figsize=(10, 8)
     )  # , layout="constrained")
@@ -825,7 +828,7 @@ def plot_phylo_and_sim_rates():
                 ax.set_xticks(
                     list(range(1, len(plot_order) + 1)),
                     # plot_order,
-                    ["S1", "S2", "P1", "P2", "P3", "P4", "P5", "P6"],
+                    ["S1", "S2", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"],
                     fontsize=9,
                 )
                 ax.set_xlabel("Dataset")
@@ -833,7 +836,7 @@ def plot_phylo_and_sim_rates():
                 ax.set_xticks(
                     list(range(1, len(plot_order) + 1)),
                     # plot_order,
-                    ["S1", "S2", "P1", "P2", "P3", "P4", "P5", "P6"],
+                    ["S1", "S2", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"],
                     fontsize=9,
                 )
             if (i, j) == (0, 1):
@@ -849,12 +852,12 @@ def plot_phylo_and_sim_rates():
         "S2: MUT2 Simulation",
         "P1: Janssens et al. (2020)\nphylogeny, Naturalis\nclassification",
         "P2: Janssens et al. (2020)\nphylogeny, Geeta et al.\n(2012) classification",
-        # "P3: Soltis et al. (2011)\nphylogeny, Naturalis\nclassification",
-        # "P4: Soltis et al. (2011)\nphylogeny, Geeta et al.\n(2012) classification",
-        "P3: Zuntini et al. (2024)\nphylogeny, Naturalis\nclassification",
-        "P4: Zuntini et al. (2024)\nphylogeny, Geeta et al.\n(2012) classification",
-        "P5: Geeta et al. (2012)\nphylogeny, Naturalis\nclassification",
-        "P6: Geeta et al. (2012)\nphylogeny, Geeta et al.\n(2012) classification",
+        "P3: Soltis et al. (2011)\nphylogeny, Naturalis\nclassification",
+        "P4: Soltis et al. (2011)\nphylogeny, Geeta et al.\n(2012) classification",
+        "P5: Zuntini et al. (2024)\nphylogeny, Naturalis\nclassification",
+        "P6: Zuntini et al. (2024)\nphylogeny, Geeta et al.\n(2012) classification",
+        "P7: Geeta et al. (2012)\nphylogeny, Naturalis\nclassification",
+        "P8: Geeta et al. (2012)\nphylogeny, Geeta et al.\n(2012) classification",
         # "P7: jan_phylo_nat_class\n21-01-24_95_each",
         # "P8: jan_phylo_nat_class\n_21-01-24_shuff",
     ]
