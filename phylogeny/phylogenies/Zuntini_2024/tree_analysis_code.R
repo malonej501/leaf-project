@@ -97,3 +97,24 @@ write.table(
 )
 # write the subset tree
 write.nexus(zuntini_sub, file = "zuntini_naturalis_sub.tre")
+
+
+#### This part is for generating a genus_species_tree ####
+tips = zuntini_sub$tip.label
+
+processed_tips <- sapply(tips, function(x) {
+  # Split the string at underscores
+  parts <- strsplit(x, "_")[[1]]
+  
+  # Remove the first two parts
+  remaining_parts <- parts[-c(1, 2)]
+  
+  # Optionally, paste the remaining parts back into a single string
+  result <- paste(remaining_parts, collapse = "_")
+  
+  return(result)
+})
+
+zuntini_sub$tip.label <- processed_tips
+print(length(zuntini_sub$tip.label))
+write.nexus(zuntini_sub, file = "zuntini_naturalis_sub_genus_species.tre")
