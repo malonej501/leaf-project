@@ -720,7 +720,7 @@ def plot_phylo_and_sim_rates():
         "MUT1_simulation",
         "MUT2_simulation",
         "jan_phylo_nat_class",
-        "jan_phylo_geeta_class",
+        "jan_phylo_nat_class_prior_0-1_burnin100000_run4",
         "solt_phylo_nat_class",
         "solt_phylo_geeta_class",
         "zuntini_phylo_nat_class",
@@ -923,12 +923,20 @@ def plot_phylo_and_sim_rates():
         # "zuntini_phylo_nat_class",
         # "zuntini_phylo_geeta_class",
         # "geeta_phylo_nat_class",
-        "geeta_phylo_geeta_class",
-        "geeta_phylo_geeta_class_23-04-24_17_each",
-        "geeta_phylo_geeta_class_23-04-24_shuff",
-        "geeta_phylo_geeta_class_23-04-24_mle",
-        "geeta_phylo_geeta_class_23-04-24_17_each_mle",
-        "geeta_phylo_geeta_class_23-04-24_shuff_mle",
+        # "geeta_phylo_geeta_class",
+        # "geeta_phylo_geeta_class_23-04-24_17_each",
+        # "geeta_phylo_geeta_class_23-04-24_shuff",
+        # "geeta_phylo_geeta_class_23-04-24_mle",
+        # "geeta_phylo_geeta_class_23-04-24_17_each_mle",
+        # "geeta_phylo_geeta_class_23-04-24_shuff_mle",
+        "jan_phylo_nat_class_prior_0-1_burnin100000_run4",
+        # "jan_phylo_nat_class_21-01-24_95_each_prior_0-1_burnin100000_run2",
+        "jan_phylo_nat_class_21-01-24_shuff_prior_0-1_burnin100000_run1",
+        # "jan_phylo_nat_class_21-01-24_cenrich_sub_prior_0-1_burnin100000_run1",
+        # "jan_phylo_nat_class_mle",
+        "jan_phylo_nat_class_21-01-24_95_each_mle",
+        # "jan_phylo_nat_class_21-01-24_shuff_mle",
+        "jan_phylo_nat_class_21-01-24_cenrich_sub_mle",
     ]
     fig, axes = plt.subplots(
         nrows=4, ncols=4, figsize=(10, 8)
@@ -987,9 +995,12 @@ def plot_phylo_and_sim_rates():
                     if dataset not in legend_labels:
                         legend_labels.append(dataset)
 
-                ax.axvline(3.5, linestyle="--", color="grey", alpha=0.5)
+                ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
+                # ax.axvline(4.5, linestyle="--", color="grey", alpha=0.5)
                 ax.text(1, 5, "MCMC", color="grey")
-                ax.text(4.5, 5, "MLE", color="grey")
+                ax.text(3, 5, "MLE", color="grey")
+                # ax.text(1.5, 5, "MCMC", color="grey")
+                # ax.text(6, 5, "MLE", color="grey")
                 # ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
                 # bp = ax.boxplot(
                 #     rates,
@@ -1010,7 +1021,9 @@ def plot_phylo_and_sim_rates():
                 # for k, box in enumerate(bp["boxes"]):
                 #     box.set_facecolor(sns.color_palette("colorblind")[k])
                 for k, pc in enumerate(bp["bodies"]):
-                    pc.set_facecolor(sns.color_palette("colorblind")[k % 3])
+                    pc.set_facecolor(
+                        sns.color_palette("colorblind")[k % int(0.5 * len(plot_order))]
+                    )
                     # pc.set_facecolor(sns.color_palette("colorblind")[-((k - 1) // -2)])
                     # pc.set_facecolor(sns.color_palette("colorblind")[k])
                     # pc.set_edgecolor("black")
@@ -1024,7 +1037,7 @@ def plot_phylo_and_sim_rates():
                 ax.set_xticks(
                     list(range(1, len(plot_order) + 1)),
                     # plot_order,
-                    ["P1", "P2", "P3", "P4", "P5", "P6"],
+                    [f"P{i}" for i in range(1, len(plot_order) + 1)],
                     fontsize=9,
                 )
                 ax.set_xlabel("Dataset")
@@ -1032,7 +1045,7 @@ def plot_phylo_and_sim_rates():
                 ax.set_xticks(
                     list(range(1, len(plot_order) + 1)),
                     # plot_order,
-                    ["P1", "P2", "P3", "P4", "P5", "P6"],
+                    [f"P{i}" for i in range(1, len(plot_order) + 1)],
                     fontsize=9,
                 )
             if (i, j) == (0, 1):
@@ -1045,12 +1058,20 @@ def plot_phylo_and_sim_rates():
                 ax.set_xlabel("Dataset")
 
     labels_alt = [
-        "P1: original mcmc",
-        "P2: 17 each, mcmc",
-        "P3: shuffled, mcmc",
-        "P4: original mle",
-        "P5: 17 each, mle",
-        "P6: shuffled, mle",
+        # "P1: original mcmc",
+        # "P2: 17 each, mcmc",
+        # "P3: shuffled, mcmc",
+        # "P4: original mle",
+        # "P5: 17 each, mle",
+        # "P6: shuffled, mle",
+        "P1: original, prior0-1 mcmc",
+        # "P2: 95 each, prior0-1 mcmc",
+        "P2: shuffled, prior0-1 mcmc",
+        # "P4: c-enriched, prior0-1 mcmc",
+        # "P5: original mle",
+        "P3: 95 each, mle",
+        # "P7: shuffled, mle",
+        "P4: c-enriched, mle",
     ]
 
     legend_handles = [
@@ -1058,7 +1079,7 @@ def plot_phylo_and_sim_rates():
             (0, 0),
             1,
             1,
-            color=sns.color_palette("colorblind")[i % 3],
+            color=sns.color_palette("colorblind")[i % int(0.5 * len(plot_order))],
         )
         for i, label in enumerate(
             labels_alt
