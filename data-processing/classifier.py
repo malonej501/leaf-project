@@ -447,7 +447,8 @@ def main_batch(directory):
         # Save the image as a PDF
         plt.imsave(directory + f"/{file[:-4]}-points.pdf", img_rgb)
 
-        plt.figure(figsize=(3, 4))
+        plt.figure(figsize=(4, 3))
+        plt.rcParams["font.family"] = "CMU Serif"
         seaborn.scatterplot(refdist, color="black", s=10, edgecolor="none")
         seaborn.scatterplot(
             y=refdist[local_maxima_indices + 40],
@@ -463,8 +464,8 @@ def main_batch(directory):
             s=100,
             edgecolor="none",
         )
-        plt.xlabel("Contour position")  # , fontsize=16)
-        plt.ylabel("Distance from ref. point")  # , fontsize=16)
+        plt.xlabel("Contour position", fontsize=12)
+        plt.ylabel("Distance from ref. point", fontsize=12)
         # plt.xticks(fontsize=14)
         # plt.yticks(fontsize=14)
         plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.95)
@@ -631,5 +632,5 @@ def parallel(wd, function):
                 process.join()
 
 
-main_batch(wd2)
+main_batch("leaf")
 # parallel(randomwalkleaves, contour_out)

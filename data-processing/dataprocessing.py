@@ -522,8 +522,9 @@ def firstswitch():
 
 def paramspace():
     order = ["u", "l", "d", "c"]
-    paramshapess = param_concatenator()
-    paramshapes = pd.concat(paramshapess, ignore_index=True)
+    # paramshapess = param_concatenator()
+    # paramshapes = pd.concat(paramshapess, ignore_index=True)
+    paramshapes = pd.read_csv("MUT2.2_trajectories_param.csv")
 
     starting_leaves = pd.DataFrame(pdict.values()).transpose()
 
@@ -536,8 +537,9 @@ def paramspace():
     # paramshapes_sub = only_valid_leaves.iloc[:, [0, 1, 2, 3, 36, 67]]
     # # print(paramshapes_sub.iloc[:, 3].str.contains("passed"))
 
-    shapess = concatenator()
-    shapes = pd.concat(shapess, ignore_index=True)
+    # shapess = concatenator()
+    # shapes = pd.concat(shapess, ignore_index=True)
+    shapes = pd.read_csv("MUT2.2_trajectories_shape.csv")
 
     # paramshapes_sub["shape"] = shapes["shape"]
     # paramshapes_sub.columns = [
@@ -575,7 +577,7 @@ def paramspace():
     #     hull = spatial.ConvexHull(data_sub, qhull_options="QJ")
     #     print(hull.volume)
 
-    data.to_csv("/home/m/malone/leaf_storage/random_walks/result.csv", index=False)
+    # data.to_csv("/home/m/malone/leaf_storage/random_walks/result.csv", index=False)
     scaled_data = StandardScaler().fit_transform(data)
 
     pca_params = PCA(n_components=2)
@@ -596,6 +598,7 @@ def paramspace():
         hulls.append(hull)
 
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    plt.rcParams["font.family"] = "CMU Serif"
     fig, axs = plt.subplots(
         2, 2, figsize=(7, 8), sharex="all", sharey="all", layout="constrained"
     )
@@ -1282,7 +1285,7 @@ def plot_data_from_probcurves(curves, t_vals):
 
 def plot_sim_and_phylogeny_curves():
 
-    # Get phylo-rates
+    #### Get phylo-rates ####
     phylo_dir = "../phylogeny/all_rates/uniform_1010000steps"
     # phylo = "jan_phylo_nat_class"  # the phylo-class to use for the curves
     # phylo = "jan_phylo_nat_class_21-01-24_95_each"
@@ -1341,7 +1344,7 @@ def plot_sim_and_phylogeny_curves():
     phylo_summary["lb"] = [i[0] for i in confidence_intervals.values()]
     phylo_summary["ub"] = [i[1] for i in confidence_intervals.values()]
 
-    # Get sim-rates
+    #### Get sim-rates ####
     # sim_rates = pd.read_csv(
     #     "../data-processing/markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
     # )
@@ -1422,12 +1425,15 @@ def plot_sim_and_phylogeny_curves():
     # )
     # print(sim_summary)
 
-    # Get sim timeseries data
-    dfs = concatenator()
-    for walk in dfs:
-        walk["step"] = walk.index.values
-    concat = pd.concat(dfs, ignore_index=True)
-    concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    #### Get sim timeseries data ####
+    # dfs = concatenator()
+    # for walk in dfs:
+    #     walk["step"] = walk.index.values
+    # concat = pd.concat(dfs, ignore_index=True)
+    # concat = pd.merge(concat, first_cats[["leafid", "first_cat"]], on="leafid")
+    concat = pd.read_csv("MUT2.2_trajectories_shape.csv")
+    print(concat)
+
     # total of each shape per step for each leafid
     timeseries = (
         concat.groupby(["leafid", "first_cat", "step", "shape"])
@@ -1574,7 +1580,7 @@ def plot_sim_and_phylogeny_curves():
                     ax.set_title(
                         "Zuntini et al. (2024)\nphylogeny, Naturalis\nclassification CTMC",
                         # "jan_phylo\n_nat_class_21\n-01-24_95_each"
-                        phylo,
+                        # phylo,
                     )
                 ax.set_xlim(0, 0.05)
 
@@ -1835,10 +1841,10 @@ if __name__ == "__main__":
     # curves_CTMC_mcmcsimfit()
     # MLE_rates_barplot()
     # randomwalk_rates_firstswitch()
-    plot_sim_and_phylogeny_curves()
+    # plot_sim_and_phylogeny_curves()
 
     # stack_plot()
-    # paramspace()
+    paramspace()
 
     # prop_curves()
 

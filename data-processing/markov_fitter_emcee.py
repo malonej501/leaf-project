@@ -263,7 +263,7 @@ def run_mcmc():
     # transitions = get_transition_count(dfs)
 
     print(transitions)
-    init_params = np.random.rand(nwalkers, ndim)
+    init_params = np.random.rand(nwalkers, ndim)  # initial values drawn between 0 and 1
 
     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob)
     state = sampler.run_mcmc(
@@ -285,7 +285,7 @@ def run_mcmc_leaf_uncert(pid):
     print(leaf_sum)
     leaf_grouped = leaf_sum.groupby(["first_cat", "leafid"])
     # first_cat = np.random.choice(["u", "l", "d", "c"])
-    # infer rates from the mean transition counts of 4 random leaves, 1 from each category
+    # infer rates from the mean transition counts of 8 random leaves, 2 from each category
     for i in range(0, n_shuffle):
         np.random.seed()
         sample = []
