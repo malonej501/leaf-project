@@ -190,6 +190,7 @@ def plot_phylo_and_sim_rates(norm_method):
     ].transform(
         "mean"
     )  # get mean rate for each transition per dataset
+    print(phylo_sim_long)
 
     if norm_method == "meanmean":
         # get the mean mean transition rate per dataset (i.e. the centre of the rates for that dataset)
@@ -232,6 +233,21 @@ def plot_phylo_and_sim_rates(norm_method):
             (phylo_sim_long["rate"] - phylo_sim_long["mean_mean"])
             / phylo_sim_long["std_mean"]
         ) + 2.7  # move data up by 2.7 to get rid of negatives
+
+    elif norm_method == "zscore_global":
+        phylo_sim_long["dataset_mean"] = phylo_sim_long.groupby(["Dataset"])[
+            "rate"
+        ].transform(
+            "mean"
+        )  # get mean overall rate for each dataset
+        # get the stdev of rates per dataset
+        phylo_sim_long["dataset_std"] = phylo_sim_long.groupby("Dataset")[
+            "rate"
+        ].transform("std")
+        # zscore normalisation
+        phylo_sim_long["rate_norm"] = (
+            phylo_sim_long["rate"] - phylo_sim_long["dataset_mean"]
+        ) / phylo_sim_long["dataset_std"]
 
     elif norm_method == "minmax":
         # min max normalisation
@@ -387,6 +403,8 @@ def plot_phylo_and_sim_rates(norm_method):
                     ax.set_ylim(-2.7, 8)  # for z-score normalisation
                 elif norm_method == "zscore+2.7":
                     ax.set_ylim(0, 10.7)  # for z-score norm + 2.7
+                elif norm_method == "zscore_global":
+                    ax.set_ylim(-2, 5)
                 elif norm_method == "meanmean":
                     ax.set_ylim(0, 8)  # for mean-mean normalisation
                 elif norm_method == "minmax":
@@ -479,11 +497,15 @@ def plot_phylo_and_sim_rates(norm_method):
     )
     plt.tight_layout()
     # plt.subplots_adjust(hspace=0.25, wspace=0.2, bottom=0.18)
-    if norm_method == "zscore" or norm_method == "zscore+2.7":
+    if (
+        norm_method == "zscore"
+        or norm_method == "zscore+2.7"
+        or norm_method == "zscore_global"
+    ):
         plt.subplots_adjust(
             hspace=0.2, wspace=0.2, right=0.745, left=0.064
         )  # for z-score-norm
-    elif norm_method == "meanmean" or norm_method == "minmax":
+    else:
         plt.subplots_adjust(
             hspace=0.2, wspace=0.2, right=0.745, left=0.044
         )  # for min-max-norm or mean-mean-norm
@@ -701,11 +723,11 @@ def get_phylo_stats():
 
 if __name__ == "__main__":
 
-    # Normalisation method options: meanmean, zscore, zscore+2.7, minmax
+    # Normalisation method options: meanmean, zscore, zscore+2.7, zscore_global, minmax
 
     # plot_rates_trace_hist(rates)
     # phylo_rates_norm = normalise_rates(phylo_rates)
-    plot_phylo_and_sim_rates("zscore")
+    plot_phylo_and_sim_rates("zscore_global")
     # get_phylo_stats()
     # concat_posteriors()
     # rates_batch_stats(rates_norm)
