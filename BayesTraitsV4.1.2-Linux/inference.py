@@ -1,9 +1,16 @@
 import matplotlib.pyplot as plt
+import matplotlib.backends.backend_pdf
 import pandas as pd
 import numpy as np
 from io import StringIO
 import multiprocessing
 import subprocess
+import os
+import shutil
+
+burnin = 100000
+plt.rcParams["font.family"] = "CMU Serif"
+plt.rcParams["font.size"] = 12
 
 # file = "BayesTraitsV4.0.0-Linux/Janssens/sample_eud_21-1-24/mcmc/prior_0-1/img_labels_unambig_full_21-1-24.txt.Log.txt"
 # file = "BayesTraitsV4.0.0-Linux/Janssens/sample_eud_21-1-24/mcmc/prior_0-1_run2/img_labels_unambig_full_21-1-24.txt.Log.txt"
@@ -38,45 +45,54 @@ import subprocess
 #          "Zuntini_2024/naturalis_30-06-24/mcmc/original/Naturalis_img_labels_unambig_full_21-1-24_zuntini2024_sub.txt.Log.txt"]
 
 
-data = (
-    ("Geeta/geeta_23-04-24/561Data08.tre", "Geeta/geeta_23-04-24/561AngLf09_D.txt"),
-    (
-        "Geeta/naturalis_23-04-24/Geeta_naturalis_sub.tre",
-        "Geeta/naturalis_23-04-24/Naturalis_img_labels_unambig_full_21-1-24_Geeta_sub.txt",
-    ),
-    (
-        "Zuntini_2024/geeta_30-06-24/zuntini_geetasub.tre",
-        "Zuntini_2024/geeta_30-06-24/561AngLf09_D_zuntini2024_sub.txt",
-    ),
-    (
-        "Zuntini_2024/naturalis_30-06-24/zuntini_naturalis_sub.tre",
-        "Zuntini_2024/naturalis_30-06-24/Naturalis_img_labels_unambig_full_21-1-24_zuntini2024_sub.txt",
-    ),
-    (
-        "Soltis_2011/Geeta_04-03-24/Soltis_T31199_geetasub.tre",
-        "Soltis_2011/Geeta_04-03-24/561AngLf09_D_soltis2011_T31199_sub.txt",
-    ),
-    (
-        "Soltis_2011/Naturalis_23-04-24/Soltis_T31199_naturalis_sub.tre",
-        "Soltis_2011/Naturalis_23-04-24/Naturalis_img_labels_unambig_full_21-1-24_soltis2011_T31199_sub.txt",
-    ),
-    (
-        "Janssens/sample_eud_21-1-24/Naturalis_sample_Janssens_intersect_labelled_21-01-24.tre",
-        "Janssens/sample_eud_21-1-24/img_labels_unambig_full_21-1-24.txt",
-    ),
-    (
-        "Janssens/geeta_sub_21-02-24/Geeta_sub_Janssens.tre",
-        "Janssens/geeta_sub_21-02-24/Geeta_sub_species.txt",
-    ),
-)
+# data = (
+#     ("Geeta/geeta_23-04-24/561Data08.tre", "Geeta/geeta_23-04-24/561AngLf09_D.txt"),
+#     (
+#         "Geeta/naturalis_23-04-24/Geeta_naturalis_sub.tre",
+#         "Geeta/naturalis_23-04-24/Naturalis_img_labels_unambig_full_21-1-24_Geeta_sub.txt",
+#     ),
+#     (
+#         "Zuntini_2024/geeta_30-06-24/zuntini_geetasub.tre",
+#         "Zuntini_2024/geeta_30-06-24/561AngLf09_D_zuntini2024_sub.txt",
+#     ),
+#     (
+#         "Zuntini_2024/naturalis_30-06-24/zuntini_naturalis_sub.tre",
+#         "Zuntini_2024/naturalis_30-06-24/Naturalis_img_labels_unambig_full_21-1-24_zuntini2024_sub.txt",
+#     ),
+#     (
+#         "Soltis_2011/Geeta_04-03-24/Soltis_T31199_geetasub.tre",
+#         "Soltis_2011/Geeta_04-03-24/561AngLf09_D_soltis2011_T31199_sub.txt",
+#     ),
+#     (
+#         "Soltis_2011/Naturalis_23-04-24/Soltis_T31199_naturalis_sub.tre",
+#         "Soltis_2011/Naturalis_23-04-24/Naturalis_img_labels_unambig_full_21-1-24_soltis2011_T31199_sub.txt",
+#     ),
+#     (
+#         "Janssens/sample_eud_21-1-24/Naturalis_sample_Janssens_intersect_labelled_21-01-24.tre",
+#         "Janssens/sample_eud_21-1-24/img_labels_unambig_full_21-1-24.txt",
+#     ),
+#     (
+#         "Janssens/geeta_sub_21-02-24/Geeta_sub_Janssens.tre",
+#         "Janssens/geeta_sub_21-02-24/Geeta_sub_species.txt",
+#     ),
+# )
 
 
-def plot_trace(file):
-    save_fig_path = file.rsplit("/", 1)[0]
+def import_data():
+    trees = []
+    for file in os.listdir("data"):
+        if file.endswith(("class.tre", "class.txt")):
+            file_path = os.path.join("data", file)
+            base = file_path.split(".")[0]
+            if base not in trees:
+                trees.append(base)
 
-    # log = pd.read_csv(file, sep="\t", skiprows=57)
-    # # log = pd.read_csv(file, sep="\t", skiprows=46)
+    files = sorted(tuple((f"{tree}.tre", f"{tree}.txt") for tree in trees))
 
+    return files
+
+
+def get_log(file):
     log = None
     with open(file, "r") as fh:
         lines = fh.readlines()
@@ -84,20 +100,55 @@ def plot_trace(file):
         # find the start of the log table
         start_index = None
         for i, line in enumerate(lines):
-            print(i)
-            print(line)
             if "Tree No" in line:
                 start_index = i
                 break
-        print(start_index)
         fh.seek(0)
         log = pd.read_csv(fh, sep="\t", skiprows=start_index)
 
+    return log
+
+
+def get_ML_rates(directory):
+    logs = []
+    for file in os.listdir(directory):
+        if file.endswith(".Log.txt"):
+            data_name = file.rsplit(".")[0]
+            filepath = os.path.join(directory, file)
+            log = get_log(filepath)
+            log_mean = log.mean()
+            log_mean_df = pd.DataFrame([log_mean], columns=log.columns)
+            log_mean_df.insert(0, "dataset", data_name)
+            # log_mean_df.to_csv(directory + f"/{data_name}_rates_ml.csv", index=False)
+            logs.append(log_mean_df)
+
+    ML_rates = pd.concat(logs, axis=0, ignore_index=True)
+    ML_rates.sort_values(by="dataset", inplace=True)
+    if "Tree No" in ML_rates.columns:
+        ML_rates.drop("Tree No", axis=1, inplace=True)
+    if "Unnamed: 18" in ML_rates.columns:
+        ML_rates.drop("Unnamed: 18", axis=1, inplace=True)
+    ML_rates.to_csv(directory + "/mean_rates_all.csv", index=False)
+
+    return ML_rates
+
+
+def plot_trace(file, run_name, ML_data):
+    save_fig_path = file.rsplit("/", 1)[0]
+    log_file_name = file.rsplit("/", 1)[1]
+    data_name = log_file_name.rsplit(".")[0]
+
+    # Get ML data for comparison
+    ML_data = pd.read_csv(f"data/{ML_data}/mean_rates_all.csv")
+    # ML_data = pd.read_csv("data/ML_scaletrees0.001_1/mean_rates_all.csv")
+    ML = ML_data[ML_data["dataset"] == data_name].reset_index()
+
+    log = get_log(file)
     # summary statistics
     print(log.describe())
 
     # export just the cleaned posteriors from the log file
-    log_no_burnin = log.loc[log["Iteration"] >= 100000]
+    log_no_burnin = log.loc[log["Iteration"] >= burnin]
     rates = log_no_burnin[
         [
             "q01",
@@ -114,7 +165,7 @@ def plot_trace(file):
             "q32",
         ]
     ]
-    rates.to_csv(save_fig_path + "/rates.csv")
+    rates.to_csv(save_fig_path + f"/{data_name}_{run_name}.csv", index=False)
 
     # plt.plot(log["Iteration"], log["Lh"])
     # plt.show()
@@ -135,7 +186,12 @@ def plot_trace(file):
         ]
     )
 
-    fig, axes = plt.subplots(nrows=4, ncols=5, figsize=(15, 12), sharex=True)
+    fig, axes = plt.subplots(
+        nrows=4,
+        ncols=5,
+        figsize=(15, 12),
+        sharex=True,
+    )
 
     # If only one subplot, `axes` is not a list, so we handle that case
     if num_vars == 1:
@@ -154,15 +210,22 @@ def plot_trace(file):
             axes[counter].plot(log["Iteration"], log[var])
             axes[counter].set_ylabel(var)
             axes[counter].grid(True)
+            # Add ML values
+            if var in ML.columns:
+                axes[counter].axhline(
+                    y=ML.loc[0, var], linestyle="--", color="C1", label="ML"
+                )
             counter += 1
 
-    plt.xlabel("Iteration")
-    plt.tight_layout()
+    fig.text(0.5, 0.01, "Iteration", ha="center")
+    fig.suptitle(data_name)
+    fig.tight_layout()
     # Adding a legend
 
-    plt.savefig(save_fig_path + "/trace.pdf", format="pdf")
+    # plt.savefig(save_fig_path + f"/{data_name}_trace.pdf", format="pdf")
 
     # plt.show()
+    return fig
 
 
 def run_BayesTraits(tree, labels):
@@ -174,9 +237,18 @@ def run_BayesTraits(tree, labels):
     return result.stdout
 
 
-def run_all_trees():
+def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
+    run_dir = os.path.join("data", run_name)
+    os.makedirs(run_dir, exist_ok=True)
 
-    print(f"Inference on {len(data)} trees")
+    if datasets == ["ALL"]:
+        data = import_data()
+    else:
+        data = sorted(
+            tuple(
+                (f"data/{dataset}.tre", f"data/{dataset}.txt") for dataset in datasets
+            )
+        )
     processes = []
     for tree, labels in data:
         process = multiprocessing.Process(target=run_BayesTraits, args=(tree, labels))
@@ -186,9 +258,41 @@ def run_all_trees():
     for process in processes:
         process.join()
 
-    for _, label in data:
-        logfilepath = label + ".Log.txt"
-        plot_trace(logfilepath)
+    if method == "MCMC":
+        pdf = matplotlib.backends.backend_pdf.PdfPages(f"data/{run_name}_trace.pdf")
+        for _, label in data:
+            logfilepath = label + ".Log.txt"
+            fig = plot_trace(logfilepath, run_name, ML_data)
+            pdf.savefig(fig)
+        pdf.close()
+
+    for file in os.listdir("data"):
+        if not file.endswith(("class.tre", "class.txt")):
+            source_file = os.path.join("data", file)
+            destination_file = os.path.join(run_dir, file)
+            if os.path.isfile(source_file):
+                shutil.move(source_file, destination_file)
+                print(f"Moved: {source_file} to {destination_file}")
 
 
-run_all_trees()
+# files = import_data()
+# run_all_trees(files, "uniform1-100")
+# run_select_trees(
+#     [
+#         "jan_phylo_nat_class",
+#         "jan_phylo_geeta_class",
+#         "zuntini_phylo_nat_class",
+#         "zuntini_phylo_geeta_class",
+#     ],
+#     "ML_scaletrees0.001_1",
+#     "ML"
+# )
+# run_select_trees(datasets=["ALL"], run_name="ML_3", method="ML", ML_data="None")
+# run_select_trees(
+#     datasets=["ALL"],
+#     run_name="ML_nqm_2",
+#     method="ML",
+#     ML_data="ML_1",
+# )
+# run_select_trees(["ALL"], "exp10_1", "MCMC", "ML_scaletrees0.001_1")
+get_ML_rates("data/ML_nqm_2")
