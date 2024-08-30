@@ -495,7 +495,7 @@ def concat_posteriors():
     posterior_concat.to_csv("posterior_concat.csv", index=False)
 
 
-def med_diff(summary):
+def rate_diff(summary):
     dfs = []
     for dataset in set(summary["Dataset_"]):
         dataset_sub = summary[summary["Dataset_"] == dataset].reset_index(drop=True)
@@ -507,8 +507,11 @@ def med_diff(summary):
         dataset_sub_rev = dataset_sub.sort_values(by="transition_rev").reset_index(
             drop=True
         )
-        dataset_sub["rate_norm_median_diff"] = (
-            dataset_sub["rate_norm_median"] - dataset_sub_rev["rate_norm_median"]
+        # dataset_sub["rate_norm_median_diff"] = (
+        #     dataset_sub["rate_norm_median"] - dataset_sub_rev["rate_norm_median"]
+        # )
+        dataset_sub["rate_norm_mean_diff"] = (
+            dataset_sub["rate_norm_mean"] - dataset_sub_rev["rate_norm_mean"]
         )
         dfs.append(dataset_sub)
     summary_new = pd.concat(dfs).reset_index(drop=True)
@@ -578,19 +581,45 @@ def plot_phylo_and_sim_rates():
     phylo_sim_long = pd.melt(
         phylo_sim, id_vars=["Dataset"], var_name="transition", value_name="rate"
     )
-    # Normalise by dividing by the mean mean transition rate for each dataset
+    # Normalise the rates across datasets
     phylo_sim_long["mean_rate"] = phylo_sim_long.groupby(["Dataset", "transition"])[
         "rate"
-    ].transform("mean")
-
+    ].transform(
+        "mean"
+    )  # get mean rate for each transition per dataset
+    # get the mean mean transition rate per dataset (i.e. the centre of the rates for that dataset)
     phylo_sim_long["mean_mean"] = phylo_sim_long.groupby(["Dataset"])[
         "mean_rate"
     ].transform("mean")
-    phylo_sim_long["rate_norm"] = phylo_sim_long["rate"] / phylo_sim_long["mean_mean"]
-    phylo_sim_long["initial_shape"], phylo_sim_long["final_shape"] = zip(
-        *phylo_sim_long["transition"].map(rates_map)
-    )
+    # get the stdev of the mean transition rate per dataset
+    phylo_sim_long["std_mean"] = phylo_sim_long.groupby("Dataset")[
+        "mean_rate"
+    ].transform("std")
+    # normalise by dividing by the mean mean transition rate for each dataset
+    # phylo_sim_long["rate_norm"] = phylo_sim_long["rate"] / phylo_sim_long["mean_mean"]
+    # phylo_sim_long["initial_shape"], phylo_sim_long["final_shape"] = zip(
+    #     *phylo_sim_long["transition"].map(rates_map)
+    # )
+
+    # z-score normalisation
+    phylo_sim_long["rate_norm"] = (
+        phylo_sim_long["rate"] - phylo_sim_long["mean_mean"]
+    ) / phylo_sim_long[
+        "std_mean"
+    ] + 2.7  # move data up by 2.7 to get rid of negatives
     print(phylo_sim_long)
+
+    # min max normalisation
+    # phylo_sim_long["min_mean"] = phylo_sim_long.groupby("Dataset")[
+    #     "mean_rate"
+    # ].transform("min")
+    # phylo_sim_long["max_mean"] = phylo_sim_long.groupby("Dataset")[
+    #     "mean_rate"
+    # ].transform("max")
+    # phylo_sim_long["rate_norm"] = (
+    #     phylo_sim_long["rate"] - phylo_sim_long["min_mean"]
+    # ) / (phylo_sim_long["max_mean"] - phylo_sim_long["min_mean"])
+    # print(phylo_sim_long)
 
     # Select the datasets to plot e.g. MUT2.2 simulation and 2 phylogenies
     # phylo_sim_sub = phylo_sim_long[
@@ -639,9 +668,9 @@ def plot_phylo_and_sim_rates():
     summary.columns = ["_".join(col).strip() for col in summary.columns.values]
 
     # get differences between back and forth median rates for arrow plots
-    summary = med_diff(summary)
+    summary = rate_diff(summary)
     print(summary)
-    # summary.to_csv("sim_phylo_rates_stats_12-08-24.csv", index=False)
+    summary.to_csv("sim_phylo_rates_stats_znorm_mixedpriors_30-08-24.csv", index=False)
     # exit()
 
     # # summary["mcmc_std_frac"] = summary["std"] / summary["mean"]
@@ -719,14 +748,22 @@ def plot_phylo_and_sim_rates():
     plot_order = [
         "MUT1_simulation",
         "MUT2_simulation",
-        "jan_phylo_nat_class",
-        "jan_phylo_nat_class_prior_0-1_burnin100000_run4",
-        "solt_phylo_nat_class",
-        "solt_phylo_geeta_class",
-        "zuntini_phylo_nat_class",
-        "zuntini_phylo_geeta_class",
-        "geeta_phylo_nat_class",
-        "geeta_phylo_geeta_class",
+        # "jan_phylo_nat_class_uniform0-100_rj_scaletrees0.001_3",
+        # "jan_phylo_geeta_class_uniform0-100_rj_scaletrees0.001_3",
+        # "solt_phylo_nat_class_uniform0-100_rj_4",
+        # "solt_phylo_geeta_class_uniform0-100_rj_4",
+        # "zuntini_phylo_nat_class_uniform0-100_rj_scaletrees0.001_3",
+        # "zuntini_phylo_geeta_class_uniform0-100_rj_scaletrees0.001_3",
+        # "geeta_phylo_nat_class_uniform0-100_rj_4",
+        # "geeta_phylo_geeta_class_uniform0-100_rj_4",
+        "jan_phylo_nat_class_uniform0-0.1_1",
+        "jan_phylo_geeta_class_uniform0-100_2",
+        "solt_phylo_nat_class_uniform0-100_2",
+        "solt_phylo_geeta_class_uniform0-100_2",
+        "zuntini_phylo_nat_class_uniform0-0.1_1",
+        "zuntini_phylo_geeta_class_uniform0-0.1_1",
+        "geeta_phylo_nat_class_uniform0-100_2",
+        "geeta_phylo_geeta_class_uniform0-100_2",
         # "geeta_phylo_geeta_class_23-04-24_17_each",
         # "geeta_phylo_geeta_class_23-04-24_shuff",
         # "geeta_phylo_geeta_class_23-04-24_mle",
@@ -735,7 +772,9 @@ def plot_phylo_and_sim_rates():
     ]
     plt.rcParams["font.family"] = "CMU Serif"
     fig, axes = plt.subplots(
-        nrows=4, ncols=4, figsize=(10, 8)
+        nrows=4,
+        ncols=4,
+        figsize=(10, 8),  # sharey=True
     )  # , layout="constrained")
 
     counter = -1
@@ -795,35 +834,39 @@ def plot_phylo_and_sim_rates():
                 # ax.text(1, 5, "MCMC", color="grey")
                 # ax.text(4.5, 5, "MLE", color="grey")
                 ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
-                # bp = ax.boxplot(
-                #     rates,
-                #     patch_artist=True,
-                #     # showmeans=True,
-                #     # meanline=True,
-                #     showfliers=False,
-                # )
-                bp = ax.violinplot(
+                bp = ax.boxplot(
                     rates,
-                    showmedians=True,
-                    showextrema=False,
+                    patch_artist=True,
+                    showmeans=True,
+                    meanline=True,
+                    showfliers=False,
+                    meanprops=dict(color="black", linestyle="-"),
                 )
+                # bp = ax.violinplot(
+                #     rates,
+                #     showmedians=True,
+                #     showextrema=False,
+                # )
 
-                # for median in bp["medians"]:
-                #     # median.set_visible(False)
-                #     median.set(color="black")
-                # for k, box in enumerate(bp["boxes"]):
-                #     box.set_facecolor(sns.color_palette("colorblind")[k])
-                for k, pc in enumerate(bp["bodies"]):
-                    # pc.set_facecolor(sns.color_palette("colorblind")[k % 3])
-                    # pc.set_facecolor(sns.color_palette("colorblind")[-((k - 1) // -2)])
-                    pc.set_facecolor(sns.color_palette("colorblind")[k])
-                    # pc.set_edgecolor("black")
-                    pc.set_alpha(1)
-                bp["cmedians"].set_colors("black")
+                for median in bp["medians"]:
+                    median.set_visible(False)
+                    # median.set(color="black")
+                for k, box in enumerate(bp["boxes"]):
+                    box.set_facecolor(sns.color_palette("colorblind")[k])
+                # for k, pc in enumerate(bp["bodies"]):
+                #     # pc.set_facecolor(sns.color_palette("colorblind")[k % 3])
+                #     # pc.set_facecolor(sns.color_palette("colorblind")[-((k - 1) // -2)])
+                #     pc.set_facecolor(sns.color_palette("colorblind")[k])
+                #     # pc.set_edgecolor("black")
+                #     pc.set_alpha(1)
+                # bp["cmedians"].set_colors("black")
                 ax.set_title(transition)
-                ax.set_ylim(0, 6)
+                ax.set_ylim(-2.7, 8)  # for z-score normalisation
+                ax.set_ylim(0, 10.7)  # for z-score norm + 2.7
+                # ax.set_ylim(0, 8)  # for mean-mean normalisation
+                # ax.set_ylim(-0.5, 3)  # for min-max normalisation
             if j == 0:
-                ax.set_ylabel("Rate")
+                ax.set_ylabel("Normalised rate")
             if i == 3:
                 ax.set_xticks(
                     list(range(1, len(plot_order) + 1)),
@@ -840,7 +883,7 @@ def plot_phylo_and_sim_rates():
                     fontsize=9,
                 )
             if (i, j) == (0, 1):
-                ax.set_ylabel("Rate")
+                ax.set_ylabel("Normalised rate")
             if j != 0 and (i, j) != (0, 1):
                 ax.set_yticklabels([])
             if i != 3 and (i, j) != (2, 3):
@@ -910,7 +953,12 @@ def plot_phylo_and_sim_rates():
     )
     plt.tight_layout()
     # plt.subplots_adjust(hspace=0.25, wspace=0.2, bottom=0.18)
-    plt.subplots_adjust(hspace=0.2, wspace=0.2, right=0.745)
+    plt.subplots_adjust(
+        hspace=0.2, wspace=0.2, right=0.745, left=0.064
+    )  # for z-score-norm
+    # plt.subplots_adjust(
+    #     hspace=0.2, wspace=0.2, right=0.745, left=0.044
+    # )  # for min-max-norm or mean-mean-norm
     plt.show()
 
     #### For the Shuffle test
@@ -1002,18 +1050,18 @@ def plot_phylo_and_sim_rates():
                 # ax.text(1.5, 5, "MCMC", color="grey")
                 # ax.text(6, 5, "MLE", color="grey")
                 # ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
-                # bp = ax.boxplot(
-                #     rates,
-                #     patch_artist=True,
-                #     # showmeans=True,
-                #     # meanline=True,
-                #     showfliers=False,
-                # )
-                bp = ax.violinplot(
+                bp = ax.boxplot(
                     rates,
-                    showmedians=True,
-                    showextrema=False,
+                    patch_artist=True,
+                    # showmeans=True,
+                    # meanline=True,
+                    showfliers=False,
                 )
+                # bp = ax.violinplot(
+                #     rates,
+                #     showmedians=True,
+                #     showextrema=False,
+                # )
 
                 # for median in bp["medians"]:
                 #     # median.set_visible(False)
@@ -1049,7 +1097,7 @@ def plot_phylo_and_sim_rates():
                     fontsize=9,
                 )
             if (i, j) == (0, 1):
-                ax.set_ylabel("Rate")
+                ax.set_ylabel("Noramlised rate")
             if j != 0 and (i, j) != (0, 1):
                 ax.set_yticklabels([])
             if i != 3 and (i, j) != (2, 3):
