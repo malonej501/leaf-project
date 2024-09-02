@@ -133,6 +133,34 @@ def get_ML_rates(directory):
     return ML_rates
 
 
+def get_marginal_likelihood(directory):
+    marglhs = []
+    for file in os.listdir(directory):
+        if file.endswith(".Stones.txt"):
+            data_name = file.rsplit(".")[0]
+            filepath = os.path.join(directory, file)
+            with open(filepath, "r") as fh:
+                lines = fh.readlines()
+                # find marginal likelihood value
+                index = None
+                for line in lines:
+                    if "Log marginal likelihood" in line:
+                        marglh_val = float(line.rsplit("\t")[1])
+                        marglh = pd.DataFrame(
+                            {
+                                "dataset": [data_name],
+                                "log_marginal_likelihood": [marglh_val],
+                            }
+                        )
+                        marglhs.append(marglh)
+    marglhs_df = pd.concat(marglhs, axis=0, ignore_index=True)
+    marglhs_df.sort_values(by="dataset", inplace=True)
+    marglhs_df.reset_index(inplace=True, drop=True)
+
+    marglhs_df.to_csv(directory + "/log_marginal_likelihoods_all.csv", index=False)
+    return marglhs_df
+
+
 def plot_trace(file, run_name, ML_data):
     save_fig_path = file.rsplit("/", 1)[0]
     log_file_name = file.rsplit("/", 1)[1]
@@ -294,5 +322,7 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
 #     method="ML",
 #     ML_data="ML_1",
 # )
-# run_select_trees(["ALL"], "exp10_1", "MCMC", "ML_scaletrees0.001_1")
-get_ML_rates("data/ML_nqm_2")
+# run_select_trees(["ALL"], "uniform0-0.1_res_1", "MCMC", "ML_1")
+# run_select_trees(["jan_phylo_geeta_class"], "uniform0-100_res_2", "MCMC", "ML_1")
+# get_ML_rates("data/ML_nqm_2")
+get_marginal_likelihood("data/uniform0-100_unres_1")
