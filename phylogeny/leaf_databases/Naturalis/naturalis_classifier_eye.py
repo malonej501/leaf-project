@@ -15,23 +15,26 @@ import DuckDuckGoImages as ddgi
 import traceback
 import shutil
 
-wd = "sample_eud_21-1-24/"
-file = "Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
+# wd = "sample_eud_21-1-24/"
+wd = "sample_eud_zuntini_10-09-24/"
+# file = "Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
+file = "Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera.csv"
 
-startfrom = 2017  # which leaf index to start labelling from
+startfrom = 760  # which leaf index to start labelling from
 
 # Google search engine initialisation
 api_key = "REMOVED FOR SECURITY REASONS - SEE LOCAL MACHINE"  # API key for leaf-project tied to malonej501@gmail.com
 cx = "25948abc932774194"  # search engine id for leaf-finder within leaf-project tied to malonej501@gmail.com
 
 
-def check_alldownloaded(species_full):
+def check_alldownloaded(species_full, herb_dir):
     filenames_expected = [
         f"{value}{index}" for index, value in enumerate(species_full["species"])
     ]
     for i in range(len(filenames_expected)):
         filenames_expected[i] += ".png"
-    filenames = os.listdir(wd + "Naturalis_eud_sample_Janssens_intersect_21-01-24")
+    filenames = os.listdir(herb_dir)
+    # filenames = os.listdir("download_imgs")
 
     missing_imgs = list(set(filenames_expected).difference(filenames))
 
@@ -219,8 +222,8 @@ def search_duckduckgo_images(query, canvas):
 
 
 def download_duckduckgo_images(query):
-    if not os.path.exists(wd + f"ddgi_sample/{query}"):
-        os.mkdir(wd + f"ddgi_sample/{query}")
+    if not os.path.exists(wd + f"ddgi_sample_1/{query}"):
+        os.mkdir(wd + f"ddgi_sample_1/{query}")
         saved_data = []
         results = []
         with DDGS() as ddgs:
@@ -244,7 +247,7 @@ def download_duckduckgo_images(query):
                     image = Image.open(io.BytesIO(response.content))
                     image.thumbnail((250, 250))
 
-                    image.save(wd + f"ddgi_sample/{query}/result_{index}.png")
+                    image.save(wd + f"ddgi_sample_1/{query}/result_{index}.png")
                 else:
                     print(
                         f"Failed to download image {index}. Status code: {response.status_code}"
@@ -254,12 +257,13 @@ def download_duckduckgo_images(query):
         print("Search complete!")
         saved_data_df = pd.DataFrame(saved_data)
         saved_data_df.to_csv(
-            wd + f"ddgi_sample/{query}/results_{query}.csv", index=False
+            wd + f"ddgi_sample_1/{query}/results_{query}.csv", index=False
         )
 
 
-def display_downloaded(query, canvas, species_full):
-    path = wd + "ddgi_sample/" + query
+def display_downloaded(query, canvas, species_full, ddgi_dir):
+    # path = wd + "ddgi_sample/" + query
+    path = os.path.join(ddgi_dir, query)
     pngs = sorted([file for file in os.listdir(path) if file.lower().endswith(".png")])
     for index, filename in enumerate(pngs):
         png = os.path.join(path, filename)
@@ -321,19 +325,17 @@ def process_images_old():
         return leafdata
 
 
-def process_images(species_full):
+def process_images(species_full, herb_dir, ddgi_dir):
     leafdata = []
 
     try:
         sorted_file_list = sorted(
-            os.listdir(wd + "Naturalis_eud_sample_Janssens_intersect_21-01-24"),
+            os.listdir(herb_dir),
             key=lambda x: int(re.search(r"\d+", x).group()),
         )
         for filename in sorted_file_list[startfrom:]:
             if filename.endswith(".png"):
-                imgpath = wd + os.path.join(
-                    "Naturalis_eud_sample_Janssens_intersect_21-01-24", filename
-                )
+                imgpath = os.path.join(herb_dir, filename)
                 query = re.sub(r"\d+", "", filename.rstrip(".png"))
 
                 root = tk.Tk()
@@ -354,7 +356,9 @@ def process_images(species_full):
                 # search_duckduckgo_images(query, canvas)
                 # search_duckduckgo_images_alt(query, canvas)
                 # search_wikimedia_commons(query, canvas)
-                display_downloaded(query, canvas, species_full)
+
+                if os.path.exists(ddgi_dir):
+                    display_downloaded(query, canvas, species_full, ddgi_dir)
 
                 print(filename)
                 root.bind("<Key>", lambda event, arg=root: on_press(event, arg))
@@ -373,30 +377,39 @@ def process_images(species_full):
 
 if __name__ == "__main__":
     species_full = pd.read_csv(wd + file)
-    check_alldownloaded(species_full)
+    herb_dir = wd + file.split(".")[0]
+    ddgi_dir = wd + "ddgi_sample_" + file.split(".")[0]
+    check_alldownloaded(species_full, herb_dir)
     pressed_keys = []
 
     with Listener(on_press=on_press) as listener:
-        leafdata = process_images(species_full)
+        leafdata = process_images(species_full, herb_dir, ddgi_dir)
         leafdata_df = pd.DataFrame(leafdata, columns=["species", "shape"])
         print(leafdata_df)
         leafdata_df.to_csv(wd + f"img_labels.csv", index=False)
 
 # if __name__ == "__main__":
-#     check_alldownloaded()
-#     if os.path.isdir(wd + "ddgi_sample"):
-#         shutil.rmtree(wd + "ddgi_sample")
-#     os.mkdir(wd + "ddgi_sample")
+#     species_full = pd.read_csv(wd + file)
+#     check_alldownloaded(species_full)
+
+#     ddgi_path = wd + "ddgi_sample_" + file.split(".")[0]
+#     print(ddgi_path)
+
+#     if os.path.isdir(wd + "ddgi_sample_1"):
+#         shutil.rmtree(wd + "ddgi_sample_1")
+#     os.mkdir(wd + "ddgi_sample_1")
 
 #     sorted_file_list = sorted(
-#         os.listdir(wd + "Naturalis_eud_sample_Janssens_intersect_21-01-24"),
+#         os.listdir(wd + "Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept"),
+#         # os.listdir("download_imgs"),
 #         key=lambda x: int(re.search(r"\d+", x).group()),
 #     )
 #     for filename in sorted_file_list[startfrom:]:
 #         if filename.endswith(".png"):
 #             imgpath = wd + os.path.join(
-#                 "Naturalis_eud_sample_Janssens_intersect_21-01-24", filename
+#                 "Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept", filename
 #             )
+#             # imgpath = os.path.join("download_imgs", filename)
 #             query = re.sub(r"\d+", "", filename.rstrip(".png"))
 #             print(filename)
 #             download_duckduckgo_images(query)
