@@ -3,7 +3,10 @@ import os
 import re
 from datetime import datetime
 
-wd = "sample_eud_21-1-24"
+wd = "sample_eud_zuntini_10-09-24"
+file_name = "Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera.csv"
+data_name = file_name.split(".")[0]
+
 
 shapes = pd.DataFrame()
 
@@ -23,7 +26,9 @@ for file in sorted_file_list:
         df = pd.read_csv(f"./{wd}/{file}")
         shapes = pd.concat([shapes, df], ignore_index=True)
 
-shapes.replace("y", "a", inplace=True)
+print(set(shapes["shape"]))
+
+# shapes.replace("y", "a", inplace=True)
 # shapes.replace("f", "a", inplace=True)
 # shapes.replace("s", "a", inplace=True)
 # shapes.replace("v", "a", inplace=True)
@@ -31,29 +36,25 @@ shapes.replace("y", "a", inplace=True)
 print(len(shapes))
 print(shapes["shape"].value_counts())
 
-
 # remove numerical name component
 shapes["species"] = shapes["species"].replace("\d+", "", regex=True)
 # drop any remaining duplicates
 shapes.drop_duplicates(subset="species", keep="first", inplace=True)
-
-shapes.to_csv(f"./img_labels_full_{datetime.now()}.csv", index=False)
+shapes.to_csv(f"./{data_name}_labels_full.csv", index=False)
 
 # drop ambiguous species
 shapes_unambig = shapes[shapes["shape"] != "a"].reset_index(drop=True)
 print(f"Unambiguous species count: {len(shapes_unambig)}")
 
 shapes_unambig["shape"].replace({"u": 0, "l": 1, "d": 2, "c": 3}, inplace=True)
-print(shapes_unambig)
+# print(shapes_unambig)
 
 shapes_unambig.to_csv(
-    "./img_labels_unambig_full.csv", sep="\t", index=False, header=False
+    f"./{data_name}_labels_unambig_full.csv", sep="\t", index=False, header=False
 )
 
-species_full = pd.read_csv(
-    f"./{wd}/Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
-)
-# drop any duplicates
+species_full = pd.read_csv(os.path.join(wd, file_name))
+# drop any duplicatesikk
 species_full_clean = species_full.drop_duplicates(subset="species", keep="first")
 
 
@@ -65,6 +66,6 @@ print(species_full_labelled)
 
 
 species_full_labelled.to_csv(
-    f"./Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24.csv",
+    f"./{data_name}_labelled.csv",
     index=False,
 )
