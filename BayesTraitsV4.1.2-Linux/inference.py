@@ -133,16 +133,16 @@ def get_ML_rates(directory):
     return ML_rates
 
 
-def get_marginal_likelihood(directory):
+def get_marginal_likelihood(run_name):
+
     marglhs = []
-    for file in os.listdir(directory):
+    for file in os.listdir("data"):
         if file.endswith(".Stones.txt"):
             data_name = file.rsplit(".")[0]
-            filepath = os.path.join(directory, file)
+            filepath = os.path.join("data", file)
             with open(filepath, "r") as fh:
                 lines = fh.readlines()
                 # find marginal likelihood value
-                index = None
                 for line in lines:
                     if "Log marginal likelihood" in line:
                         marglh_val = float(line.rsplit("\t")[1])
@@ -157,7 +157,7 @@ def get_marginal_likelihood(directory):
     marglhs_df.sort_values(by="dataset", inplace=True)
     marglhs_df.reset_index(inplace=True, drop=True)
 
-    marglhs_df.to_csv(directory + "/log_marginal_likelihoods_all.csv", index=False)
+    marglhs_df.to_csv(f"data/{run_name}_log_marginal_likelihoods_all.csv", index=False)
     return marglhs_df
 
 
@@ -256,6 +256,32 @@ def plot_trace(file, run_name, ML_data):
     return fig
 
 
+def plot_marglhs(run_name):
+    marglhs = get_marginal_likelihood(run_name)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    bars = ax.bar(
+        marglhs["dataset"], marglhs["log_marginal_likelihood"], color="skyblue"
+    )
+
+    # Adding labels on top of the bars
+    for bar, label in zip(bars, marglhs["log_marginal_likelihood"]):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 0.1,  # Adjusted for better visibility
+            round(label, 2),
+            ha="center",
+            va="bottom",
+        )
+    ax.set_xticklabels(marglhs["dataset"], rotation=45)
+    ax.set_xlabel("Dataset")
+    ax.set_ylabel("Log Marginal Likelihood")
+    plt.tight_layout()
+
+    return fig
+
+
 def run_BayesTraits(tree, labels):
     print(tree, labels)
     result = subprocess.run(
@@ -277,6 +303,7 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
                 (f"data/{dataset}.tre", f"data/{dataset}.txt") for dataset in datasets
             )
         )
+
     processes = []
     for tree, labels in data:
         process = multiprocessing.Process(target=run_BayesTraits, args=(tree, labels))
@@ -291,6 +318,10 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
         for _, label in data:
             logfilepath = label + ".Log.txt"
             fig = plot_trace(logfilepath, run_name, ML_data)
+            pdf.savefig(fig)
+
+        if os.path.exists(datasets[0] + ".txt.Stones.txt"):
+            fig = plot_marglhs(run_name)
             pdf.savefig(fig)
         pdf.close()
 
@@ -315,7 +346,14 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
 #     "ML_scaletrees0.001_1",
 #     "ML"
 # )
-# run_select_trees(datasets=["ALL"], run_name="ML_3", method="ML", ML_data="None")
+# run_select_trees(datasets=["ALL"], run_name="ML_4", method="ML", ML_data="None")
+# run_select_trees(
+#     datasets=["zuntini_phylo_nat_class_10-09-24_genera_class"],
+#     run_name="ML_4",
+#     method="ML",
+#     ML_data="None",
+# )
+
 # run_select_trees(
 #     datasets=["ALL"],
 #     run_name="ML_nqm_2",
@@ -323,6 +361,15 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
 #     ML_data="ML_1",
 # )
 # run_select_trees(["ALL"], "uniform0-0.1_res_1", "MCMC", "ML_1")
-# run_select_trees(["jan_phylo_geeta_class"], "uniform0-100_res_2", "MCMC", "ML_1")
-# get_ML_rates("data/ML_nqm_2")
-get_marginal_likelihood("data/uniform0-100_unres_1")
+run_select_trees(["ALL"], "uniform0-0.1_res2", "MCMC", "ML_3")
+# run_select_trees(
+#     [
+#         "zuntini_phylo_nat_class_10-09-24_class",
+#         "zuntini_phylo_nat_class_10-09-24_genera_class",
+#     ],
+#     "uniform0-1_rj_2",
+#     "MCMC",
+#     "ML_3",
+# )
+# get_ML_rates("data/ML_3")
+# get_marginal_likelihood("data/uniform0-0.1_unres_1")
