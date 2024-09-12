@@ -150,6 +150,36 @@ def jan_nat_cenrich_annotations():
     )
 
 
+def zuntini_phylo_geeta_class_annotations():
+    data = pd.read_csv(
+        # "final_data/labels/jan_phylo_nat_class_21-01-24_cenrich_sub.txt",
+        "final_data/labels/zuntini_phylo_geeta_class_30-07-24.txt",
+        sep="\t",
+        header=None,
+        names=["species", "shape"],
+    )
+
+    data.insert(1, "command", "range")
+
+    palette = sns.color_palette("colorblind", as_cmap=True)
+
+    cmap = {0: palette[0], 1: palette[1], 2: palette[2], 3: palette[3]}
+    shapemap = {0: "Unlobed", 1: "Lobed", 2: "Dissected", 3: "Compound"}
+    print(data)
+
+    data["colour"] = data["shape"].map(cmap)
+    data["label"] = data["shape"].map(shapemap)
+    data.drop(columns=["shape"], inplace=True)
+    print(data)
+    data.to_csv(
+        "zuntini_phylo_geeta_class_shapeannotations.txt",
+        sep="\t",
+        header=False,
+        index=False,
+    )
+
+
 if __name__ == "__main__":
     # zuntini_nat_annotations()
-    jan_nat_cenrich_annotations()
+    zuntini_phylo_geeta_class_annotations()
+    # jan_nat_cenrich_annotations()
