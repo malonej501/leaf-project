@@ -12,6 +12,8 @@ eud_fams = pd.read_csv("../APG_IV/APG_IV_eud_fams.csv")
 
 current_date = datetime.now().strftime("%d-%m-%y")
 
+startfrom = 1720
+
 
 def filter_to_angio_or_eud():
 
@@ -61,7 +63,14 @@ def sample_families(sample_fams):
     ang_sp_full.insert(0, "species", sp_list)
     ang_sp_full_clean = ang_sp_full.drop_duplicates(
         subset="species", keep="first"
-    ).reset_index(drop=True)
+    ).reset_index(
+        drop=True
+    )  # remove duplicate species
+    ang_sp_full_clean = ang_sp_full_clean.drop_duplicates(
+        subset="id", keep="first"
+    ).reset_index(
+        drop=True
+    )  # remove any completely identical rows
     print("Done!")
 
     sample_dfs = []
@@ -90,7 +99,7 @@ def sample_families(sample_fams):
 def img_from_sample():
     print("Reading data...")
     sample = pd.read_csv(
-        "sample_eud_22-4-24/Naturalis_occurrence_eud_sample_22-04-24.csv"
+        "sample_eud_zuntini_10-09-24/Naturalis_occurrence_eud_sample_10-09-24.csv"
     )
     print("Done!")
 
@@ -110,11 +119,15 @@ def download_imgs():
         print("download_imgs is not empty! Terminating.")
 
     else:
+        # intersect = pd.read_csv(
+        #     "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
+        # )
         intersect = pd.read_csv(
-            "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
+            "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera.csv"
         )
+        print(f"Downloading {len(intersect)} images...")
 
-        for index, row in intersect.iterrows():
+        for index, row in intersect.iloc[startfrom:].iterrows():
             try:
                 species = row["species"]
                 print(index, species)
@@ -127,5 +140,6 @@ def download_imgs():
 
 
 if __name__ == "__main__":
-    #sample_families(eud_fams)
-    img_from_sample()
+    # sample_families(eud_fams)
+    # img_from_sample()
+    download_imgs()
