@@ -205,7 +205,7 @@ def import_phylo_and_sim_rates(plot_order):
 
 def import_phylo_ML_rates(ML_data):
     # ML_rates = pd.read_csv("all_rates/ML3_mean_rates_all.csv")
-    ML_rates = pd.read_csv(f"all_rates/{ML_data}.csv")
+    ML_rates = pd.read_csv(f"all_rates/ML/{ML_data}.csv")
     ML_rates.drop(
         columns=[
             "Lh",
