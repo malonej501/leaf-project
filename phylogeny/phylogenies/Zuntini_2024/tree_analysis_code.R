@@ -6,7 +6,7 @@ library(ape)
 #zuntini[4] <- gsub("(?<!') (?!')", "_", zuntini[4], perl = TRUE)
 #zuntini[7] <- gsub("(?<!') (?!')", "_", zuntini[7], perl = TRUE)
 #writeLines(zuntini, "zuntini_2024_clean.tre")
-zuntini <- read.tree("Trees/4_young_tree_smoothing_10_pruned_for_diversification_analyses.tre")
+zuntini <- read.tree("trees/4_young_tree_smoothing_10_pruned_for_diversification_analyses.tre")
 #zuntini <- read.tree("Trees/2_global_tree.tre")
 zuntini_tips <- data.frame(order_family_genus_species = zuntini$tip.label)
 #cleaning
@@ -179,7 +179,8 @@ write.nexus(zuntini_sub, file = "zuntini_Naturalis_multimedia_eud_sample_10-09-2
 
 naturalis_labs <-
   read.csv(
-    "Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labels_unambig_full.csv",
+    #"Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labels_unambig_full.csv",
+    "zuntini_genera_equal_genus_phylo_nat_class.txt",
     header = FALSE,
     sep = "\t",
     col.names = c("genus_species", "shape")
@@ -228,5 +229,6 @@ write.table(
   quote = FALSE
 )
 # write the subset tree
-write.nexus(zuntini_sub, file = "zuntini_Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_labels_genera_unambig_full_sub.tre")
+#write.nexus(zuntini_sub, file = "zuntini_Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_labels_genera_unambig_full_sub.tre")
+write.nexus(zuntini_sub, file = "zuntini_genera_equal_genus_phylo_nat_class.tre")
 

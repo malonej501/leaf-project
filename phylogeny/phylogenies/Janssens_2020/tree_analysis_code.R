@@ -9,11 +9,13 @@ tree <- read.nexus("Janssens_ml_dated.tre")
 tree_tips <- data.frame(tip_labels = tree$tip.label)
 
 naturalis_sample <- read.csv("./sample_eud_21-1-24/Naturalis_multimedia_eud_sample_13-01-24.csv")
-naturalis_sample_labelled <- read.csv("./sample_eud_21-1-24_reduced/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_reduced.csv")
+# naturalis_sample_labelled <- read.csv("./sample_eud_21-1-24_reduced/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_reduced.csv")
+naturalis_sample_labelled <- read.csv("./sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24.csv")
 
 naturalis_sample_tree_intersect <- naturalis_sample[naturalis_sample$species %in% intersect(tree_tips$tip_labels, naturalis_sample$species),]
 #write.csv(naturalis_sample_tree_intersect, file="Naturalis_sample_Janssens_intersect_species_list.csv", row.names=FALSE)
-naturalis_sample_labelled_tree_intersect <- naturalis_sample_labelled[tree$tip.label %in% naturalis_sample_labelled$species,]
+naturalis_sample_labelled_tree_intersect <- naturalis_sample_labelled[naturalis_sample_labelled$species %in% intersect(tree_tips$tip_labels, naturalis_sample_labelled$species),]
+write.csv(naturalis_sample_labelled_tree_intersect, "Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_2416.csv")
 
 tree_intersect <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% naturalis_sample_tree_intersect$species)])
 tree_intersect_labelled <- drop.tip(tree, tree$tip.label[!(tree$tip.label %in% naturalis_sample_labelled$species)])
@@ -41,6 +43,16 @@ ggtree(tree_minus_outgroups)
 axisPhylo()
 
 table((naturalis_sample_labelled$species %in% tree_tips$tip_labels))
+
+#### intersect with equal fams data ####
+
+#equal_fams <- read.csv("sample_eud_16-09-24_equal_fam/jan_equal_fam_phylo_nat_class.txt", header = FALSE, sep="\t", col.names = c("genus_species", "shape"))
+equal_fams <- read.csv("sample_eud_16-09-24_equal_gen/jan_equal_genus_phylo_nat_class.txt", header = FALSE, sep="\t", col.names = c("genus_species", "shape"))
+jan_equal_fam_diff <-
+  setdiff(tree$tip.label, equal_fams$genus_species)
+jan_sub <- drop.tip(tree, jan_equal_fam_diff)
+length(jan_sub$tip.label)
+write.nexus(jan_sub, file="jan_equal_genus_phylo_nat_class.tre")
 
 # Plotting the Geographical distribution of the sample
 

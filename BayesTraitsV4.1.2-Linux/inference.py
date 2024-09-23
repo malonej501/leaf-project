@@ -177,22 +177,23 @@ def plot_trace(file, run_name, ML_data):
 
     # export just the cleaned posteriors from the log file
     log_no_burnin = log.loc[log["Iteration"] >= burnin]
-    rates = log_no_burnin[
-        [
-            "q01",
-            "q02",
-            "q03",
-            "q10",
-            "q12",
-            "q13",
-            "q20",
-            "q21",
-            "q23",
-            "q30",
-            "q31",
-            "q32",
-        ]
-    ]
+    # rates = log_no_burnin[
+    #     [
+    #         "q01",
+    #         "q02",
+    #         "q03",
+    #         "q10",
+    #         "q12",
+    #         "q13",
+    #         "q20",
+    #         "q21",
+    #         "q23",
+    #         "q30",
+    #         "q31",
+    #         "q32",
+    #     ]
+    # ]
+    rates = log.filter(like="q", axis=1)
     rates.to_csv(save_fig_path + f"/{data_name}_{run_name}.csv", index=False)
 
     # plt.plot(log["Iteration"], log["Lh"])
@@ -346,10 +347,15 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
 #     "ML_scaletrees0.001_1",
 #     "ML"
 # )
-# run_select_trees(datasets=["ALL"], run_name="ML_4", method="ML", ML_data="None")
 # run_select_trees(
-#     datasets=["zuntini_phylo_nat_class_10-09-24_genera_class"],
-#     run_name="ML_4",
+#     datasets=["ALL"],
+#     run_name="ML_red_1",
+#     method="ML",
+#     ML_data="None",
+# )
+# run_select_trees(
+#     datasets=["ALL"],
+#     run_name="ML_jan_zun_equal_genus_5",
 #     method="ML",
 #     ML_data="None",
 # )
@@ -361,7 +367,10 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
 #     ML_data="ML_1",
 # )
 # run_select_trees(["ALL"], "uniform0-0.1_res_1", "MCMC", "ML_1")
-run_select_trees(["ALL"], "uniform0-0.1_res2", "MCMC", "ML_3")
+# run_select_trees(["ALL"], "uniform0-100_res_1", "MCMC", "ML_res_1")
+run_select_trees(["ALL"], "uniform0-0.1_4", "MCMC", "ML_jan_zun_equal_genus_5")
+
+
 # run_select_trees(
 #     [
 #         "zuntini_phylo_nat_class_10-09-24_class",
@@ -371,5 +380,5 @@ run_select_trees(["ALL"], "uniform0-0.1_res2", "MCMC", "ML_3")
 #     "MCMC",
 #     "ML_3",
 # )
-# get_ML_rates("data/ML_3")
+# get_ML_rates("data/ML_jan_zun_equal_genus_5")
 # get_marginal_likelihood("data/uniform0-0.1_unres_1")
