@@ -5,7 +5,25 @@ load_tree <- function(tree_path){
   return(tree)
 }
 
-load_shape_data <- function(shape_dataset){
+load_trees <- function(path){
+  # path = "phylo_data/raw_trees"
+  tree_files <- list.files(path=path, pattern = "\\.nwk$|\\.tree$|\\.tre$|\\.txt$|\\.nex$", full.names = TRUE)
+  trees <- c()
+  for (file in tree_files){
+    print(file)
+    if (grepl("zuntini", file)){
+      tree <- read.tree(file)
+    }
+    else{
+      tree <- read.nexus(file)
+    }
+    trees[[basename(file)]] <- tree
+  }
+  tree_filenames <- basename(tree_files)
+  return(trees)
+}
+
+load_shape_data_full <- function(shape_dataset){
   if (shape_dataset == "Naturalis"){
     leaf_data_occur <- read.csv("leaf_data/Naturalis/botany-20240108.dwca/Occurrence.txt")
     names(leaf_data_occur)[names(leaf_data_occur) == "id"] <- "CoreId"
@@ -15,6 +33,43 @@ load_shape_data <- function(shape_dataset){
   }
   return(shape_data)
 }
+
+load_naturalis_sample_data <- function(){
+  path = "shape_data/Naturalis"
+  jan_nat <- read.csv(paste0(path, "/jan_nat_eud_21-01-24/Naturalis_multimedia_eud_sample_13-01-24.csv"))
+  zun_nat <- read.csv(paste0(path, "/zun_nat_eud_10-09-24/Naturalis_multimedia_eud_sample_10-09-24.csv"))
+  #print(nrow(jan_nat))
+  #print(nrow(zun_nat))
+  return(list(janssens_nat = jan_nat, zuntini_nat = zun_nat))
+}
+
+nat_tree_intersect <- function(tree_path){
+  trees <- load_trees(tree_path)
+  nat_samp_data <- load_naturalis_sample_data()
+  #print(trees$janssens_ml_dated.tre)
+  tree_names <- c("janssens","zuntini")
+  for (name in tree_names){
+    print(name)
+    tree <- trees[[grep(name, names(trees))]]
+    tips_genus_species <- sub("^[^_]*_[^_]*_(.*)", "\\1", tree$tip.label) # return genus and species of the tip_label
+    tips_genus <- sub("^(.*?)_.*", "\\1", tips_genus_species) # return just the genus
+    nat_samp <- nat_samp_data[[grep(name, names(nat_samp_data))]]
+    nat_tree_intersect_species <- nat_samp[nat_samp$species %in% intersect(nat_samp$species, tips_genus_species),]
+    print(nrow(nat_tree_intersect_species))
+    nat_tree_intersect_genus <- nat_samp[nat_samp$genus %in% intersect(nat_samp$genus, tips_genus),]
+    nat_tree_intersect_genus <- nat_tree_intersect_genus[!duplicated(nat_tree_intersect_genus$genus), ] # keep only the first occurring species in each genera
+    print(nrow(nat_tree_intersect_genus))
+    
+    write.csv(nat_tree_intersect_species, paste(substr(name, 1, 3), "nat_species.csv", sep="_"), row.names=FALSE)
+    write.csv(nat_tree_intersect_genus, paste(substr(name, 1, 3), "nat_genus.csv", sep="_"), row.names=FALSE)
+  }
+}
+
+nat_tree_intersect(tree_path="phylo_data/raw_trees")
+x <- read.csv("jan_nat_species.csv")
+x <- read.csv("zun_nat_genus.csv")
+y <- read.csv("jan_nat_genus.csv")
+z <- intersect(x$genus, y$genus)
 
 load_apg <- function(){
   apg <- read.csv("leaf_data/APG_IV/APG_IV_ang_fams.csv")

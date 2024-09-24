@@ -1499,7 +1499,8 @@ def arrow_plot(colourise):
             to = row["transition_"][2]
             r = row["rate_norm_mean_diff"] * 10
             rc = row["std_c"] if colourise else "black"
-            rs = row["rate_norm_std"]
+            # rs = row["rate_norm_std"]
+            rs = False  # set to false to disable multi-arrows
 
             if r > 0:
                 if at == "u" and to == "l":
@@ -1595,7 +1596,7 @@ if __name__ == "__main__":
     # plot_phylo_and_sim_rates_with_leaf_icons(
     #     norm_method="meanmean", ML_data="ML3_mean_rates_all", legend=False
     # )
-    arrow_plot(colourise=False)
+    arrow_plot(colourise=True)
     # plot_phylo_and_sim_rates_restricted(
     #     norm_method="minmax", ML_data="ML_red_1_mean_rates_all"
     # )
