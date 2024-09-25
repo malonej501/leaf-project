@@ -193,7 +193,7 @@ def plot_trace(file, run_name, ML_data):
     #         "q32",
     #     ]
     # ]
-    rates = log.filter(like="q", axis=1)
+    rates = log_no_burnin.filter(like="q", axis=1)
     rates.to_csv(save_fig_path + f"/{data_name}_{run_name}.csv", index=False)
 
     # plt.plot(log["Iteration"], log["Lh"])
@@ -368,7 +368,7 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
 # )
 # run_select_trees(["ALL"], "uniform0-0.1_res_1", "MCMC", "ML_1")
 # run_select_trees(["ALL"], "uniform0-100_res_1", "MCMC", "ML_res_1")
-run_select_trees(["ALL"], "uniform0-0.1_4", "MCMC", "ML_jan_zun_equal_genus_5")
+run_select_trees(["ALL"], "exp1_1", "MCMC", "ML_3")
 
 
 # run_select_trees(
