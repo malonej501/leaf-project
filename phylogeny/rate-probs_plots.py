@@ -171,9 +171,10 @@ def rate_diff(summary):
     return summary_new
 
 
-def import_phylo_and_sim_rates(plot_order):
+def import_phylo_and_sim_rates(plot_order, calc_diff):
+    # to return differences between rates rather than raw rates, set calc_diff to true
     #### import data ####
-    phylo_rates = get_rates_batch(directory="all_rates/uniform_1010000steps")
+    phylo_rates = get_rates_batch(directory="rates/uniform_1010000steps")
     s1 = pd.read_csv(
         "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT1.csv"
     )
@@ -189,8 +190,21 @@ def import_phylo_and_sim_rates(plot_order):
 
     phylo_sim = pd.concat([sim_rates, phylo_rates]).reset_index(drop=True)
     phylo_sim = phylo_sim.rename(columns={"phylo-class": "Dataset"})
+
+    if calc_diff:
+        # Calculate differences
+        phylo_sim["l→u-u→l"] = phylo_sim["l→u"] - phylo_sim["u→l"]
+        phylo_sim["d→u-u→d"] = phylo_sim["d→u"] - phylo_sim["u→d"]
+        phylo_sim["c→u-u→c"] = phylo_sim["c→u"] - phylo_sim["u→c"]
+        phylo_sim["l→d-d→l"] = phylo_sim["l→d"] - phylo_sim["d→l"]
+        phylo_sim["l→c-c→l"] = phylo_sim["l→c"] - phylo_sim["c→l"]
+        phylo_sim["d→c-c→d"] = phylo_sim["d→c"] - phylo_sim["c→d"]
+        # phylo_sim = phylo_sim.drop(columns=rates_map3.values())
     phylo_sim_long = pd.melt(
-        phylo_sim, id_vars=["Dataset"], var_name="transition", value_name="rate"
+        phylo_sim,
+        id_vars=["Dataset"],
+        var_name="transition",
+        value_name="rate",
     )
     phylo_sim_long["dataname"] = phylo_sim_long["Dataset"].apply(
         lambda x: x.split("_class", 1)[0] + "_class"
@@ -203,9 +217,9 @@ def import_phylo_and_sim_rates(plot_order):
     return phylo_sim_long
 
 
-def import_phylo_ML_rates(ML_data):
-    # ML_rates = pd.read_csv("all_rates/ML3_mean_rates_all.csv")
-    ML_rates = pd.read_csv(f"all_rates/ML/{ML_data}.csv")
+def import_phylo_ML_rates(ML_data, plot_order, calc_diff):
+    # ML_rates = pd.read_csv("rates/ML3_mean_rates_all.csv")
+    ML_rates = pd.read_csv(f"rates/ML/{ML_data}.csv")
     ML_rates.drop(
         columns=[
             "Lh",
@@ -222,21 +236,42 @@ def import_phylo_ML_rates(ML_data):
     ML_rates["dataname"] = ML_rates["dataset"].apply(
         lambda x: x.split("_class", 1)[0] + "_class"
     )
+    if calc_diff:
+        # Calculate differences
+        ML_rates["l→u-u→l"] = ML_rates["l→u"] - ML_rates["u→l"]
+        ML_rates["d→u-u→d"] = ML_rates["d→u"] - ML_rates["u→d"]
+        ML_rates["c→u-u→c"] = ML_rates["c→u"] - ML_rates["u→c"]
+        ML_rates["l→d-d→l"] = ML_rates["l→d"] - ML_rates["d→l"]
+        ML_rates["l→c-c→l"] = ML_rates["l→c"] - ML_rates["c→l"]
+        ML_rates["d→c-c→d"] = ML_rates["d→c"] - ML_rates["c→d"]
+        # ML_rates = ML_rates.drop(columns=rates_map3.values())
+
     ML_rates_long = pd.melt(
         ML_rates,
         id_vars=["dataname", "dataset"],
         var_name="transition",
         value_name="rate",
     )
+    # filter to only rows with dataset in the plot_order list
+    ML_plot_order = [x.split("_class", 1)[0] + "_class" for x in plot_order]
+    ML_rates_long = ML_rates_long[
+        ML_rates_long["dataname"].isin(ML_plot_order)
+    ].reset_index(drop=True)
+    # ML_rates_long.rename(
+    #     columns={"dataset": "Dataset"}
+    # )  # rename to match column in mcmc rates
 
     return ML_rates_long
 
 
 def normalise_rates(phylo_sim_long, ML_phylo_rates_long, norm_method):
     #### Normalise the rates across datasets ####
-    phylo_sim_long["mean_rate"] = phylo_sim_long.groupby(["Dataset", "transition"])[
-        "rate"
-    ].transform(
+    phylo_sim_long_filt = phylo_sim_long[  # only calculate the mean rate for transitions, not transition differences
+        phylo_sim_long["transition"].isin(rates_map3.values())
+    ]
+    phylo_sim_long["mean_rate"] = phylo_sim_long_filt.groupby(
+        ["Dataset", "transition"]
+    )["rate"].transform(
         "mean"
     )  # get mean rate for each transition per dataset
 
@@ -878,8 +913,8 @@ def plot_phylo_and_sim_rates_with_leaf_icons(norm_method, ML_data, legend):
         "geeta_phylo_geeta_class_uniform0-100_4",
     ]
 
-    ML_phylo_rates_long = import_phylo_ML_rates(ML_data)
-    phylo_sim_long = import_phylo_and_sim_rates(plot_order)
+    ML_phylo_rates_long = import_phylo_ML_rates(ML_data, plot_order, calc_diff=False)
+    phylo_sim_long = import_phylo_and_sim_rates(plot_order, calc_diff=False)
     phylo_sim_long, ML_phylo_rates_long, summary = normalise_rates(
         phylo_sim_long, ML_phylo_rates_long, norm_method
     )
@@ -931,7 +966,7 @@ def plot_phylo_and_sim_rates_with_leaf_icons(norm_method, ML_data, legend):
                     if not x.empty:
                         ML_rates.append(x.loc[0, "rate_norm"])
                     elif x.empty:
-                        ML_rates.append(np.NaN)
+                        ML_rates.append(np.nan)
                     if dataset not in legend_labels:
                         legend_labels.append(dataset)
                 ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
@@ -1047,6 +1082,126 @@ def plot_phylo_and_sim_rates_with_leaf_icons(norm_method, ML_data, legend):
             )  # for min-max-norm or mean-mean-norm
     else:
         plt.subplots_adjust(hspace=0.2, wspace=0.2)
+    plt.show()
+
+
+def plot_rates_diff(norm_method, ML_data):
+    plot_order = [
+        "MUT1_simulation",
+        "MUT2_simulation",
+        "jan_phylo_nat_class_uniform0-0.1_5",
+        "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_5",
+        "geeta_phylo_geeta_class_uniform0-100_6",
+    ]
+
+    # plot_titles = ["u-l", "u-d", "u-c", "l-d", "l-c", "d-c"]
+    plot_titles = [
+        "l→u-u→l",
+        "d→u-u→d",
+        "c→u-u→c",
+        "l→d-d→l",
+        "l→c-c→l",
+        "d→c-c→d",
+    ]
+    # plot_transitions = ["u→l", "u→d", "u→c", "l→d", "l→c", "d→c"]
+    plot_transitions = ["l→u", "d→u", "c→u", "l→d", "l→c", "d→c"]
+
+    ML_phylo_rates_long = import_phylo_ML_rates(ML_data, plot_order, calc_diff=True)
+    phylo_sim_long = import_phylo_and_sim_rates(plot_order, calc_diff=True)
+    phylo_sim_long, ML_phylo_rates_long, summary = normalise_rates(
+        phylo_sim_long, ML_phylo_rates_long, norm_method
+    )
+
+    # mcmc_diff, ml_diff = get_raw_rates_diff(phylo_sim_long, ML_phylo_rates_long)
+
+    #### plotting ####
+
+    plt.rcParams["font.family"] = "CMU Serif"
+
+    fig, axes = plt.subplots(
+        nrows=2,
+        ncols=3,
+        figsize=(12, 9),  # sharey=True
+    )  # , layout="constrained")
+    counter = -1
+    legend_labels = []
+    print(axes)
+    for i, transition in enumerate(plot_titles):
+        ax = axes.flat[i]
+        # mcmc_plot_data = mcmc_diff[mcmc_diff["transition"] == transition]
+        # ml_plot_data = ml_diff[ml_diff["transition"] == transition]
+        mcmc_plot_data = phylo_sim_long[phylo_sim_long["transition"] == transition]
+        ml_plot_data = ML_phylo_rates_long[
+            ML_phylo_rates_long["transition"] == transition
+        ]
+
+        rates = []
+        ml_rates = []
+        for k, dataset in enumerate(plot_order):
+            # rates.append(
+            #     mcmc_plot_data["rate_norm_diff"][
+            #         mcmc_plot_data["Dataset"] == dataset
+            #     ].squeeze()
+            # )
+            rates.append(
+                mcmc_plot_data["rate_norm"][
+                    mcmc_plot_data["Dataset"] == dataset
+                ].squeeze()
+            )
+
+            # get ML_rates in correct order
+            x = ml_plot_data[
+                ml_plot_data["dataname"].apply(lambda x: x in dataset)
+            ].reset_index(drop=True)
+            if not x.empty:
+                # ml_rates.append(x.loc[0, "rate_norm_diff"])
+                ml_rates.append(x.loc[0, "rate_norm"])
+            elif x.empty:
+                ml_rates.append(np.nan)
+        ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
+        ax.axhline(0, linestyle="--", color="C1", alpha=0.5)
+        bp = ax.violinplot(
+            rates,
+            # patch_artist=True,
+            # showmeans=True,
+            # meanline=True,
+            # showfliers=False,
+            # meanprops=dict(color="black", linestyle="-"),
+            showextrema=False,
+            showmeans=True,
+        )
+
+        # for median in bp["medians"]:
+        #     median.set_visible(False)
+        # for k, box in enumerate(bp["boxes"]):
+        #     box.set_facecolor(sns.color_palette("colorblind")[k])
+        ax.set_title(plot_titles[i])
+        ax.set_ylim(-8, 8)
+        ax.set_xticks(
+            list(range(1, len(plot_order) + 1)),
+            ["MUT1", "MUT2", "Janssens", "Zuntini", "Geeta"],
+            fontsize=9,
+        )
+        ax.set_xticklabels(ax.get_xticklabels())  # , rotation=45)
+        # if norm_method == "zscore":
+        #     ax.set_ylim(-2.7, 8)  # for z-score normalisation
+        # elif norm_method == "zscore+2.7":
+        #     ax.set_ylim(0, 10.7)  # for z-score norm + 2.7
+        # elif norm_method == "zscore_global":
+        #     ax.set_ylim(-2, 5)
+        # elif norm_method == "meanmean":
+        #     ax.set_ylim(0, 8)  # for mean-mean normalisation
+        # elif norm_method == "minmax":
+        #     ax.set_ylim(-0.5, 3)  # for min-max normalisation
+
+        # plot ML values
+        if ML_data:
+            pos = list(range(1, len(plot_order) + 1))
+            ax.scatter(
+                pos, ml_rates, color="black", zorder=5, s=8, facecolors="white"
+            )  # , marker="D")
+    fig.supxlabel("Dataset")
+    fig.supylabel("Difference between back and forwards normalised rate")
     plt.show()
 
 
@@ -1596,12 +1751,13 @@ if __name__ == "__main__":
     # plot_phylo_and_sim_rates_with_leaf_icons(
     #     norm_method="meanmean", ML_data="ML3_mean_rates_all", legend=False
     # )
-    arrow_plot(colourise=True)
-    # plot_phylo_and_sim_rates_restricted(
-    #     norm_method="minmax", ML_data="ML_red_1_mean_rates_all"
-    # )
-    # get_phylo_stats()
-    # concat_posteriors()
-    # rates_batch_stats(rates_norm)
-    # plot_rates_batch(rates_norm)
-    # concat_posteriors()
+    # arrow_plot(colourise=True)
+    plot_rates_diff(norm_method="meanmean", ML_data="ML4_mean_rates_all")
+# plot_phylo_and_sim_rates_restricted(
+#     norm_method="minmax", ML_data="ML_red_1_mean_rates_all"
+# )
+# get_phylo_stats()
+# concat_posteriors()
+# rates_batch_stats(rates_norm)
+# plot_rates_batch(rates_norm)
+# concat_posteriors()
