@@ -233,7 +233,13 @@ def get_leaf_transitions(dfs):
     return leaf_sum
 
 
-def log_prob(params):
+def log_prior(params):  # define a uniform prior from 0 to 1 for every transition rate
+    if any(0 <= q <= 0.1 for q in params):
+        return 0
+    return -np.inf
+
+
+def log_likelihood(params):
     Q = np.array(
         [
             [-(params[0] + params[1] + params[2]), params[0], params[1], params[2]],
@@ -242,15 +248,22 @@ def log_prob(params):
             [params[9], params[10], params[11], -(params[9] + params[10] + params[11])],
         ]
     )
-    log_prob = 0
+    log_likelihood = 0
     Pt = scipy.linalg.expm(Q)  # * 0.1)  # t=1 for every transition
     for i, transition in enumerate(transitions["transition"]):
-        log_prob += transitions["count"][i] * np.log(
+        log_likelihood += transitions["count"][i] * np.log(
             Pt[transition_map_rates[transition]]
         )
-    if np.isnan(log_prob):
-        log_prob = -np.inf
-    return log_prob
+    if np.isnan(log_likelihood):
+        log_likelihood = -np.inf
+    return log_likelihood
+
+
+def log_probability(params):
+    lp = log_prior(params)
+    if not np.isfinite(lp):
+        return -np.inf
+    return lp + log_likelihood(params)
 
 
 def run_mcmc():
@@ -265,7 +278,7 @@ def run_mcmc():
     print(transitions)
     init_params = np.random.rand(nwalkers, ndim)  # initial values drawn between 0 and 1
 
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob)
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
     state = sampler.run_mcmc(
         init_params, 25000, skip_initial_state_check=True, progress=True
     )
@@ -286,6 +299,7 @@ def run_mcmc_leaf_uncert(pid):
     leaf_grouped = leaf_sum.groupby(["first_cat", "leafid"])
     # first_cat = np.random.choice(["u", "l", "d", "c"])
     # infer rates from the mean transition counts of 8 random leaves, 2 from each category
+    chain_samples = []
     for i in range(0, n_shuffle):
         np.random.seed()
         sample = []
@@ -309,7 +323,7 @@ def run_mcmc_leaf_uncert(pid):
         # infer rates from this particular sample
         init_params = np.random.rand(nwalkers, ndim)
 
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob)
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
         state = sampler.run_mcmc(
             init_params, 25000, skip_initial_state_check=True, progress=True
         )
@@ -320,25 +334,29 @@ def run_mcmc_leaf_uncert(pid):
         samples = pd.DataFrame(samples)
         samples.to_csv(f"emcee_run_log_{sample}_{pid}_{i}.csv", index=False)
 
-        # chain = sampler.get_chain()[
-        #     :, 1, :
-        # ]  # from the left to right the indicies represent: step, chain, parameter
-        # # here we take all steps for all parameters from one chain
-        # chain = pd.DataFrame(chain)
-        # chain["step"] = chain.index
-        # chain_long = pd.melt(
-        #     chain, id_vars=["step"], var_name="parameter", value_name="rate"
-        # )
-        # sns.relplot(
-        #     data=chain_long,
-        #     x="step",
-        #     y="rate",
-        #     col="parameter",
-        #     col_wrap=4,
-        #     kind="line",
-        # )
-        # plt.show()
-        # plt.clf()
+        chain = sampler.get_chain()[
+            :, 1, :
+        ]  # from the left to right the indicies represent: step, chain, parameter
+        # here we take all steps for all parameters from one chain
+        chain = pd.DataFrame(chain)
+        chain["step"] = chain.index
+        chain_long = pd.melt(
+            chain, id_vars=["step"], var_name="parameter", value_name="rate"
+        )
+        chain_long["shuffle_id"] = i
+        chain_samples.append(chain_long)
+    chain_samples = pd.concat(chain_samples)
+    chain_samples.to_csv(f"emcee_run_chain1_{sample}_{pid}_{i}.csv", index=False)
+    # sns.relplot(
+    #     data=chain_long,
+    #     x="step",
+    #     y="rate",
+    #     col="parameter",
+    #     col_wrap=4,
+    #     kind="line",
+    # )
+    # plt.show()
+    # plt.clf()
 
 
 def run_leaf_uncert_parallel():
