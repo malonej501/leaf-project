@@ -3,6 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.stats import kruskal
+from scipy import stats
 import copy
 import os
 from PIL import Image
@@ -178,6 +179,9 @@ def import_phylo_and_sim_rates(plot_order, calc_diff):
     s1 = pd.read_csv(
         "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT1.csv"
     )
+    # s1 = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2_09-10-24.csv"
+    # )
     s2 = pd.read_csv(
         "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv"
     )
@@ -191,15 +195,21 @@ def import_phylo_and_sim_rates(plot_order, calc_diff):
     phylo_sim = pd.concat([sim_rates, phylo_rates]).reset_index(drop=True)
     phylo_sim = phylo_sim.rename(columns={"phylo-class": "Dataset"})
 
+    # Calculate differences
     if calc_diff:
-        # Calculate differences
-        phylo_sim["l→u-u→l"] = phylo_sim["l→u"] - phylo_sim["u→l"]
-        phylo_sim["d→u-u→d"] = phylo_sim["d→u"] - phylo_sim["u→d"]
-        phylo_sim["c→u-u→c"] = phylo_sim["c→u"] - phylo_sim["u→c"]
-        phylo_sim["l→d-d→l"] = phylo_sim["l→d"] - phylo_sim["d→l"]
-        phylo_sim["l→c-c→l"] = phylo_sim["l→c"] - phylo_sim["c→l"]
-        phylo_sim["d→c-c→d"] = phylo_sim["d→c"] - phylo_sim["c→d"]
-        # phylo_sim = phylo_sim.drop(columns=rates_map3.values())
+        transitions = rates_map3.values()
+        for fwd in transitions:
+            bwd = fwd[2] + "→" + fwd[0]
+            if fwd != bwd:
+                col_name = f"{fwd}-{bwd}"
+                phylo_sim[col_name] = phylo_sim[fwd] - phylo_sim[bwd]
+    # phylo_sim["l→u-u→l"] = phylo_sim["l→u"] - phylo_sim["u→l"]
+    # phylo_sim["d→u-u→d"] = phylo_sim["d→u"] - phylo_sim["u→d"]
+    # phylo_sim["c→u-u→c"] = phylo_sim["c→u"] - phylo_sim["u→c"]
+    # phylo_sim["l→d-d→l"] = phylo_sim["l→d"] - phylo_sim["d→l"]
+    # phylo_sim["l→c-c→l"] = phylo_sim["l→c"] - phylo_sim["c→l"]
+    # phylo_sim["d→c-c→d"] = phylo_sim["d→c"] - phylo_sim["c→d"]
+    # # phylo_sim = phylo_sim.drop(columns=rates_map3.values())
     phylo_sim_long = pd.melt(
         phylo_sim,
         id_vars=["Dataset"],
@@ -238,12 +248,19 @@ def import_phylo_ML_rates(ML_data, plot_order, calc_diff):
     )
     if calc_diff:
         # Calculate differences
-        ML_rates["l→u-u→l"] = ML_rates["l→u"] - ML_rates["u→l"]
-        ML_rates["d→u-u→d"] = ML_rates["d→u"] - ML_rates["u→d"]
-        ML_rates["c→u-u→c"] = ML_rates["c→u"] - ML_rates["u→c"]
-        ML_rates["l→d-d→l"] = ML_rates["l→d"] - ML_rates["d→l"]
-        ML_rates["l→c-c→l"] = ML_rates["l→c"] - ML_rates["c→l"]
-        ML_rates["d→c-c→d"] = ML_rates["d→c"] - ML_rates["c→d"]
+        transitions = rates_map3.values()
+        for fwd in transitions:
+            bwd = fwd[2] + "→" + fwd[0]
+            if fwd != bwd:
+                col_name = f"{fwd}-{bwd}"
+                ML_rates[col_name] = ML_rates[fwd] - ML_rates[bwd]
+
+        # ML_rates["l→u-u→l"] = ML_rates["l→u"] - ML_rates["u→l"]
+        # ML_rates["d→u-u→d"] = ML_rates["d→u"] - ML_rates["u→d"]
+        # ML_rates["c→u-u→c"] = ML_rates["c→u"] - ML_rates["u→c"]
+        # ML_rates["l→d-d→l"] = ML_rates["l→d"] - ML_rates["d→l"]
+        # ML_rates["l→c-c→l"] = ML_rates["l→c"] - ML_rates["c→l"]
+        # ML_rates["d→c-c→d"] = ML_rates["d→c"] - ML_rates["c→d"]
         # ML_rates = ML_rates.drop(columns=rates_map3.values())
 
     ML_rates_long = pd.melt(
@@ -908,9 +925,12 @@ def plot_phylo_and_sim_rates_with_leaf_icons(norm_method, ML_data, legend):
     plot_order = [
         "MUT1_simulation",
         "MUT2_simulation",
-        "jan_phylo_nat_class_uniform0-0.1_1",
-        "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_2",
-        "geeta_phylo_geeta_class_uniform0-100_4",
+        # "jan_phylo_nat_class_uniform0-0.1_1",
+        # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_2",
+        # "geeta_phylo_geeta_class_uniform0-100_4",
+        "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+        "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+        "geeta_phylo_geeta_class_uniform0-100_genus_1",
     ]
 
     ML_phylo_rates_long = import_phylo_ML_rates(ML_data, plot_order, calc_diff=False)
@@ -970,19 +990,20 @@ def plot_phylo_and_sim_rates_with_leaf_icons(norm_method, ML_data, legend):
                     if dataset not in legend_labels:
                         legend_labels.append(dataset)
                 ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
-                bp = ax.boxplot(
-                    rates,
-                    patch_artist=True,
-                    showmeans=True,
-                    meanline=True,
-                    showfliers=False,
-                    meanprops=dict(color="black", linestyle="-"),
-                )
+                # bp = ax.boxplot(
+                #     rates,
+                #     patch_artist=True,
+                #     showmeans=True,
+                #     meanline=True,
+                #     showfliers=False,
+                #     meanprops=dict(color="black", linestyle="-"),
+                # )
+                bp = ax.violinplot(rates, showextrema=False, showmeans=True)
 
-                for median in bp["medians"]:
-                    median.set_visible(False)
-                for k, box in enumerate(bp["boxes"]):
-                    box.set_facecolor(sns.color_palette("colorblind")[k])
+                # for median in bp["medians"]:
+                #     median.set_visible(False)
+                # for k, box in enumerate(bp["boxes"]):
+                #     box.set_facecolor(sns.color_palette("colorblind")[k])
                 # ax.set_title(transition)
                 if norm_method == "zscore":
                     ax.set_ylim(-2.7, 8)  # for z-score normalisation
@@ -1089,9 +1110,15 @@ def plot_rates_diff(norm_method, ML_data):
     plot_order = [
         "MUT1_simulation",
         "MUT2_simulation",
-        "jan_phylo_nat_class_uniform0-0.1_5",
-        "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_5",
-        "geeta_phylo_geeta_class_uniform0-100_6",
+        # "jan_phylo_nat_class_uniform0-0.1_5",
+        # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_5",
+        # "geeta_phylo_geeta_class_uniform0-100_6",
+        "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+        "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+        "geeta_phylo_geeta_class_uniform0-100_genus_1",
+        # "jan_equal_genus_phylo_nat_class_uniform0-0.1_4",
+        # "zuntini_genera_equal_genus_phylo_nat_class_uniform0-0.1_4",
+        # "geeta_phylo_geeta_class_uniform0-100_4",
     ]
 
     # plot_titles = ["u-l", "u-d", "u-c", "l-d", "l-c", "d-c"]
@@ -1491,7 +1518,7 @@ def blank_diagram(
     return fig, ax
 
 
-def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std):
+def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant):
     style = ArrowStyle(
         "Simple",
         head_length=1,
@@ -1501,18 +1528,33 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std):
 
     if not rate_std:
 
-        arrow = FancyArrowPatch(
-            (startpoint[0], startpoint[1]),  # Start point
-            (endpoint[0], endpoint[1]),  # End point
-            connectionstyle=f"arc3,rad={curvature}.3",  # Curvature
-            mutation_scale=10,  # Arrow head size
-            arrowstyle="-|>",  # Arrow style
-            # arrowstyle=style,
-            color=rate_c,  # Arrow color
-            lw=rate,  # Line width
-        )
+        if significant:
+            arrow = FancyArrowPatch(
+                (startpoint[0], startpoint[1]),  # Start point
+                (endpoint[0], endpoint[1]),  # End point
+                connectionstyle=f"arc3,rad={curvature}.3",  # Curvature
+                mutation_scale=30,  # Arrow head size
+                arrowstyle="-|>",  # Arrow style
+                # arrowstyle=style,
+                color=rate_c,  # Arrow color
+                lw=rate,  # Line width
+            )
+        else:
+            arrow = FancyArrowPatch(
+                (startpoint[0], startpoint[1]),  # Start point
+                (endpoint[0], endpoint[1]),  # End point
+                connectionstyle=f"arc3,rad={curvature}.3",  # Curvature
+                mutation_scale=30,  # Arrow head size
+                arrowstyle="-|>",  # Arrow style
+                # linestyle="-",
+                # arrowstyle=style,
+                color=rate_c,  # Arrow color
+                lw=rate,  # Line width
+                zorder=0,
+            )
         arrow.set_joinstyle("miter")
-        # arrow.set_capstyle("butt")
+        # arrow.set_
+        arrow.set_capstyle("butt")
         ax.add_patch(arrow)
 
     if rate_std:
@@ -1569,6 +1611,8 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std):
 
 
 def nodes(ax, c_proper, rad, texts, icon_imgs):
+    # textplacement goes from top right clockwise
+    text_placement = ((-0.7, 0.7), (0.7, 0.7), (0.7, -0.7), (-0.7, -0.7))
     for i, center in enumerate(c_proper.values()):
         x, y = center
         theta = np.linspace(0, 2 * np.pi, 100)
@@ -1577,15 +1621,31 @@ def nodes(ax, c_proper, rad, texts, icon_imgs):
         #     y + rad * np.sin(theta),
         #     color="black",
         # )
+        # resize_img = icon_imgs[i].resize((1024, 984), Image.LANCZOS)
 
-        img_box = mpl.offsetbox.OffsetImage(icon_imgs[i], zoom=0.16)
-        ab = mpl.offsetbox.AnnotationBbox(
-            img_box, (x, y), frameon=False, box_alignment=(0.5, 0.5)
+        # img_box = mpl.offsetbox.OffsetImage(resize_img, zoom=0.04)
+        # ab = mpl.offsetbox.AnnotationBbox(
+        #     img_box, (x, y), frameon=False, box_alignment=(0.5, 0.5)
+        # )
+        # ax.add_artist(ab)
+        w, h = icon_imgs[i].size
+        sf = 0.0021
+
+        ax.imshow(
+            icon_imgs[i],
+            extent=[
+                x - (w * sf / 2),
+                x + (w * sf / 2),
+                y - (h * sf / 2),
+                y + (h * sf / 2),
+            ],
+            rasterized=True,
+            # interpolation="none",
         )
-        ax.add_artist(ab)
+
         ax.text(
-            x,
-            y - 0.7,
+            x + text_placement[i][0],
+            y + text_placement[i][1],
             texts[i],
             horizontalalignment="center",
             verticalalignment="center",
@@ -1593,7 +1653,20 @@ def nodes(ax, c_proper, rad, texts, icon_imgs):
         )
 
 
-def arrow_plot(colourise):
+def arrow_plot(norm_method, ML_data, colourise):
+    plt.rcParams["font.family"] = "CMU Serif"
+    plot_order = [
+        "MUT1_simulation",
+        "MUT2_simulation",
+        # "jan_phylo_nat_class_uniform0-0.1_5",
+        # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_5",
+        # "geeta_phylo_geeta_class_uniform0-100_6",
+        "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+        "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+        "geeta_phylo_geeta_class_uniform0-100_genus_1",
+        # "jan_equal_genus_phylo_nat_class_uniform0-0.1_4",
+        # "zuntini_genera_equal_genus_phylo_nat_class_uniform0-0.1_4",
+    ]
     icon_filenames = [
         "leaf_p7a_0_0.png",
         "leaf_p8ae_0_0.png",
@@ -1606,12 +1679,33 @@ def arrow_plot(colourise):
     scale_factor = 0.5
     shape_cats = ["Unlobed", "Lobed", "Dissected", "Compound"]
 
-    rate_data = pd.read_csv("sim_phylo_rates_stats_meanmean_mixedpriors_18-09-24.csv")
+    ML_phylo_rates_long = import_phylo_ML_rates(ML_data, plot_order, calc_diff=True)
+    phylo_sim_long = import_phylo_and_sim_rates(plot_order, calc_diff=True)
+    phylo_sim_long, ML_phylo_rates_long, summary = normalise_rates(
+        phylo_sim_long, ML_phylo_rates_long, norm_method
+    )
+    rate_data = test_rates_diff_from_zero(phylo_sim_long)
+    # rate_data = pd.read_csv("sim_phylo_rates_stats_meanmean_mixedpriors_18-09-24.csv")
+    # rate_data.rename(columns={"Dataset_": "dataset"}, inplace=True)
+    # rate_data["transition"] = (
+    #     rate_data["transition_"] + "-" + rate_data["transition_rev"]
+    # )
+    # prop_over_zero = pd.read_csv("rates_diff_std_prop_over_zero.csv")
+    # prop_over_zero_filt = prop_over_zero[["dataset", "transition", "prop_over_zero"]]
+    # print(rate_data)
+    # print(prop_over_zero)
+    # print(prop_over_zero_filt)
+    rate_data["fwd"] = rate_data["transition"].str[:3]
+    rate_data["bwd"] = rate_data["transition"].str[-3:]
+    # print(rate_data)
+    rate_data.to_csv("rate_data_bw_fw.csv", index=False)
+
     cmap = plt.get_cmap("viridis")
-    rate_data["std_c"] = rate_data["rate_norm_std"].apply(lambda x: cmap(x))
-    print(rate_data["rate_norm_mean_diff"])
-    print(set(rate_data["Dataset_"]))
-    datasets = set(rate_data["Dataset_"])
+    rate_data["std_c"] = rate_data["std"].apply(lambda x: cmap(x))
+    print(rate_data)
+    # print(rate_data["rate_norm_mean_diff"])
+    # print(set(rate_data["dataset"]))
+    datasets = set(rate_data["dataset"])
     node_dist = 8
 
     # centers = [(2, 6), (6, 6), (6, 2), (2, 2)]
@@ -1644,47 +1738,61 @@ def arrow_plot(colourise):
     }
 
     # Draw circles with text in the center
+    if len(plot_order) > 1:
+        fig, axs = plt.subplots(2, 3, figsize=(14, 9))
+        for ax in axs.flat:
+            ax.axis("off")
+    else:
+        fig, axs = plt.subplots(1, 1, figsize=(5, 5))
+        axs.axis("off")
 
-    for dataset in datasets:
-        plot_data = rate_data[rate_data["Dataset_"] == dataset]
-        fig, ax = blank_diagram()
+    for d, dataset in enumerate(plot_order):
+        ax = axs.flat[d] if len(plot_order) > 1 else axs
+        ax.set_xlim(0, 8)
+        ax.set_ylim(0, 8)
+
+        plot_data = rate_data[rate_data["dataset"] == dataset]
+        # fig, ax = blank_diagram()
         nodes(ax, c_proper, rad, texts, icon_imgs)
         for i, row in plot_data.iterrows():
-            at = row["transition_"][0]
-            to = row["transition_"][2]
-            r = row["rate_norm_mean_diff"] * 10
-            rc = row["std_c"] if colourise else "black"
+            # print(row)
+            at = row["fwd"][0]
+            to = row["fwd"][2]
+            r = row["mean_rate_norm"] * 10
+            # rc = row["std_c"] if colourise else "black"
+            rc = "lightgrey" if row["prop_over_zero"] < 0.90 else "black"
+            sig = False if row["prop_over_zero"] < 0.90 else True
             # rs = row["rate_norm_std"]
             rs = False  # set to false to disable multi-arrows
 
             if r > 0:
-                if at == "u" and to == "l":
-                    arc(ax, c["uS"], c["lS"], "+", r, rc, rs)
-                if at == "l" and to == "u":
-                    arc(ax, c["lN"], c["uN"], "+", r, rc, rs)
-                if at == "l" and to == "d":
-                    arc(ax, c["lE"], c["dE"], "-", r, rc, rs)
-                if at == "d" and to == "l":
-                    arc(ax, c["dW"], c["lW"], "-", r, rc, rs)
-                if at == "d" and to == "c":
-                    arc(ax, c["dN"], c["cN"], "+", r, rc, rs)
-                if at == "c" and to == "d":
-                    arc(ax, c["cS"], c["dS"], "+", r, rc, rs)
-                if at == "c" and to == "u":
-                    arc(ax, c["cW"], c["uW"], "-", r, rc, rs)
-                if at == "u" and to == "c":
-                    arc(ax, c["uE"], c["cE"], "-", r, rc, rs)
+                if at + to == "ul":
+                    arc(ax, c["uS"], c["lS"], "+", r, rc, rs, sig)
+                if at + to == "lu":
+                    arc(ax, c["lN"], c["uN"], "+", r, rc, rs, sig)
+                if at + to == "ld":
+                    arc(ax, c["lE"], c["dE"], "-", r, rc, rs, sig)
+                if at + to == "dl":
+                    arc(ax, c["dE"], c["lE"], "+", r, rc, rs, sig)
+                if at + to == "dc":
+                    arc(ax, c["dS"], c["cS"], "-", r, rc, rs, sig)
+                if at + to == "cd":
+                    arc(ax, c["cS"], c["dS"], "+", r, rc, rs, sig)
+                if at + to == "cu":
+                    arc(ax, c["cW"], c["uW"], "-", r, rc, rs, sig)
+                if at + to == "uc":
+                    arc(ax, c["uE"], c["cE"], "-", r, rc, rs, sig)
 
                     #### diagonals ####
                 if at == "u" and to == "d":
-                    arc(ax, c["uE"], c["dN"], "-", r, rc, rs)
+                    arc(ax, c["uS"], c["dW"], "+", r, rc, rs, sig)
                 if at == "d" and to == "u":
-                    arc(ax, c["dW"], c["uS"], "-", r, rc, rs)
+                    arc(ax, c["dW"], c["uS"], "-", r, rc, rs, sig)
                 if at == "c" and to == "l":
-                    arc(ax, c["cE"], c["lS"], "+", r, rc, rs)
+                    arc(ax, c["cE"], c["lS"], "+", r, rc, rs, sig)
                 if at == "l" and to == "c":
-                    arc(ax, c["lW"], c["cN"], "+", r, rc, rs)
-        fig.suptitle(dataset)
+                    arc(ax, c["lS"], c["cE"], "-", r, rc, rs, sig)
+        ax.set_title(dataset, fontsize=8)
         if colourise:
             norm = mpl.colors.Normalize(
                 vmin=min(rate_data["rate_norm_std"]),
@@ -1699,6 +1807,8 @@ def arrow_plot(colourise):
                 label="Normalised stdev",
                 cax=cbar_ax,
             )
+    plt.tight_layout()
+    plt.savefig("arrow_plot.pdf", format="pdf", dpi=1200)
     plt.show()
 
     # with schemdraw.Drawing() as d:
@@ -1738,6 +1848,127 @@ def get_phylo_stats():
     counts.to_csv("phylo_stats.csv")
 
 
+def test_rates_diff_from_zero_old(norm_method, ML_data):
+    plot_order = [
+        "MUT1_simulation",
+        "MUT2_simulation",
+        # "jan_phylo_nat_class_uniform0-0.1_1",
+        # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_2",
+        # "geeta_phylo_geeta_class_uniform0-100_4",
+        "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+        "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+        "geeta_phylo_geeta_class_uniform0-100_genus_1",
+    ]
+    transitions = [
+        "l→u-u→l",
+        "d→u-u→d",
+        "c→u-u→c",
+        "l→d-d→l",
+        "l→c-c→l",
+        "d→c-c→d",
+    ]
+    ML_phylo_rates_long = import_phylo_ML_rates(ML_data, plot_order, calc_diff=True)
+    phylo_sim_long = import_phylo_and_sim_rates(plot_order, calc_diff=True)
+    phylo_sim_long, ML_phylo_rates_long, summary = normalise_rates(
+        phylo_sim_long, ML_phylo_rates_long, norm_method
+    )
+
+    # for name, group in phylo_sim_long
+    results = []
+    for i, transition in enumerate(transitions):
+        mcmc_plot_data = phylo_sim_long[phylo_sim_long["transition"] == transition]
+        for name, group in mcmc_plot_data.groupby("Dataset"):
+            n = len(group)
+            ng0 = len(group[group["rate_norm"] > 0])
+
+            mean = group["rate_norm"].mean()
+            # t_stat, p_val = stats.ttest_1samp(group["rate_norm"], 0)
+            std = group["rate_norm"].std()
+            results.append(
+                {
+                    "dataset": name,
+                    "transition": transition,
+                    "mean_rate_norm": mean,
+                    # "t_stat": t_stat,
+                    # "p_val": p_val,
+                    "std": std,
+                    "lb": mean - std,
+                    "ub": mean + std,
+                    "n": n,
+                    "prop_over_zero": ng0 / n,
+                }
+            )
+    r = pd.DataFrame(results)
+    print(r)
+    # r.to_csv("rates_diff_t_test.csv", index=False)
+
+    # error = [r["mean_rate_norm"] - r["lb"], r["mean_rate_norm"] + r["ub"]]
+    # fig, axes = plt.subplots(
+    #     nrows=2,
+    #     ncols=3,
+    #     figsize=(12, 9),  # sharey=True
+    # )  # , layout="constrained")
+
+    # for ax, transition in zip(axes.flat, r["transition"].unique()):
+    #     r_filt = r[r["transition"] == transition]
+    #     ax.errorbar(
+    #         r_filt["dataset"],
+    #         r_filt["mean_rate_norm"],
+    #         yerr=r_filt["std"] * 2,
+    #         fmt="o",
+    #         capsize=5,
+    #         elinewidth=1,
+    #         markersize=8,
+    #         label="Data points with error",
+    #     )
+    #     ax.axhline(0, linestyle="--", color="C1", alpha=0.5)
+    #     ax.set_title(transition)
+    #     ax.set_xticks(
+    #         list(range(0, len(plot_order))),
+    #         ["MUT1", "MUT2", "Janssens", "Zuntini", "Geeta"],
+    #         fontsize=9,
+    #     )
+    # plt.tight_layout()
+    # plt.show()
+    # print(r)
+
+
+def test_rates_diff_from_zero(phylo_sim_long):
+
+    phylo_sim_long_filt = phylo_sim_long[
+        phylo_sim_long["transition"].str.contains(
+            r"^[a-zA-Z]→[a-zA-Z]-[a-zA-Z]→[a-zA-Z]$"
+        )
+    ]
+    transitions = phylo_sim_long_filt["transition"].unique()
+    results = []
+    for i, transition in enumerate(transitions):
+        mcmc_plot_data = phylo_sim_long[phylo_sim_long["transition"] == transition]
+        for name, group in mcmc_plot_data.groupby("Dataset"):
+            n = len(group)
+            ng0 = len(group[group["rate_norm"] > 0])
+
+            mean = group["rate_norm"].mean()
+            # t_stat, p_val = stats.ttest_1samp(group["rate_norm"], 0)
+            std = group["rate_norm"].std()
+            results.append(
+                {
+                    "dataset": name,
+                    "transition": transition,
+                    "mean_rate_norm": mean,
+                    # "t_stat": t_stat,
+                    # "p_val": p_val,
+                    "std": std,
+                    "lb": mean - std,
+                    "ub": mean + std,
+                    "n": n,
+                    "prop_over_zero": ng0 / n,
+                }
+            )
+    r = pd.DataFrame(results)
+    return r
+
+
 if __name__ == "__main__":
 
     # Normalisation method options: meanmean, zscore, zscore+2.7, zscore_global, minmax
@@ -1751,8 +1982,15 @@ if __name__ == "__main__":
     # plot_phylo_and_sim_rates_with_leaf_icons(
     #     norm_method="meanmean", ML_data="ML3_mean_rates_all", legend=False
     # )
-    # arrow_plot(colourise=True)
-    plot_rates_diff(norm_method="meanmean", ML_data="ML4_mean_rates_all")
+    # plot_phylo_and_sim_rates_with_leaf_icons(
+    #     norm_method="meanmean", ML_data="ML6_genus_mean_rates_all", legend=False
+    # )
+    # test_rates_diff_from_zero(
+    #     norm_method="meanmean", ML_data="ML6_genus_mean_rates_all"
+    # )
+    arrow_plot(norm_method="meanmean", ML_data="ML4_mean_rates_all", colourise=False)
+    # plot_rates_diff(norm_method="meanmean", ML_data="ML4_mean_rates_all")
+    # plot_rates_diff(norm_method="meanmean", ML_data="ML6_genus_mean_rates_all")
 # plot_phylo_and_sim_rates_restricted(
 #     norm_method="minmax", ML_data="ML_red_1_mean_rates_all"
 # )
