@@ -2,17 +2,18 @@ from dataprocessing import concatenator, first_cats
 import numpy as np
 import pandas as pd
 import scipy
+from scipy import optimize
 import emcee
 from matplotlib import pyplot as plt
 import seaborn as sns
 import multiprocessing
 import os
 
-lb, ub = 0, 1
+init_lb, init_ub = 0, 0.1 # lb and ub of uniform distribution for initial values
 ndim = 12
 nwalkers = 24
 nsteps = 25000
-nshuffle = 25
+nshuffle = 200 #25
 shuffsize = 16 # must be a multiple of 4, so that equal no. each shape is in the shuffsample
 burnin = 15000
 thin = 100
@@ -270,6 +271,49 @@ def log_probability(params):
         return -np.inf
     return lp + log_likelihood(params)
 
+def get_maximum_likelihood():
+    dfs = get_data()
+    global transitions
+    leaf_sum = get_leaf_transitions(dfs)
+    leaf_grouped = leaf_sum.groupby(["first_cat", "leafid"])
+    
+    Q_mls = []
+    for i in range(0, nshuffle):
+        np.random.seed()
+        sample = []
+        # pick equal no. random leaves from each first_cat - they are sampled without replacement
+        shapes = ["u", "l", "d", "c"]
+        for shape in shapes:
+            leaf = np.random.choice(
+                [key[1] for key in list(leaf_grouped.groups.keys()) if key[0] == shape],
+                size=int(shuffsize / len(shapes)), # ensure equal no. of each shape in the shuffsample
+                replace=False,
+            )
+            sample.extend(leaf)
+        sample_str = "-".join(str(x) for x in sample)
+        # retrieve the counts associated with the sample leaves
+        leaf_sum_sub = leaf_sum[leaf_sum["leafid"].isin(sample)][
+            ["transition", "sum"]
+        ].rename(columns={"sum": "count"})
+        # calculate the mean count for each transition type across the sample
+        transitions = (
+            leaf_sum_sub.groupby("transition")["count"].agg("mean").reset_index()
+        )
+
+
+        nll = lambda Q: -log_likelihood(Q)
+        init = np.random.uniform(init_lb, init_ub, ndim) # initialise 12 random numbers for Q matrix
+        soln = optimize.minimize(nll, init)
+        Q_ml = soln.x
+        print(f"Maximum likelihood rates: {Q_ml}")
+        Q_mls.append(Q_ml)
+    Q_mldf = pd.DataFrame(Q_mls)
+    print(Q_mldf)
+    plt.figure(figsize=(14,7))
+    plt.boxplot([Q_mldf[col] for col in Q_mldf.columns], labels=Q_mldf.columns)
+    plt.xlabel("Transition")
+    plt.ylabel("Maximum likelihood rate")
+    plt.show()
 
 def run_mcmc():
     dfs = get_data()
@@ -282,6 +326,7 @@ def run_mcmc():
 
     print(transitions)
     init_params = np.random.rand(nwalkers, ndim)  # initial values drawn between 0 and 1
+    init_params = np.random.uniform(0, 0.1)
 
     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
     state = sampler.run_mcmc(
@@ -312,7 +357,7 @@ def run_mcmc_leaf_uncert(pid):
         for shape in shapes:
             leaf = np.random.choice(
                 [key[1] for key in list(leaf_grouped.groups.keys()) if key[0] == shape],
-                size=shuffsize / len(shapes), # ensure equal no. of each shape in the shuffsample
+                size=int(shuffsize / len(shapes)), # ensure equal no. of each shape in the shuffsample
                 replace=False,
             )
             sample.extend(leaf)
@@ -327,7 +372,8 @@ def run_mcmc_leaf_uncert(pid):
         )
         print(transitions)
         # infer rates from this particular sample
-        init_params = np.random.rand(nwalkers, ndim)
+        # init_params = np.random.rand(nwalkers, ndim)
+        init_params = np.random.uniform(init_lb, init_ub, (nwalkers, ndim)) # generate initial values to fill Q matrix for each walker
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
         state = sampler.run_mcmc(
@@ -563,7 +609,8 @@ if __name__ == "__main__":
     # run_leaf_uncert_parallel()
     # run_mcmc_leaf_uncert(0)
     # plot_chain_from_file()
-    combine_posteriors_from_file()
+    # combine_posteriors_from_file()
+    get_maximum_likelihood()
     # samples, sampler = run_mcmc()
     # plot_posterior(samples, sampler)
     # plot_posterior_fromfile(
