@@ -15,7 +15,7 @@ eud_fams = pd.read_csv("../APG_IV/APG_IV_eud_fams.csv")
 
 current_date = datetime.now().strftime("%d-%m-%y")
 
-startfrom = 1720
+startfrom = 2389
 
 
 def filter_to_angio_or_eud():
@@ -56,7 +56,7 @@ def filter_to_angio_or_eud():
 def sample_families(sample_fams):
     print("Reading data...")
     ang_sp_full = pd.read_csv(
-        "Naturalis_ang_species_occurrence.csv",
+        "botany-20240108.dwca/Naturalis_ang_species_occurrence.csv",
         low_memory=False,
     )
     print("Done!")
@@ -102,7 +102,7 @@ def sample_families(sample_fams):
 def img_from_sample():
     print("Reading data...")
     sample = pd.read_csv(
-        "sample_eud_zuntini_10-09-24/Naturalis_occurrence_eud_sample_10-09-24.csv"
+        "jan_zun_nat_ang_09-10-24/Naturalis_occurrence_eud_sample_09-10-24.csv"
     )
     print("Done!")
 
@@ -125,11 +125,10 @@ def download_imgs():
         # intersect = pd.read_csv(
         #     "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
         # )
-        intersect = pd.read_csv(
-            "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera.csv"
-        )
+        intersect = pd.read_csv("jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus.csv")
         print(f"Downloading {len(intersect)} images...")
 
+        failed_indicies = []
         for index, row in intersect.iloc[startfrom:].iterrows():
             try:
                 species = row["species"]
@@ -139,16 +138,38 @@ def download_imgs():
                 img = Image.open(r"temp.png")
                 img.save(f"download_imgs/{species}{index}.png")
             except:
-                None
+                failed_indicies.append(index)
+                print("Error: Download failed")
+
+        failed_to_download = intersect.iloc[failed_indicies]
+        if not failed_to_download.empty:
+            failed_to_download.to_csv(f"download_failed.csv", index=False)
 
 
 def plot_taxon_distribution():
-    datapath1 = "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled.csv"
-    datapath2 = "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24.csv"
+    # datapath1 = "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled.csv"
+    # datapath2 = "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24.csv"
     # datapath1 = "sample_eud_zun_equal_fam_16-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled_equal_fam.csv"
     # datapath2 = "sample_eud_jan_equal_fam_16-09-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_equal_fam.csv"
-    datapaths = [datapath1, datapath2]
+    # datapath1 = "jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus_labelled.csv"
+    # datapath2 = "jan_zun_nat_ang_26-09-24/jan_nat_genus.csv"
+    # datapath3 = "jan_zun_nat_ang_26-09-24/zun_nat_genus.csv"
+    datapath1 = "jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv"
+    datapath2 = "jan_zun_nat_ang_26-09-24/zun_nat_genus_labelled.csv"
+
+    datapaths = [datapath1, datapath2]  # , datapath3]
     samples = [pd.read_csv(datapath) for datapath in datapaths]
+    # u = samples[0]
+    # js = samples[1]
+    # zs = samples[2]
+    # j = u[u["CoreId"].isin(js["CoreId"])]
+    # j.to_csv("jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv", index=False)
+    # print(len(j))
+    # z = u[u["CoreId"].isin(zs["CoreId"])]
+    # z.to_csv("jan_zun_nat_ang_26-09-24/zun_nat_genus_labelled.csv", index=False)
+    # print(len(z))
+    # exit()
+
     datanames = []
     for datapath in datapaths:
         datanames.append(datapath.split("/")[1].split(".")[0])
@@ -158,6 +179,7 @@ def plot_taxon_distribution():
     for i, freq in enumerate(freqs):
         freq.rename(columns={"count": f"count_{datanames[i]}"}, inplace=True)
     freqs_merged = pd.merge(*freqs, on="family", how="outer").reset_index()
+    freqs_merged.sort_values(by=freqs_merged.columns[1], ascending=False, inplace=True)
     print(datanames)
     print(freqs)
     print(freqs_merged)
@@ -284,8 +306,9 @@ def equalise_taxon_sample(level, export):
 
 if __name__ == "__main__":
     # sample_families(eud_fams)
-    # img_from_sample()
+    # sample_families(angio_fams)
+    img_from_sample()
     # download_imgs()
-    plot_taxon_distribution()
+    # plot_taxon_distribution()
     # taxon_difference(level="family")
     # equalise_taxon_sample(level="genus", export=False)
