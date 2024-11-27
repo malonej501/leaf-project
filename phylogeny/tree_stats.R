@@ -3,21 +3,22 @@ library(treestats)
 library(ggplot2)
 library(ggtree)
 library(dplyr)
+library(svglite)
 
 import_trees <- function(){
   # import trees
-  tre_names <- sort(list.files("phylogenies/final_data/trees"))
+  tre_names <- sort(list.files("phylo_data/trees_final"))
   tre_names_filt <- tre_names[!grepl("shuff|each|cenrich", tre_names)] #
   summary = data.frame(dataset=tre_names_filt)
   return(summary)
 }
 
 import_labels <- function(){
-  labels <- sort(list.files("phylogenies/final_data/labels"))
+  labels <- sort(list.files("shape_data/labels_final"))
   labels_filt <- labels[!grepl("shuff|each|cenrich", labels)]
   label_data <- data.frame()
   for (label in labels_filt){
-    data <- read.delim(paste0("phylogenies/final_data/labels/",label), header=FALSE, sep="\t")
+    data <- read.delim(paste0("shape_data/labels_final/",label), header=FALSE, sep="\t")
     data$dataset = sub("^(.*class).*", "\\1", label)
     label_data <- rbind(label_data, data)
   }
@@ -36,7 +37,8 @@ import_labels <- function(){
 get_treeness <- function(summary){
   # calculate treeness - sum of all internal branch lengths (e.g. branches not leading to a tip) divided by the sum over all branch lengths
   for (dataset in summary$dataset) {
-    tree = read.nexus(paste0("phylogenies/final_data/trees/", dataset))
+    tree = read.nexus(paste0("phylo_data/trees_final/", dataset))
+    print(tree)
     if (class(tree) == "phylo") {
       summary[summary$dataset == dataset, "treeness"] <- treeness(tree)  
       summary[summary$dataset == dataset, "mean_branch_length"] <- mean_branch_length(tree)
@@ -66,8 +68,7 @@ get_treeness <- function(summary){
       summary[summary$dataset == dataset, "avg_leaf_depth"] <- mean(ald_list)
       summary[summary$dataset == dataset, "var_leaf_depth"] <- mean(vld_list)
       summary[summary$dataset == dataset, "pigot_rho"] <- mean(pr_list)
-      
-      
+
     }
   }
   return(summary)
@@ -78,7 +79,7 @@ plot_trees <- function(summary){
   layout(matrix(1:length(summary$dataset), ncol = 2, byrow = TRUE)) 
   par()
   for (dataset in summary$dataset) {
-    tree = read.nexus(paste0("phylogenies/final_data/trees/", dataset))
+    tree = read.nexus(paste0("phylo_data/trees_final/", dataset))
     if (class(tree) == "phylo") {
       plot(tree, type="fan", main=dataset)
     }
@@ -91,11 +92,12 @@ plot_trees <- function(summary){
 plot_ggtrees <- function(summary){
   label_data = import_labels()
   tree_names <- summary$dataset
+  tree_names <- list("zuntini_genera_phylo_nat_class_10-09-24.tre")
   trees <- list()  # Initialize an empty list to store trees
   
   for (dataset in tree_names) {
     data_name = sub("^(.*class).*", "\\1", dataset)
-    tree_path <- paste0("phylogenies/final_data/trees/", dataset)
+    tree_path <- paste0("phylo_data/trees_final/", dataset)
     tree <- read.nexus(tree_path)
     labels <- label_data[label_data$dataset == data_name, ]
     #print(labels[1,])
@@ -112,7 +114,7 @@ plot_ggtrees <- function(summary){
   }
   class(trees) <- "multiPhylo"
   #print(trees[[1]])
-  ggtree(trees, layout="circular", size=0.07) +
+  p <- ggtree(trees, layout="circular", size=ifelse(length(trees) == 1, 0.5, 0.07)) +
     aes(colour=shape) +
     facet_wrap(~.id, scale="free", ncol = 4) +
     # theme_tree2() +
@@ -120,6 +122,7 @@ plot_ggtrees <- function(summary){
     scale_color_manual(values=c("unlobed"="#0173B2","lobed"="#DE8F05","dissected"="#029E73","compound"="#D55E00"))
   
   #return(fig)
+  ggsave(file="ggtreeplot.svg", plot=p, width=10, height=10)
 }
 
 get_shape_counts <- function(summary){
