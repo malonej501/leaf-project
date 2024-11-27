@@ -11,6 +11,11 @@ import os
 lb, ub = 0, 1
 ndim = 12
 nwalkers = 24
+nsteps = 25000
+nshuffle = 25
+shuffsize = 16 # must be a multiple of 4, so that equal no. each shape is in the shuffsample
+burnin = 15000
+thin = 100
 
 rates_map = {
     0: ("u", "l"),
@@ -233,7 +238,7 @@ def get_leaf_transitions(dfs):
     return leaf_sum
 
 
-def log_prior(params):  # define a uniform prior from 0 to 1 for every transition rate
+def log_prior(params):  # define a uniform prior from 0 to 0.1 for every transition rate
     if any(0 <= q <= 0.1 for q in params):
         return 0
     return -np.inf
@@ -291,7 +296,6 @@ def run_mcmc():
 
 
 def run_mcmc_leaf_uncert(pid):
-    n_shuffle = 25
     dfs = get_data()
     global transitions
     leaf_sum = get_leaf_transitions(dfs)
@@ -300,17 +304,19 @@ def run_mcmc_leaf_uncert(pid):
     # first_cat = np.random.choice(["u", "l", "d", "c"])
     # infer rates from the mean transition counts of 8 random leaves, 2 from each category
     chain_samples = []
-    for i in range(0, n_shuffle):
+    for i in range(0, nshuffle):
         np.random.seed()
         sample = []
-        # pick 2 random leaves from each first_cat - they are sampled without replacement
-        for shape in ["u", "l", "d", "c"]:
+        # pick equal no. random leaves from each first_cat - they are sampled without replacement
+        shapes = ["u", "l", "d", "c"]
+        for shape in shapes:
             leaf = np.random.choice(
                 [key[1] for key in list(leaf_grouped.groups.keys()) if key[0] == shape],
-                size=2,
+                size=shuffsize / len(shapes), # ensure equal no. of each shape in the shuffsample
                 replace=False,
             )
             sample.extend(leaf)
+        sample_str = "-".join(str(x) for x in sample)
         # retrieve the counts associated with the sample leaves
         leaf_sum_sub = leaf_sum[leaf_sum["leafid"].isin(sample)][
             ["transition", "sum"]
@@ -325,14 +331,14 @@ def run_mcmc_leaf_uncert(pid):
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
         state = sampler.run_mcmc(
-            init_params, 25000, skip_initial_state_check=True, progress=True
+            init_params, nsteps, skip_initial_state_check=True, progress=True
         )
         # reduce the size of the saved chain by discarding the burnin and rounding each step and recording only every thin step
         samples = np.round(
-            sampler.get_chain(flat=True, discard=15000, thin=100), decimals=6
+            sampler.get_chain(flat=True, discard=burnin, thin=thin), decimals=6
         )
         samples = pd.DataFrame(samples)
-        samples.to_csv(f"emcee_run_log_{sample}_{pid}_{i}.csv", index=False)
+        samples.to_csv(f"emcee_run_log_{sample_str}_{pid}_{i}.csv", index=False)
 
         chain = sampler.get_chain()[
             :, 1, :
@@ -346,7 +352,7 @@ def run_mcmc_leaf_uncert(pid):
         chain_long["shuffle_id"] = i
         chain_samples.append(chain_long)
     chain_samples = pd.concat(chain_samples)
-    chain_samples.to_csv(f"emcee_run_chain1_{sample}_{pid}_{i}.csv", index=False)
+    chain_samples.to_csv(f"emcee_run_chain1_{pid}.csv", index=False)
     # sns.relplot(
     #     data=chain_long,
     #     x="step",
@@ -462,18 +468,21 @@ def plot_posterior_fromfile(file):
 
 def combine_posteriors_from_file():
 
-    directory = "markov_fitter_reports/emcee/err_MUT2"
+    directory = "markov_fitter_reports/emcee/24chains_25000steps_15000burnin_thin100_09-10-24"
     dfs = []
     for filename in os.listdir(directory):
-        if filename.endswith(".csv"):
+        if (
+            filename.endswith(".csv")
+            and "chain" not in filename
+            and "MUT2" not in filename
+        ):
             filepath = os.path.join(directory, filename)
             df = pd.read_csv(filepath)
             # df = df.iloc[::2000, :].reset_index(drop=True)  # remove every nth row
             dfs.append(df)
             del df
     samples = pd.concat(dfs)
-    # samples.to_csv("samples.csv", index=False)
-
+    # samples.to_csv("MUT2_emcee_rates_log_09-10-24.csv", index=False)
     # samples = pd.read_csv("samples.csv")
 
     print(samples)
@@ -488,28 +497,73 @@ def combine_posteriors_from_file():
     samples_long["transition"] = (
         samples_long["initial_shape"] + samples_long["final_shape"]
     )
+    print(samples_long)
 
-    sns.displot(
-        data=samples_long,
-        x="rate",
-        col="transition",
-        col_wrap=4,
-        kind="hist",
-        bins=500,
-    )
-    plt.xlim(-0.5, 3)
+    # sns.displot(
+    #     data=samples_long,
+    #     x="rate",
+    #     col="transition",
+    #     col_wrap=4,
+    #     kind="hist",
+    #     bins=100,
+    #     binrange=(-0.5, 1)
+    # )
+
+    fig, axes = plt.subplots(4, 4, figsize=(12,9), sharex=True, sharey=True)
+    plt_idx = 0
+    for i, row in enumerate(axes):
+        for j, ax in enumerate(row):
+            if i == j:
+                ax.axis("off")
+                continue
+            transition = samples_long['transition'].unique()[plt_idx] 
+            subset = samples_long[samples_long['transition'] == transition]
+            ax.hist(subset['rate'], bins=200, range=(0, 0.1), alpha=0.7)
+            ax.set_title(transition)
+            plt_idx += 1
+
+
+    fig.supxlabel("Rate")
+    fig.supylabel("Count")
+    plt.tight_layout()
     plt.show()
 
-    sns.boxplot(data=samples_long, x="transition", y="rate", showfliers=False)
+    sns.violinplot(data=samples_long, x="transition", y="rate", density_norm="width")#, showfliers=False)
+    plt.show()
+
+
+def plot_chain_from_file():
+    file = "markov_fitter_reports/emcee/24chains_25000steps_15000burnin_thin100_09-10-24/emcee_run_chain1_0.csv"
+    chain = pd.read_csv(file)
+    chain = chain[chain["shuffle_id"] == 0]
+    chain["initial_shape"], chain["final_shape"] = zip(
+        *chain["parameter"].astype(float).map(rates_map)
+    )
+    chain["transition"] = chain["initial_shape"] + chain["final_shape"]
+    print(chain)
+
+    fig, axes = plt.subplots(4, 3, figsize=(12, 9), sharex=True)
+
+    for i, transition in enumerate(chain["transition"].unique()):
+        ax = axes.flat[i]
+        chain_sub = chain[chain["transition"] == transition]
+        # print(chain_sub)
+        ax.plot(chain_sub["step"], chain_sub["rate"])
+        ax.set_title(transition)
+
+    fig.supxlabel("Step")
+    fig.supylabel("Rate")
+    plt.tight_layout()
     plt.show()
 
 
 if __name__ == "__main__":
     # dfs = get_data()
     # get_transition_count_avg(dfs)
-    run_leaf_uncert_parallel()
+    # run_leaf_uncert_parallel()
     # run_mcmc_leaf_uncert(0)
-    # combine_posteriors_from_file()
+    # plot_chain_from_file()
+    combine_posteriors_from_file()
     # samples, sampler = run_mcmc()
     # plot_posterior(samples, sampler)
     # plot_posterior_fromfile(
