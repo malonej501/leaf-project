@@ -18,6 +18,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import sympy as sp
 from scipy.integrate import odeint
+from PIL import Image
 
 wd = "leaves_full_21-9-23_MUT2.2_CLEAN"
 # wd = "leaves_full_15-9-23_MUT1_CLEAN"
@@ -1285,13 +1286,18 @@ def plot_data_from_probcurves(curves, t_vals):
 
 def plot_sim_and_phylogeny_curves():
 
+    lb = 5
+    ub = 95
+
     #### Get phylo-rates ####
-    phylo_dir = "../phylogeny/all_rates/uniform_1010000steps"
+    phylo_dir = "../phylogeny/rates/uniform_1010000steps"
     # phylo = "jan_phylo_nat_class"  # the phylo-class to use for the curves
     # phylo = "jan_phylo_nat_class_21-01-24_95_each"
     # phylo = "geeta_phylo_geeta_class_23-04-24_shuff"
-    phylo = "zuntini_phylo_nat_class"
-    phylo_xlim = 0.1
+    # phylo = "zuntini_phylo_nat_class"
+    phylo = "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
+    # phylo = "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
+    phylo_xlim = 200  # 0.1
     phylo_rates_list = []
 
     for filename in os.listdir(phylo_dir):
@@ -1336,11 +1342,403 @@ def plot_sim_and_phylogeny_curves():
     for col in phylo_rates.columns:
         data = phylo_rates[col].dropna()
         confidence_intervals[col] = (
-            np.mean(data) - (1.96 * stats.sem(data)),
-            np.mean(data) + (1.96 * stats.sem(data)),
+            # np.mean(data) - (1.96 * stats.sem(data)), # sterr for mean
+            # np.mean(data) + (1.96 * stats.sem(data)),
             # np.mean(data) - np.std(data),
             # np.mean(data) + np.std(data),
+            np.percentile(data, lb),  # calculate credible interval from posterior
+            np.percentile(data, ub),
         )
+
+    phylo_summary["lb"] = [i[0] for i in confidence_intervals.values()]
+    phylo_summary["ub"] = [i[1] for i in confidence_intervals.values()]
+
+    #### Get sim-rates ####
+
+    sim_rates = (
+        pd.read_csv("markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv") * 0.1
+    )
+    name_map = {
+        "0": "q01",
+        "1": "q02",
+        "2": "q03",
+        "3": "q10",
+        "4": "q12",
+        "5": "q13",
+        "6": "q20",
+        "7": "q21",
+        "8": "q23",
+        "9": "q30",
+        "10": "q31",
+        "11": "q32",
+    }
+
+    # for sim_rates in avg_list:
+    sim_rates = sim_rates.rename(columns=name_map)
+    sim_rates.insert(0, "q00", -sim_rates["q01"] - sim_rates["q02"] - sim_rates["q03"])
+    sim_rates.insert(5, "q11", -sim_rates["q10"] - sim_rates["q12"] - sim_rates["q13"])
+    sim_rates.insert(
+        10,
+        "q22",
+        -sim_rates["q20"] - sim_rates["q21"] - sim_rates["q23"],
+    )
+    sim_rates.insert(
+        15,
+        "q33",
+        -sim_rates["q30"] - sim_rates["q31"] - sim_rates["q32"],
+    )
+
+    # Calculate means
+    sim_summary = sim_rates.mean().reset_index()
+    sim_summary.columns = ["transition", "mean_rate"]
+    # Calculate confidence intervals
+    confidence_intervals = {}
+    for col in sim_rates.columns:
+        data = sim_rates[col].dropna()
+        confidence_intervals[col] = (
+            # np.mean(data) - (1.96 * stats.sem(data)),
+            # np.mean(data) + (1.96 * stats.sem(data)),
+            # np.mean(data) - np.std(data),
+            # np.mean(data) + np.std(data),
+            # np.mean(data) - (200 * np.var(data, ddof=1)),
+            # np.mean(data) + (200 * np.var(data, ddof=1)),
+            np.percentile(data, lb),
+            np.percentile(data, ub),
+        )
+    sim_summary["lb"] = [i[0] for i in confidence_intervals.values()]
+    sim_summary["ub"] = [i[1] for i in confidence_intervals.values()]
+    # sim_summaries.append(sim_summary)
+    print(sim_summary)
+
+    #### Get sim timeseries data ####
+    concat = pd.read_csv("MUT2.2_trajectories_shape.csv")
+    print(concat)
+
+    # total of each shape per step for each leafid
+    timeseries = (
+        concat.groupby(["leafid", "first_cat", "step", "shape"])
+        .size()
+        .reset_index(name="total_shape_firstcat")
+    )
+    print(timeseries)
+
+    # no. active walks per step for each leafid
+    timeseries_total = (
+        timeseries.groupby(["leafid", "first_cat", "step"])
+        .agg(total_firstcat=("total_shape_firstcat", "sum"))
+        .reset_index()
+    )
+    print(timeseries_total)
+
+    # proportion of active walks in each shape category for each leafid
+    timeseries = timeseries.merge(timeseries_total, on=["leafid", "first_cat", "step"])
+    timeseries["proportion"] = (
+        timeseries["total_shape_firstcat"] / timeseries["total_firstcat"]
+    )
+    print(timeseries)
+
+    # mean proportion of active walks in each shape category for all leaves in each first_cat
+    timeseries = (
+        timeseries.groupby(["first_cat", "step", "shape"])
+        .agg(mean_prop=("proportion", "mean"), sterr=("proportion", "sem"))
+        .reset_index()
+    )
+    timeseries["lb"] = timeseries["mean_prop"] - 1.96 * timeseries["sterr"]
+    timeseries["ub"] = timeseries["mean_prop"] + 1.96 * timeseries["sterr"]
+
+    # add initial state to the timeseries
+    timeseries["step"] = timeseries["step"] + 1
+    for i in order:
+        for j in order:
+            if i == j:
+                timeseries.loc[-1] = {
+                    "first_cat": i,
+                    "step": 0,
+                    "shape": i,
+                    # "total_shape_firstcat": np.nan,
+                    # "total_firstcat": np.nan,
+                    # "proportion": 1,
+                    "mean_prop": 1,
+                    "sterr": 0,
+                    "lb": 1,
+                    "ub": 1,
+                }
+            else:
+                timeseries.loc[-1] = {
+                    "first_cat": i,
+                    "step": 0,
+                    "shape": j,
+                    "mean_prop": 0,
+                    "sterr": 0,
+                    "lb": 0,
+                    "ub": 0,
+                }
+            timeseries.index = timeseries.index + 1
+            timeseries = timeseries.sort_index()
+    print(timeseries)
+
+    # print(phylo_rates)
+    # print(phylo_summary)
+    # print(sim_rates)
+    # print(sim_summary)
+    # print(timeseries)
+
+    # produce phylo-curves
+    t_vals = np.linspace(0, phylo_xlim, 120)
+
+    phylo_curves = []
+    Q = np.array(phylo_summary["mean_rate"].values).reshape(4, 4)
+    QL = np.array(phylo_summary["lb"].values).reshape(4, 4)
+    QU = np.array(phylo_summary["ub"].values).reshape(4, 4)
+    for t in t_vals:
+        Pt = linalg.expm(Q * t)
+        PLt = linalg.expm(QL * t)
+        PUt = linalg.expm(QU * t)
+        phylo_curves.append([Pt, PLt, PUt])
+
+    phylo_plot = pd.DataFrame(plot_data_from_probcurves(phylo_curves, t_vals))
+
+    # produce sim-curves
+
+    t_vals = np.linspace(0, 120, 120)
+    sim_curves = []
+    Q = np.array(sim_summary["mean_rate"].values).reshape(4, 4)
+    QL = np.array(sim_summary["lb"].values).reshape(4, 4)
+    QU = np.array(sim_summary["ub"].values).reshape(4, 4)
+    for t in t_vals:
+        Pt = linalg.expm(Q * t)
+        PLt = linalg.expm(QL * t)
+        PUt = linalg.expm(QU * t)
+        sim_curves.append([Pt, PLt, PUt])
+
+    sim_plot = pd.DataFrame(plot_data_from_probcurves(sim_curves, t_vals))
+
+    print(phylo_plot)
+    print(sim_plot)
+
+    # Create subplots
+    plt.rcParams["font.family"] = "CMU Serif"
+    fig, axs = plt.subplots(
+        nrows=5,
+        ncols=5,
+        figsize=(9, 9),
+        # sharey=True,
+        gridspec_kw={"height_ratios": [3, 3, 3, 1, 3]},
+    )
+
+    lines = []
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+
+    for i, row in enumerate(axs):
+        for j, ax in enumerate(row):
+            idx = j - 1
+
+            if i < 1 or j < 1:
+                ax.axis("off")
+                continue
+            else:
+                cat = order[idx]
+                ax.set_ylim(0, 1)
+                if idx != 0:
+                    ax.set_yticklabels([])
+                if i == 1:  # timeseries data on the left
+                    cat_data = timeseries[timeseries["first_cat"] == cat]
+                    cat_data = cat_data.rename(columns={"mean_prop": "P", "step": "t"})
+                    ax.set_title(order_full[idx])
+                    ax.set_xlim(0, 60)
+                    ax.set_xticks(np.arange(0, 61, 20))
+                    ax.set_xlabel("Step")
+                    if idx == 0:
+                        # ax.set_title("MUT2 Data")
+                        ax.set_ylabel("Mean Prop.")
+                        # ax.annotate(  # This adds the row labels
+                        #     f"Initial shape\n{order_full[j]}",
+                        #     xy=(0.5, 1),
+                        #     xytext=(-ax.yaxis.labelpad - 5, 0),
+                        #     xycoords=ax.yaxis.label,
+                        #     textcoords="offset points",
+                        #     size="large",
+                        #     ha="right",
+                        #     va="center",
+                        # )
+
+                if i == 2:  # simulation ctmc in centre column
+                    cat_data = sim_plot[sim_plot["first_cat"] == cat]
+                    # ax.set_title(order_full[j])
+                    ax.set_xlabel("Step")
+                    ax.set_xlim(0, 60)
+                    ax.set_xticks(np.arange(0, 61, 20))
+                    if idx == 0:
+                        ax.set_ylabel("P")
+
+                if i == 3:
+                    ax.axis("off")
+
+                if i == 4:  # phylogeny data on the right
+                    cat_data = phylo_plot[phylo_plot["first_cat"] == cat]
+                    # ax.set_title(order_full[i])
+                    ax.set_xlim(0, phylo_xlim)
+                    ax.set_xlabel("Branch length (Myr)")
+                    if idx == 0:
+                        ax.set_ylabel("P")
+                    #     ax.set_title(
+                    #         "Zuntini et al. (2024)\nphylogeny, Naturalis\nclassification CTMC",
+                    #         # "jan_phylo\n_nat_class_21\n-01-24_95_each"
+                    #         # phylo,
+                    #     )
+
+                if i != 3:
+                    for s, shape in enumerate(order):
+                        shape_data = cat_data[cat_data["shape"] == shape]
+                        (line,) = ax.plot(
+                            shape_data["t"],
+                            shape_data["P"],
+                            label=shape,
+                            c=sns_palette[s],
+                            linestyle="-",  # cmap=cmap
+                        )
+                        ax.fill_between(
+                            shape_data["t"],
+                            shape_data["lb"],
+                            shape_data["ub"],
+                            alpha=0.2,
+                            # cmap=cmap,
+                        )
+                        lines.append(line)
+                    # if i < 3:
+                    #     ax.set_xticklabels([])
+                    # if i == 3:
+                    #     if j == 0 or j == 1:
+                    #         ax.set_xlabel("Step")
+                    #     else:
+                    #         ax.set_xlabel("Myr")
+
+    icon_filenames = [
+        "u.png",
+        "l.png",
+        "d.png",
+        "c.png",
+    ]
+    icons = [os.path.join("uldc_model_icons", path) for path in icon_filenames]
+    icon_imgs = [Image.open(path) for path in icons]
+    img_width, img_height = icon_imgs[1].size
+    sf = 1.1
+    shape_cats = ["Unlobed", "Lobed", "Dissected", "Compound"]
+
+    for j in range(0, 4):
+        ax = axs[0, j + 1]
+        # ax.axis("off")
+        ax.imshow(icon_imgs[j])
+        # ax.text(img_width / 2, img_height, shape_cats[j], ha="center", va="top")
+        # ax.set_xlim(img_width / sf, (-img_width / 2) / sf)
+        ax.set_xlim(0 + (img_width * (sf - 1)), img_width - (img_width * (sf - 1)))
+        ax.set_ylim(img_height, -(img_height / sf))
+    for idx, i in enumerate([1, 2, 4]):
+        ax = axs[i, 0]
+
+        labs = [
+            "Simulation Data\nMUT2",
+            "Simulation CTMC\nMUT2",
+            "Phylogeny CTMC\nZuntini et al. (2024)",
+            # "Zuntini et al. (2024)\nphylogeny, Naturalis\nclassification CTMC",
+        ]
+
+        ax.text(
+            0.2,
+            0.5,
+            labs[idx],
+            ha="center",
+            va="center",
+        )
+    #     ax.axis("off")
+    #     ax.imshow(icon_imgs[i - 1])
+    #     ax.text(img_width / 2, img_height, shape_cats[i - 1], ha="center", va="top")
+    #     ax.set_xlim(0, (img_width / scale_factor) + ((img_width / 2) / scale_factor))
+    #     ax.set_ylim(img_height / scale_factor, (-img_height / 2) / scale_factor)
+    # axes[0, 4].axis("off")
+
+    legend = fig.legend(
+        lines,
+        order_full,
+        loc="outside right",
+        title="Final shape",
+        # fontsize=11,
+        ncol=1,
+    )
+    title = legend.get_title()
+    title.set_fontsize(11)
+    fig.tight_layout()
+    fig.subplots_adjust(wspace=0.17, hspace=0.17, right=0.84)
+    plt.savefig("curves.pdf", format="pdf", dpi=1200)
+    plt.show()
+
+
+def plot_sim_and_phylogeny_curves_vert():
+
+    lb = 30
+    ub = 70
+
+    #### Get phylo-rates ####
+    phylo_dir = "../phylogeny/rates/uniform_1010000steps"
+    # phylo = "jan_phylo_nat_class"  # the phylo-class to use for the curves
+    # phylo = "jan_phylo_nat_class_21-01-24_95_each"
+    # phylo = "geeta_phylo_geeta_class_23-04-24_shuff"
+    # phylo = "zuntini_phylo_nat_class"
+    phylo = "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
+    # phylo = "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
+    phylo_xlim = 200  # 0.1
+    phylo_rates_list = []
+
+    for filename in os.listdir(phylo_dir):
+        if filename.endswith(".csv"):
+            path = os.path.join(phylo_dir, filename)
+            df = pd.read_csv(path)
+            df["phylo-class"] = filename[:-4]
+            phylo_rates_list.append(df)
+
+    phylo_rates = pd.concat(phylo_rates_list, ignore_index=True)
+    # Choose phylogeny for curves
+    phylo_rates = phylo_rates[phylo_rates["phylo-class"] == phylo]
+    phylo_rates.drop(columns="phylo-class", inplace=True)
+    phylo_rates.reset_index(drop=True, inplace=True)
+    # Insert stasis rates
+    phylo_rates.insert(
+        0,
+        "q00",
+        -phylo_rates["q01"] - phylo_rates["q02"] - phylo_rates["q03"],
+    )
+    phylo_rates.insert(
+        5,
+        "q11",
+        -phylo_rates["q10"] - phylo_rates["q12"] - phylo_rates["q13"],
+    )
+    phylo_rates.insert(
+        10,
+        "q22",
+        -phylo_rates["q20"] - phylo_rates["q21"] - phylo_rates["q23"],
+    )
+    phylo_rates.insert(
+        15,
+        "q33",
+        -phylo_rates["q30"] - phylo_rates["q31"] - phylo_rates["q32"],
+    )
+
+    # Calculate means
+    phylo_summary = phylo_rates.mean().reset_index()
+    phylo_summary.columns = ["transition", "mean_rate"]
+    # Calculate confidence intervals
+    confidence_intervals = {}
+    for col in phylo_rates.columns:
+        data = phylo_rates[col].dropna()
+        confidence_intervals[col] = (
+            # np.mean(data) - (1.96 * stats.sem(data)),
+            # np.mean(data) + (1.96 * stats.sem(data)),
+            # np.mean(data) - np.std(data),
+            # np.mean(data) + np.std(data),
+            np.percentile(data, lb),  # calculate credible interval from posterior
+            np.percentile(data, ub),
+        )
+
     phylo_summary["lb"] = [i[0] for i in confidence_intervals.values()]
     phylo_summary["ub"] = [i[1] for i in confidence_intervals.values()]
 
@@ -1402,12 +1800,14 @@ def plot_sim_and_phylogeny_curves():
     for col in sim_rates.columns:
         data = sim_rates[col].dropna()
         confidence_intervals[col] = (
-            np.mean(data) - (1.96 * stats.sem(data)),
-            np.mean(data) + (1.96 * stats.sem(data)),
+            # np.mean(data) - (1.96 * stats.sem(data)),
+            # np.mean(data) + (1.96 * stats.sem(data)),
             # np.mean(data) - np.std(data),
             # np.mean(data) + np.std(data),
             # np.mean(data) - (200 * np.var(data, ddof=1)),
             # np.mean(data) + (200 * np.var(data, ddof=1)),
+            np.percentile(data, lb),
+            np.percentile(data, ub),
         )
     sim_summary["lb"] = [i[0] for i in confidence_intervals.values()]
     sim_summary["ub"] = [i[1] for i in confidence_intervals.values()]
@@ -1582,7 +1982,7 @@ def plot_sim_and_phylogeny_curves():
                         # "jan_phylo\n_nat_class_21\n-01-24_95_each"
                         # phylo,
                     )
-                ax.set_xlim(0, 0.05)
+                ax.set_xlim(0, phylo_xlim)
 
             for s, shape in enumerate(order):
                 shape_data = cat_data[cat_data["shape"] == shape]
@@ -1597,17 +1997,17 @@ def plot_sim_and_phylogeny_curves():
                     shape_data["t"],
                     shape_data["lb"],
                     shape_data["ub"],
-                    alpha=0.3,
+                    alpha=0.2,
                     # cmap=cmap,
                 )
                 lines.append(line)
             if i < 3:
                 ax.set_xticklabels([])
             if i == 3:
-                if j == 0:
+                if j == 0 or j == 1:
                     ax.set_xlabel("Step")
                 else:
-                    ax.set_xlabel("t")
+                    ax.set_xlabel("Myr")
     legend = fig.legend(
         lines,
         order_full,
@@ -1838,13 +2238,15 @@ def MLE_rates_barplot():
 
 
 if __name__ == "__main__":
+    # curves_CTMC_MLEsimfit()
     # curves_CTMC_mcmcsimfit()
     # MLE_rates_barplot()
     # randomwalk_rates_firstswitch()
-    # plot_sim_and_phylogeny_curves()
+    plot_sim_and_phylogeny_curves()
+    # plot_sim_and_phylogeny_curves_vert()
 
     # stack_plot()
-    paramspace()
+    # paramspace()
 
     # prop_curves()
 
