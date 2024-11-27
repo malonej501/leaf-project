@@ -14,6 +14,7 @@ from sympy import *
 import schemdraw
 from schemdraw import flow
 from schemdraw import elements as elm
+from datetime import date
 
 ##### Getting Rates #####
 
@@ -410,7 +411,7 @@ def normalise_rates(phylo_sim_long, ML_phylo_rates_long, norm_method):
     summary = rate_diff(summary)
     print(summary)
     summary.to_csv(
-        f"sim_phylo_rates_stats_{norm_method}_mixedpriors_03-09-24.csv", index=False
+        f"sim_phylo_rates_stats_{norm_method}_mixedpriors_{str(date.today())}.csv", index=False
     )
     print(ML_phylo_rates_long)
     print(
@@ -1518,13 +1519,14 @@ def blank_diagram(
     return fig, ax
 
 
-def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant):
+def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant, c_val):
     style = ArrowStyle(
         "Simple",
         head_length=1,
         head_width=1.5,
         tail_width=1,  # length_includes_head=True
     )
+    # increase c_val to increase the curviness of the arrows
 
     if not rate_std:
 
@@ -1532,7 +1534,7 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant
             arrow = FancyArrowPatch(
                 (startpoint[0], startpoint[1]),  # Start point
                 (endpoint[0], endpoint[1]),  # End point
-                connectionstyle=f"arc3,rad={curvature}.3",  # Curvature
+                connectionstyle=f"arc3,rad={curvature}.{c_val}",  # Curvature
                 mutation_scale=10,  # Arrow head size
                 arrowstyle="-|>",  # Arrow style
                 # arrowstyle=style,
@@ -1543,7 +1545,7 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant
             arrow = FancyArrowPatch(
                 (startpoint[0], startpoint[1]),  # Start point
                 (endpoint[0], endpoint[1]),  # End point
-                connectionstyle=f"arc3,rad={curvature}.3",  # Curvature
+                connectionstyle=f"arc3,rad={curvature}.{c_val}",  # Curvature
                 mutation_scale=10,  # Arrow head size
                 arrowstyle="-|>",  # Arrow style
                 # linestyle="-",
@@ -1561,7 +1563,7 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant
         arrow_ub = FancyArrowPatch(
             (startpoint[0], startpoint[1]),  # Start point
             (endpoint[0], endpoint[1]),  # End point
-            connectionstyle=f"arc3,rad={curvature}.3",  # Curvature
+            connectionstyle=f"arc3,rad={curvature}.{c_val}",  # Curvature
             mutation_scale=10,  # Arrow head size
             arrowstyle="-|>",  # Arrow style
             # arrowstyle=style,
@@ -1575,7 +1577,7 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant
         arrow = FancyArrowPatch(
             (startpoint[0], startpoint[1]),  # Start point
             (endpoint[0], endpoint[1]),  # End point
-            connectionstyle=f"arc3,rad={curvature}.3",  # Curvature
+            connectionstyle=f"arc3,rad={curvature}.{c_val}",  # Curvature
             mutation_scale=10,  # Arrow head size
             arrowstyle="-|>",  # Arrow style
             # arrowstyle=style,
@@ -1587,7 +1589,7 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant
         arrow_lb = FancyArrowPatch(
             (startpoint[0], startpoint[1]),  # Start point
             (endpoint[0], endpoint[1]),  # End point
-            connectionstyle=f"arc3,rad={curvature}.3",  # Curvature
+            connectionstyle=f"arc3,rad={curvature}.{c_val}",  # Curvature
             mutation_scale=10,  # Arrow head size
             arrowstyle="-|>",  # Arrow style
             # arrowstyle=style,
@@ -1612,7 +1614,8 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std, significant
 
 def nodes(ax, c_proper, rad, texts, icon_imgs):
     # textplacement goes from top right clockwise
-    text_placement = ((-0.7, 0.7), (0.7, 0.7), (0.7, -0.7), (-0.7, -0.7))
+    # text_placement = ((-0.7, 0.7), (0.7, 0.7), (0.7, -0.7), (-0.7, -0.7)) # original
+    text_placement = ((-0.1, 1), (0.1, 1), (0.1, -1), (-0.1, -1))
     for i, center in enumerate(c_proper.values()):
         x, y = center
         theta = np.linspace(0, 2 * np.pi, 100)
@@ -1647,7 +1650,7 @@ def nodes(ax, c_proper, rad, texts, icon_imgs):
             x + text_placement[i][0],
             y + text_placement[i][1],
             texts[i],
-            horizontalalignment="center",
+            horizontalalignment="left" if i == 1 or i == 2 else "right",
             verticalalignment="center",
             color="black",
         )
@@ -1764,34 +1767,35 @@ def arrow_plot(norm_method, ML_data, colourise):
             sig = False if row["prop_over_zero"] < 0.90 else True
             # rs = row["rate_norm_std"]
             rs = False  # set to false to disable multi-arrows
+            c_val = 2 # increase to increase the curviness of the arrows
 
             if r > 0:
                 if at + to == "ul":
-                    arc(ax, c["uS"], c["lS"], "+", r, rc, rs, sig)
+                    arc(ax, c["uS"], c["lS"], "+", r, rc, rs, sig, c_val)
                 if at + to == "lu":
-                    arc(ax, c["lN"], c["uN"], "+", r, rc, rs, sig)
+                    arc(ax, c["lN"], c["uN"], "+", r, rc, rs, sig, c_val)
                 if at + to == "ld":
-                    arc(ax, c["lE"], c["dE"], "-", r, rc, rs, sig)
+                    arc(ax, c["lE"], c["dE"], "-", r, rc, rs, sig, c_val)
                 if at + to == "dl":
-                    arc(ax, c["dE"], c["lE"], "+", r, rc, rs, sig)
+                    arc(ax, c["dE"], c["lE"], "+", r, rc, rs, sig, c_val)
                 if at + to == "dc":
-                    arc(ax, c["dS"], c["cS"], "-", r, rc, rs, sig)
+                    arc(ax, c["dS"], c["cS"], "-", r, rc, rs, sig, c_val)
                 if at + to == "cd":
-                    arc(ax, c["cS"], c["dS"], "+", r, rc, rs, sig)
+                    arc(ax, c["cS"], c["dS"], "+", r, rc, rs, sig, c_val)
                 if at + to == "cu":
-                    arc(ax, c["cW"], c["uW"], "-", r, rc, rs, sig)
+                    arc(ax, c["cW"], c["uW"], "-", r, rc, rs, sig, c_val)
                 if at + to == "uc":
-                    arc(ax, c["uE"], c["cE"], "-", r, rc, rs, sig)
+                    arc(ax, c["uE"], c["cE"], "-", r, rc, rs, sig, c_val)
 
                     #### diagonals ####
                 if at == "u" and to == "d":
-                    arc(ax, c["uS"], c["dW"], "+", r, rc, rs, sig)
+                    arc(ax, c["uS"], c["dW"], "+", r, rc, rs, sig, 3)
                 if at == "d" and to == "u":
-                    arc(ax, c["dW"], c["uS"], "-", r, rc, rs, sig)
+                    arc(ax, c["dW"], c["uS"], "-", r, rc, rs, sig, 3)
                 if at == "c" and to == "l":
-                    arc(ax, c["cE"], c["lS"], "+", r, rc, rs, sig)
+                    arc(ax, c["cE"], c["lS"], "+", r, rc, rs, sig, 3)
                 if at == "l" and to == "c":
-                    arc(ax, c["lS"], c["cE"], "-", r, rc, rs, sig)
+                    arc(ax, c["lS"], c["cE"], "-", r, rc, rs, sig, 3)
         ax.set_title(dataset, fontsize=8)
         if colourise:
             norm = mpl.colors.Normalize(
@@ -1934,7 +1938,7 @@ def test_rates_diff_from_zero_old(norm_method, ML_data):
     # print(r)
 
 
-def arrow_w_viol(norm_method, ML_data):
+def arrow_w_viol(norm_method, ML_data, layout):
     plt.rcParams["font.family"] = "CMU Serif"
     plot_order = [
         "MUT1_simulation",
@@ -1992,7 +1996,7 @@ def arrow_w_viol(norm_method, ML_data):
     rate_data["fwd"] = rate_data["transition"].str[:3]
     rate_data["bwd"] = rate_data["transition"].str[-3:]
     # print(rate_data)
-    rate_data.to_csv("rate_data_bw_fw.csv", index=False)
+    rate_data.to_csv(f"rate_data_bw_fw_{str(date.today())}.csv", index=False)
 
     cmap = plt.get_cmap("viridis")
     rate_data["std_c"] = rate_data["std"].apply(lambda x: cmap(x))
@@ -2006,12 +2010,8 @@ def arrow_w_viol(norm_method, ML_data):
     c_proper = {"u": (2, 6), "l": (6, 6), "d": (6, 2), "c": (2, 2)}
 
     rad = 0.5
-    texts = [
-        "Unlobed",
-        "Lobed",
-        "Dissected",
-        "Compound",
-    ]
+    texts = ["U","L","D","C"] if layout == "v" else ["","","",""]
+    # texts = ["","","",""] # labels for graph nodes
 
     c = {
         "uN": (2, 6 + rad),
@@ -2040,30 +2040,67 @@ def arrow_w_viol(norm_method, ML_data):
         "d→c-c→d",
     ]
     plot_titles = [
-        "Simulation\nMUT1",
-        "Simulation\nMUT2",
-        "Phylogeny\nJanssens et al., 2020",
-        "Phylogeny\nZuntini et al., 2024",
-        "Phylogeny\nGeeta et al., 2012",
+        # "Simulation\nMUT1",
+        # "Simulation\nMUT2",
+        # "Phylogeny\nJanssens et al., 2020",
+        # "Phylogeny\nZuntini et al., 2024",
+        # "Phylogeny\nGeeta et al., 2012",
+        "MUT1",
+        "MUT2",
+        "Janssens et al. (2020)",
+        "Zuntini et al. (2024)",
+        "Geeta et al. (2012)",
     ]
 
     # Draw circles with text in the center
 
-    fig, axs = plt.subplots(
-        2,
-        len(plot_order),
-        figsize=(14, 6),
-        # layout="constrained",  # , gridspec_kw={"height_ratios": [3, 1]}
-    )
+    if layout == "h":
+        fig_h = 6
+        fig_w = 14
+        fig, axs = plt.subplots(
+            2,
+            len(plot_order),
+            figsize=(fig_w, fig_h),
+            # layout="constrained",  # , gridspec_kw={"height_ratios": [3, 1]}
+        )
+    elif layout == "v":
+        fig_h = 4 * len(plot_order)
+        fig_w = 8
+        fig, axs = plt.subplots(
+            len(plot_order) * 2,
+            2,
+            figsize=(fig_h, fig_w),
+            gridspec_kw={
+                "height_ratios": [
+                    3 if i % 2 == 0 else 1 for i in range(len(plot_order) * 2)
+                ],
+                "width_ratios": [2, 1],
+            },
+        )
+    # elif layout == "c":  # only works with len(plot_order) == 1
+    #     fig, axs = plt.subplots(1, 2, figsize=(8, 4))
 
+    else:
+        raise (RuntimeError("incorrect layout argument"))
+
+    if len(plot_order) == 1:
+        axs = [axs]
     for i, row_ in enumerate(axs):
+        print(row_)
         for j in range(0, len(row_)):
-            dataset = plot_order[j]
-            if i == 0:
-                ax = row_[j]
+            ax = row_[j]
+            if layout == "v" and i % 2 == 1:
+                ax.axis("off")
+                continue
+            dataset = plot_order[j] if layout == "h" else plot_order[i // 2]
+            if (layout == "h" and i == 0) or (layout == "v" and j == 0):
+                ax.axis("off")
+                if layout == "v":
+                    ax = plt.subplot2grid(shape=(2, 2), loc=(i // 2, 0))
+                    ax.axis("off")
                 ax.set_xlim(0, 8)
                 ax.set_ylim(0, 8)
-                ax.axis("off")
+                # ax.axis("off")
 
                 plot_data = rate_data[rate_data["dataset"] == dataset]
                 # print(plot_data)
@@ -2073,43 +2110,47 @@ def arrow_w_viol(norm_method, ML_data):
                     # print(row)
                     at = row["fwd"][0]
                     to = row["fwd"][2]
-                    r = row["mean_rate_norm"] * 3
+                    r = row["mean_rate_norm"] * 4 # increase the multiplier to scale the width of the arrows
                     # rc = row["std_c"] if colourise else "black"
                     rc = "lightgrey" if row["prop_over_zero"] < 0.90 else "black"
                     sig = False if row["prop_over_zero"] < 0.90 else True
                     # rs = row["rate_norm_std"]
                     rs = False  # set to false to disable multi-arrows
+                    c_val = 2 # increase to increase the curviness of the arrows
+                    dc_val = 5 # increas to increase diagonal arrow curviness
+
 
                     if r > 0:
                         if at + to == "ul":
-                            arc(ax, c["uS"], c["lS"], "+", r, rc, rs, sig)
+                            arc(ax, c["uS"], c["lS"], "+", r, rc, rs, sig, c_val)
                         if at + to == "lu":
-                            arc(ax, c["lN"], c["uN"], "+", r, rc, rs, sig)
+                            arc(ax, c["lN"], c["uN"], "+", r, rc, rs, sig, c_val)
                         if at + to == "ld":
-                            arc(ax, c["lE"], c["dE"], "-", r, rc, rs, sig)
+                            arc(ax, c["lE"], c["dE"], "-", r, rc, rs, sig, c_val)
                         if at + to == "dl":
-                            arc(ax, c["dE"], c["lE"], "+", r, rc, rs, sig)
+                            arc(ax, c["dE"], c["lE"], "+", r, rc, rs, sig, c_val)
                         if at + to == "dc":
-                            arc(ax, c["dS"], c["cS"], "-", r, rc, rs, sig)
+                            arc(ax, c["dS"], c["cS"], "-", r, rc, rs, sig, c_val)
                         if at + to == "cd":
-                            arc(ax, c["cS"], c["dS"], "+", r, rc, rs, sig)
+                            arc(ax, c["cS"], c["dS"], "+", r, rc, rs, sig, c_val)
                         if at + to == "cu":
-                            arc(ax, c["cW"], c["uW"], "-", r, rc, rs, sig)
+                            arc(ax, c["cW"], c["uW"], "-", r, rc, rs, sig, c_val)
                         if at + to == "uc":
-                            arc(ax, c["uE"], c["cE"], "-", r, rc, rs, sig)
+                            arc(ax, c["uE"], c["cE"], "-", r, rc, rs, sig, c_val)
 
                             #### diagonals ####
                         if at == "u" and to == "d":
-                            arc(ax, c["uS"], c["dW"], "+", r, rc, rs, sig)
+                            arc(ax, c["uS"], c["dW"], "+", r, rc, rs, sig, dc_val)
                         if at == "d" and to == "u":
-                            arc(ax, c["dW"], c["uS"], "-", r, rc, rs, sig)
+                            arc(ax, c["dW"], c["uS"], "-", r, rc, rs, sig, dc_val)
                         if at == "c" and to == "l":
-                            arc(ax, c["cE"], c["lS"], "+", r, rc, rs, sig)
+                            arc(ax, c["cE"], c["lS"], "+", r, rc, rs, sig, dc_val)
                         if at == "l" and to == "c":
-                            arc(ax, c["lS"], c["cE"], "-", r, rc, rs, sig)
-                ax.set_title(plot_titles[j], fontsize=8)
-            if i == 1:
-                ax = row_[j]
+                            arc(ax, c["lS"], c["cE"], "-", r, rc, rs, sig, dc_val)
+                # title = plot_order[j] if layout == "h" else plot_order[i // 2]
+                title = plot_titles[j] if layout == "h" else plot_titles[i // 2]
+                ax.set_title(title, fontsize=9)
+            if (layout == "h" and i == 1) or (layout == "v" and j == 1):
 
                 mcmc_plot_data = phylo_sim_long[phylo_sim_long["Dataset"] == dataset]
                 ml_plot_data = ML_phylo_rates_long[
@@ -2123,14 +2164,15 @@ def arrow_w_viol(norm_method, ML_data):
                             mcmc_plot_data["transition"] == transition
                         ].squeeze()
                     )
-                    x = ml_plot_data[
-                        ml_plot_data["transition"] == transition
-                    ].reset_index(drop=True)
-                    print(ml_plot_data)
-                    if not x.empty:
-                        # ml_rates.append(x.loc[0, "rate_norm_diff"])
-                        ml_rates.append(x.loc[0, "rate_norm"])
-                    elif x.empty:
+                    if not ml_plot_data.empty:
+                        x = ml_plot_data[
+                            ml_plot_data["transition"] == transition
+                        ].reset_index(drop=True)
+
+                        if not x.empty:
+                            # ml_rates.append(x.loc[0, "rate_norm_diff"])
+                            ml_rates.append(x.loc[0, "rate_norm"])
+                    else:
                         ml_rates.append(np.nan)
 
                 p = ax.violinplot(
@@ -2162,7 +2204,9 @@ def arrow_w_viol(norm_method, ML_data):
                 w = xh - xl
                 h = yh - yl
                 # size = 0.05
-                size = 0.1
+                size = (
+                    0.1 if layout == "h" else 0.08
+                )  # worked well for horizontal and multiple vertical
                 # A = np.random.random(size=(5, 5))
                 # ax.matshow(A)
                 for x, xtick_pos in enumerate(list(range(1, len(transitions) + 1))):
@@ -2184,13 +2228,24 @@ def arrow_w_viol(norm_method, ML_data):
                     # )
                 # ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
                 ax.set_xticklabels([])
-                if j == 0:
-                    ax.set_ylabel("Rate")
-                if j > 0:
-                    ax.set_yticklabels([])
+                ax.set_ylabel("Net normalised rate")
+                if layout == "h" and j > 0:
+                    ax.set_ylabel("")
+                    # ax.set_yticklabels([])
+
+    # Create legend
+    labels = ["Compound","Dissected","Lobed","Unlobed"]
+    axlgnd = fig.add_axes([0.88, 0.4 ,0.1,0.2]) # left_pos, bottom_pos, width, height
+    icon_w, icon_h = icon_imgs[0].size
+    axlgnd.set_ylim(0, len(icon_imgs) * icon_h)
+    for i, img in enumerate(reversed(icon_imgs)):
+        axlgnd.imshow(img, extent=(0, icon_w, i*icon_h, (i*icon_h) + icon_h))
+        axlgnd.text(icon_w, (i*icon_h) + (icon_h * 0.5), labels[i], ha="left",va="center",fontsize=9)
+        axlgnd.axis("off")
 
     # plt.tight_layout()
-    plt.savefig("arrow_violin_plot.pdf", format="pdf", dpi=1200)
+    # plt.savefig("arrow_violin_plot.pdf", format="pdf", dpi=1200)
+    plt.savefig("arrow_violin_plot.svg", format="svg", dpi=1200)
     plt.show()
 
 
@@ -2244,13 +2299,13 @@ if __name__ == "__main__":
     #     norm_method="meanmean", ML_data="ML3_mean_rates_all", legend=False
     # )
     # plot_phylo_and_sim_rates_with_leaf_icons(
-    #     norm_method="meanmean", ML_data="ML6_genus_mean_rates_all", legend=False
+    #     norm_method="minmax", ML_data="ML6_genus_mean_rates_all", legend=False
     # )
     # test_rates_diff_from_zero(
     #     norm_method="meanmean", ML_data="ML6_genus_mean_rates_all"
     # )
     # arrow_plot(norm_method="meanmean", ML_data="ML4_mean_rates_all", colourise=False)
-    arrow_w_viol(norm_method="meanmean", ML_data="ML6_genus_mean_rates_all")
+    arrow_w_viol(norm_method="meanmean", ML_data="ML6_genus_mean_rates_all", layout="h")
     # plot_rates_diff(norm_method="meanmean", ML_data="ML4_mean_rates_all")
     # plot_rates_diff(norm_method="meanmean", ML_data="ML6_genus_mean_rates_all")
 # plot_phylo_and_sim_rates_restricted(
