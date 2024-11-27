@@ -16,11 +16,11 @@ import traceback
 import shutil
 
 # wd = "sample_eud_21-1-24/"
-wd = "sample_eud_zuntini_10-09-24/"
+wd = "jan_zun_nat_ang_26-09-24/"
 # file = "Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
-file = "Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera.csv"
+file = "jan_zun_union_nat_genus.csv"
 
-startfrom = 760  # which leaf index to start labelling from
+startfrom = 618  # which leaf index to start labelling from
 
 # Google search engine initialisation
 api_key = "REMOVED FOR SECURITY REASONS - SEE LOCAL MACHINE"  # API key for leaf-project tied to malonej501@gmail.com
@@ -378,6 +378,7 @@ def process_images(species_full, herb_dir, ddgi_dir):
 if __name__ == "__main__":
     species_full = pd.read_csv(wd + file)
     herb_dir = wd + file.split(".")[0]
+    # herb_dir = wd
     ddgi_dir = wd + "ddgi_sample_" + file.split(".")[0]
     check_alldownloaded(species_full, herb_dir)
     pressed_keys = []

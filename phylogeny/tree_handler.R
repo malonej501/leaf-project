@@ -36,44 +36,173 @@ load_shape_data_full <- function(shape_dataset){
 
 load_naturalis_sample_data <- function(){
   path = "shape_data/Naturalis"
-  jan_nat <- read.csv(paste0(path, "/jan_nat_eud_21-01-24/Naturalis_multimedia_eud_sample_13-01-24.csv"))
-  zun_nat <- read.csv(paste0(path, "/zun_nat_eud_10-09-24/Naturalis_multimedia_eud_sample_10-09-24.csv"))
+  #jan_nat <- read.csv(paste0(path, "/jan_nat_eud_21-01-24/Naturalis_multimedia_eud_sample_13-01-24.csv"))
+  #zun_nat <- read.csv(paste0(path, "/zun_nat_eud_10-09-24/Naturalis_multimedia_eud_sample_10-09-24.csv"))
+  sample <- read.csv(paste0(path, "/jan_zun_nat_ang_26-09-24/Naturalis_multimedia_ang_sample_26-09-24.csv"))
+  #sample <- read.csv(paste0(path, "/jan_zun_nat_ang_09-10-24/Naturalis_multimedia_ang_sample_09-10-24.csv"))
   #print(nrow(jan_nat))
   #print(nrow(zun_nat))
-  return(list(janssens_nat = jan_nat, zuntini_nat = zun_nat))
+  return(list(janssens_nat = sample, zuntini_nat = sample))
+}
+
+unique_tips <- function(tree){
+  # Get the tip labels
+  tip_labels <- tree$tip.label
+  # Identify unique labels and keep the first occurrence
+  unique_labels <- unique(tip_labels)
+  # Create a vector to store tips to keep
+  tips_to_keep <- character()
+  for (label in unique_labels) {
+    # Keep the first occurrence of each label
+    tips_to_keep <- c(tips_to_keep, tip_labels[which(tip_labels == label)[1]])
+  }
+  # Drop tips that are not in tips_to_keep
+  tips_to_drop <- tip_labels[!tip_labels %in% tips_to_keep]
+  pruned_tree <- drop.tip(tree, tips_to_drop)
+  return (pruned_tree)
 }
 
 nat_tree_intersect <- function(tree_path){
   trees <- load_trees(tree_path)
+  print("Done loading trees")
   nat_samp_data <- load_naturalis_sample_data()
   #print(trees$janssens_ml_dated.tre)
   tree_names <- c("janssens","zuntini")
+  genus_trees <- list()
+  species_trees <- list()
   for (name in tree_names){
     print(name)
     tree <- trees[[grep(name, names(trees))]]
     tips_genus_species <- sub("^[^_]*_[^_]*_(.*)", "\\1", tree$tip.label) # return genus and species of the tip_label
     tips_genus <- sub("^(.*?)_.*", "\\1", tips_genus_species) # return just the genus
+    tree$tip.label <- sub("^[^_]*_[^_]*_(.*)", "\\1", tree$tip.label) # set tip labels to genus_species
+    print(paste("original tree length =",length(tree$tip.label)))
+    
     nat_samp <- nat_samp_data[[grep(name, names(nat_samp_data))]]
     nat_tree_intersect_species <- nat_samp[nat_samp$species %in% intersect(nat_samp$species, tips_genus_species),]
-    print(nrow(nat_tree_intersect_species))
+    print(paste("nat phylo species intersect =", nrow(nat_tree_intersect_species)))
     nat_tree_intersect_genus <- nat_samp[nat_samp$genus %in% intersect(nat_samp$genus, tips_genus),]
     nat_tree_intersect_genus <- nat_tree_intersect_genus[!duplicated(nat_tree_intersect_genus$genus), ] # keep only the first occurring species in each genera
-    print(nrow(nat_tree_intersect_genus))
+    print(paste("nat phylo genus intersect =", nrow(nat_tree_intersect_genus)))
+
+    #write.csv(nat_tree_intersect_species, paste(substr(name, 1, 3), "nat_species.csv", sep="_"), row.names=FALSE)
+    #write.csv(nat_tree_intersect_genus, paste(substr(name, 1, 3), "nat_genus.csv", sep="_"), row.names=FALSE)
+
+    #subset the trees
+
+
+
     
-    write.csv(nat_tree_intersect_species, paste(substr(name, 1, 3), "nat_species.csv", sep="_"), row.names=FALSE)
-    write.csv(nat_tree_intersect_genus, paste(substr(name, 1, 3), "nat_genus.csv", sep="_"), row.names=FALSE)
+    #print(setdiff(tree$tip.label, nat_tree_intersect_species$species))
+    tree_species_sub <- drop.tip(tree, setdiff(tree$tip.label, nat_tree_intersect_species$species))
+    tree_species_sub <- unique_tips(tree_species_sub)
+    print(paste("tree_pruned_species length =",length(tree_species_sub$tip.label)))
+    #print(setdiff(tree$tip.label, nat_tree_intersect_species$species))
+    
+    # keep one tip per genus
+    tree_tip_info <- data.frame(tip = tree$tip.label, tip_genus_species = tips_genus_species, tip_genus = tips_genus)
+    # Randomly select one species from each genus
+    unique_genus <- unique(tree_tip_info$tip_genus)
+    selected_tips <- sapply(unique_genus, function(genus) {
+      species_options <- tree_tip_info$tip[tree_tip_info$tip_genus == genus]
+      sample(species_options, 1)  # Randomly select one species
+    })
+    
+    tree_pruned <- drop.tip(tree, setdiff(tree$tip.label, selected_tips)) # drop all but one tip from each genera
+    
+    tree_pruned$tip.label <- sub("^(.*?)_.*", "\\1", tree_pruned$tip.label) # set tip labels to genus
+    print(paste("tree_pruned_1_tip_per_genus length =",length(tree_pruned$tip.label)))
+    
+    tree_genus_sub <- drop.tip(tree_pruned, setdiff(tree_pruned$tip.label, nat_tree_intersect_genus$genus))
+    tree_genus_sub <- unique_tips(tree_genus_sub)
+    print("Tree length")
+    #print(length(tree_species_sub$tip.label))
+    print(paste("pruned_tree intersect with naturalis tree intersect length =", length(tree_genus_sub$tip.label)))
+    #write.nexus(tree_genus_sub, file = paste(substr(name, 1, 3), "nat_genus.tre", sep="_"))
+    genus_trees[[name]] <- tree_genus_sub
+    species_trees[[name]] <- tree_species_sub
   }
+  #print(genus_trees)
+  return(c(genus_trees, species_trees))
 }
 
 nat_tree_intersect(tree_path="phylo_data/raw_trees")
-x <- read.csv("jan_nat_species.csv")
-x <- read.csv("zun_nat_genus.csv")
-y <- read.csv("jan_nat_genus.csv")
-z <- intersect(x$genus, y$genus)
+
+
+generate_tree_labs <- function(trees, label_data, export_labs){
+  tree_names <- c("janssens","zuntini")
+  tree_labs <- list()
+  for (name in tree_names){
+    print(name)
+    tree <- trees[[grep(name, names(trees))]]
+    #print(head(tree$tip.label))
+
+    tree_label_intersect <- label_data[label_data$genus %in% tree$tip.label, ]
+    print(paste("nrow filtered label data",nrow(tree_label_intersect)))
+    print(paste("ntips tree", length(tree$tip.label)))
+    tree_label_intersect <- tree_label_intersect[, c("genus","shape")] 
+    tree_labs[[name]] <- tree_label_intersect
+    if (export_labs){
+      write.table(
+        tree_label_intersect,
+        file = paste(substr(name, 1, 3), "nat_genus.txt", sep="_"),
+        sep = "\t",
+        row.names = FALSE,
+        col.names = FALSE,
+        quote = FALSE
+      )
+    }
+  }
+  return(tree_labs)
+}
+
+drop_ambiguous_tips <- function(trees, tree_labs, export_trees){
+  trees_unambig <- list()
+  for (i in seq_along(trees)){
+    tree <- trees[[i]]
+    name <- names(trees[i])
+    print(name)
+    tree_lab <- tree_labs[[i]]
+    tree_unambig <- drop.tip(tree, setdiff(tree$tip.label, tree_lab$genus))
+    print(paste("ntips before dropping ambiguous",length(tree$tip.label)))
+    print(paste("no. tips in unambiguous label data", nrow(tree_lab)))
+    print(paste("ntips after dropping ambiguous",length(tree_unambig$tip.label)))
+    trees_unambig[[i]] <- tree_unambig
+    
+    if (export_trees){
+      write.nexus(tree_unambig, file=paste(substr(name, 1, 3), "nat_genus.tre", sep="_"))
+    }
+  }
+  return(trees_unambig)
+}
+
+
+label_phylogenies <- function(){
+  label_data <- read.csv("shape_data/Naturalis/jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus_labelled.csv")
+  trees <- nat_tree_intersect(tree_path="phylo_data/raw_trees")
+  tree_labs <- generate_tree_labs(trees, label_data, export_labs=TRUE)
+  trees_unambig <- drop_ambiguous_tips(trees, tree_labs, export_trees=TRUE)
+}
+
+get_nat_tree_intersect <- function(){
+  nat_tree_intersect(tree_path="phylo_data/raw_trees")
+}
+
+nat_tree_intersect(tree_path="phylo_data/raw_trees")
+#x <- read.csv("jan_nat_species.csv")
+#x <- read.csv("zun_nat_genus.csv")
+#y <- read.csv("jan_nat_genus.csv")
+#z <- intersect(x$genus, y$genus)
+#a <- intersect(x$species, y$species)
+#b <- union(x$species, y$species)
+#union <- rbind(x,y)
+#union <- unique(union)
+#write.csv(union, "jan_zun_union_nat_genus.csv", row.names=FALSE)
 
 load_apg <- function(){
   apg <- read.csv("leaf_data/APG_IV/APG_IV_ang_fams.csv")
 }
+
 
 tree_shape_intersect <- function(tree_path, tree, shape_data){
   if (grepl("Zuntini", tree_path)){
@@ -122,7 +251,7 @@ get_sample_from_shape_data <- function(sample_ids, shape_data){
   return(sample_full_unique)
 }
 
-generate_phylo_naturais_intersect <- function(){
+generate_phylo_naturalis_intersect <- function(){
   
   tree_path <- "Zuntini_2024/trees/4_young_tree_smoothing_10_pruned_for_diversification_analyses.tre"
   shape_dataset <- "Naturalis"
