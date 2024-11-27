@@ -857,19 +857,41 @@ def prop_curves():
         grouped_by_leaf["total_shape_leafid"] / grouped_by_leaf["total_leafid"]
     )
 
+    # grouped_by_leaf["first_cat"] = grouped_by_leaf["first_cat"].map(
+    #     {"u": "Unlobed", "l": "Lobed", "d": "Dissected", "c": "Compound"}
+    # )
+    # grouped_by_leaf["shape"] = grouped_by_leaf["shape"].map(
+    #     {"u": "Unlobed", "l": "Lobed", "d": "Dissected", "c": "Compound"}
+    # )
+
     print(grouped_by_leaf)
 
-    sns.relplot(
-        data=grouped_by_leaf,
-        x="step",
-        y="proportion",
-        col="first_cat",
-        hue="shape",
-        kind="line",
-        col_wrap=2,
-        col_order=order,
-        errorbar="ci",  # 95% confidence interval calculated with bootstrapping see https://seaborn.pydata.org/tutorial/error_bars.html
-    ).set_axis_labels("step", "average proportion").set(xlim=(0, 60))
+    # plt.rcParams["font.family"] = "CMU Serif"
+    g = (
+        sns.relplot(
+            data=grouped_by_leaf,
+            x="step",
+            y="proportion",
+            col="first_cat",
+            hue="shape",
+            kind="line",
+            col_wrap=2,
+            hue_order=order,
+            col_order=order,
+            errorbar="ci",  # 95% confidence interval calculated with bootstrapping see https://seaborn.pydata.org/tutorial/error_bars.html
+        )
+        .set_axis_labels("Step", "Mean Prop.")
+        .set(xlim=(0, 60))
+    )
+
+    custom_titles = [
+        "Initial shape: Unlobed",
+        "Initial shape: Lobed",
+        "Initial shape: Dissected",
+        "Initial shape: Compound",
+    ]  # Add your titles here
+    for ax, title in zip(g.axes.flat, custom_titles):
+        ax.set_title(title)
 
     plt.show()
 
@@ -1082,7 +1104,7 @@ def curves_CTMC_MLEsimfit():
 def curves_CTMC_mcmcsimfit():
     # Get mcmc data
     mcmc_data = pd.read_csv(
-        "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
+        "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/MUT2.2_emcee_run_log_24-04-24.csv"
     )
     # mcmc_data = pd.read_csv("emcee_run_log.csv")
     name_map = {
@@ -1838,15 +1860,16 @@ def MLE_rates_barplot():
 
 
 if __name__ == "__main__":
+    # curves_CTMC_MLEsimfit()
     # curves_CTMC_mcmcsimfit()
     # MLE_rates_barplot()
     # randomwalk_rates_firstswitch()
     # plot_sim_and_phylogeny_curves()
 
     # stack_plot()
-    paramspace()
+    # paramspace()
 
-    # prop_curves()
+    prop_curves()
 
     # curves_phylogeny()
 
