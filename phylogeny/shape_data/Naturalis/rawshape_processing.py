@@ -3,8 +3,8 @@ import os
 import re
 from datetime import datetime
 
-wd = "sample_eud_zuntini_10-09-24"
-file_name = "Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera.csv"
+wd = "jan_zun_nat_ang_26-09-24"
+file_name = "jan_zun_union_nat_genus.csv"
 data_name = file_name.split(".")[0]
 
 
