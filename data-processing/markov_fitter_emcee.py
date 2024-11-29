@@ -8,15 +8,29 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 import multiprocessing
 import os
+import corner
 
+n_processes = 10 # for parallelisation
 init_lb, init_ub = 0, 0.1 # lb and ub of uniform distribution for initial values
-ndim = 12
-nwalkers = 24
-nsteps = 25000
-nshuffle = 200 #25
+ndim = 12 # no. rate parameters
+nwalkers = 24 # no. markov chains run in parallel
+nsteps = 100 #25000 # no. steps for each markov chain
+nshuffle = 1# 25 # no. times the leaf dataset is shuffled
 shuffsize = 16 # must be a multiple of 4, so that equal no. each shape is in the shuffsample
-burnin = 15000
-thin = 100
+burnin = 0 #15000 # these first iterations are discarded from the chain
+thin = 0 #100 # only every thin iteration is kept
+t = 1 # the value of time for each timstep in P=exp[Q*t]
+print("MCMC Hyper Parameters:")
+print(f"n_processes = {n_processes}")
+print(f"init_lb = {init_lb}, init_ub = {init_ub}")
+print(f"ndim = {ndim}")
+print(f"nwalkers = {nwalkers}")
+print(f"nsteps = {nsteps}")
+print(f"nshuffle = {nshuffle}")
+print(f"shuffsize = {shuffsize}")
+print(f"burnin = {burnin}")
+print(f"thin = {thin}")
+print(f"t = {t}")
 
 rates_map = {
     0: ("u", "l"),
@@ -51,6 +65,8 @@ transition_map_rates = {
     "cd": (3, 2),
     "cc": (3, 3),
 }
+
+labels = ["ul","ud","uc","lu","ld","lc","du","dl","dc","cu","cl","cd"]
 
 
 def get_data():
@@ -124,7 +140,7 @@ def get_transition_count_avg(dfs):
 
     # total of each transition per walkid per leafid
     counts = pd.concat(count_dfs).reset_index(drop=True)
-    print(counts)
+    # print(counts)
     # counts["count_norm"] = counts["count"] / counts["walk_length"]
 
     # total no. each transition per leafid
@@ -133,14 +149,14 @@ def get_transition_count_avg(dfs):
         .agg(["sum"])
         .reset_index()
     )
-    print(leaf_sum)
+    # print(leaf_sum)
     # average no. each transition across leafids
     leaf_avg = (
         leaf_sum.groupby(["transition"])["sum"]
         .agg(["mean", "std", "sem"])
         .reset_index()
     )
-    print(leaf_avg)
+    # print(leaf_avg)
     # avg_counts["sem"] = avg_counts["sem"].fillna(
     #     0
     # )  # Beware this will give spuriously tight confidence interval - technically the interval is infinite
@@ -165,7 +181,7 @@ def get_transition_count_avg(dfs):
     # }
     # leaf_avg["transition"] = leaf_avg["transition"].replace(transition_map)
     # leaf_avg.to_csv("MUT2_counts.csv", index=False)
-    print(leaf_avg)
+    # print(leaf_avg)
     mean = leaf_avg[["transition", "mean"]].rename(columns={"mean": "count"})
     ub = leaf_avg[["transition", "ub"]].rename(columns={"ub": "count"})
     lb = leaf_avg[["transition", "lb"]].rename(columns={"lb": "count"})
@@ -255,7 +271,7 @@ def log_likelihood(params):
         ]
     )
     log_likelihood = 0
-    Pt = scipy.linalg.expm(Q)  # * 0.1)  # t=1 for every transition
+    Pt = scipy.linalg.expm(Q * t)  # * 0.1)  # t=1 for every transition
     for i, transition in enumerate(transitions["transition"]):
         log_likelihood += transitions["count"][i] * np.log(
             Pt[transition_map_rates[transition]]
@@ -308,9 +324,12 @@ def get_maximum_likelihood():
         print(f"Maximum likelihood rates: {Q_ml}")
         Q_mls.append(Q_ml)
     Q_mldf = pd.DataFrame(Q_mls)
+    print(Q_mldf.describe())
     print(Q_mldf)
     plt.figure(figsize=(14,7))
-    plt.boxplot([Q_mldf[col] for col in Q_mldf.columns], labels=Q_mldf.columns)
+    # plt.boxplot([Q_mldf[col] for col in Q_mldf.columns], labels=Q_mldf.columns)
+    plt.violinplot([Q_mldf[col] for col in Q_mldf.columns], showmeans=True, showmedians=False)
+    plt.xticks([y + 1 for y in range(len(Q_mldf.columns))], labels=["ul","ud","uc","lu","ld","lc","du","dl","dc","cu","cl","cd"])
     plt.xlabel("Transition")
     plt.ylabel("Maximum likelihood rate")
     plt.show()
@@ -324,7 +343,7 @@ def run_mcmc():
     transitions = mean
     # transitions = get_transition_count(dfs)
 
-    print(transitions)
+    # print(transitions)
     init_params = np.random.rand(nwalkers, ndim)  # initial values drawn between 0 and 1
     init_params = np.random.uniform(0, 0.1)
 
@@ -340,11 +359,10 @@ def run_mcmc():
     return samples, sampler
 
 
-def run_mcmc_leaf_uncert(pid):
+def run_mcmc_leaf_uncert(run_id, pid):
     dfs = get_data()
     global transitions
     leaf_sum = get_leaf_transitions(dfs)
-    print(leaf_sum)
     leaf_grouped = leaf_sum.groupby(["first_cat", "leafid"])
     # first_cat = np.random.choice(["u", "l", "d", "c"])
     # infer rates from the mean transition counts of 8 random leaves, 2 from each category
@@ -370,7 +388,6 @@ def run_mcmc_leaf_uncert(pid):
         transitions = (
             leaf_sum_sub.groupby("transition")["count"].agg("mean").reset_index()
         )
-        print(transitions)
         # infer rates from this particular sample
         # init_params = np.random.rand(nwalkers, ndim)
         init_params = np.random.uniform(init_lb, init_ub, (nwalkers, ndim)) # generate initial values to fill Q matrix for each walker
@@ -384,7 +401,7 @@ def run_mcmc_leaf_uncert(pid):
             sampler.get_chain(flat=True, discard=burnin, thin=thin), decimals=6
         )
         samples = pd.DataFrame(samples)
-        samples.to_csv(f"emcee_run_log_{sample_str}_{pid}_{i}.csv", index=False)
+        samples.to_csv(f"{run_id}/emcee_run_log_{sample_str}_{pid}_{i}.csv", index=False)
 
         chain = sampler.get_chain()[
             :, 1, :
@@ -398,7 +415,7 @@ def run_mcmc_leaf_uncert(pid):
         chain_long["shuffle_id"] = i
         chain_samples.append(chain_long)
     chain_samples = pd.concat(chain_samples)
-    chain_samples.to_csv(f"emcee_run_chain1_{pid}.csv", index=False)
+    chain_samples.to_csv(f"{run_id}/emcee_run_chain1_{pid}.csv", index=False)
     # sns.relplot(
     #     data=chain_long,
     #     x="step",
@@ -411,16 +428,133 @@ def run_mcmc_leaf_uncert(pid):
     # plt.clf()
 
 
-def run_leaf_uncert_parallel():
-    n_processes = 10
+def run_leaf_uncert_parallel(run_id):
+    os.mkdir(run_id)
+    output_file = f'{run_id}/mcmc_hyper_parameters.txt'
+
+    with open(output_file, 'w') as file:
+        file.write(f"Run {run_id} MCMC Hyper Parameters:\n")
+        file.write(f"n_processes = {n_processes}\n")
+        file.write(f"init_lb = {init_lb}, init_ub = {init_ub}\n")
+        file.write(f"ndim = {ndim}\n")
+        file.write(f"nwalkers = {nwalkers}\n")
+        file.write(f"nsteps = {nsteps}\n")
+        file.write(f"nshuffle = {nshuffle}\n")
+        file.write(f"shuffsize = {shuffsize}\n")
+        file.write(f"burnin = {burnin}\n")
+        file.write(f"thin = {thin}\n")
+        file.write(f"t = {t}\n")
+
+    print(f"Parameters have been saved to {output_file}")
+
     processes = []
-    for i in range(n_processes):
-        process = multiprocessing.Process(target=run_mcmc_leaf_uncert, args=(i,))
+    for pid in range(n_processes):
+        process = multiprocessing.Process(target=run_mcmc_leaf_uncert, args=(run_id, pid))
         processes.append(process)
         process.start()
 
     for process in processes:
         process.join()
+
+def run_leaf_uncert_parallel_pool(run_id):
+    os.mkdir(run_id)
+    output_file = f'{run_id}/mcmc_hyper_parameters.txt'
+
+    with open(output_file, 'w') as file:
+        file.write(f"Run {run_id} MCMC Hyper Parameters:\n")
+        file.write(f"n_processes = {n_processes}\n")
+        file.write(f"init_lb = {init_lb}, init_ub = {init_ub}\n")
+        file.write(f"ndim = {ndim}\n")
+        file.write(f"nwalkers = {nwalkers}\n")
+        file.write(f"nsteps = {nsteps}\n")
+        file.write(f"nshuffle = {nshuffle}\n")
+        file.write(f"shuffsize = {shuffsize}\n")
+        file.write(f"burnin = {burnin}\n")
+        file.write(f"thin = {thin}\n")
+        file.write(f"t = {t}\n")
+
+    print(f"Parameters have been saved to {output_file}")
+
+    dfs = get_data()
+    global transitions
+    leaf_sum = get_leaf_transitions(dfs)
+    leaf_grouped = leaf_sum.groupby(["first_cat", "leafid"])
+    # first_cat = np.random.choice(["u", "l", "d", "c"])
+    # infer rates from the mean transition counts of 8 random leaves, 2 from each category
+    chain_samples = []
+    for i in range(0, nshuffle):
+        np.random.seed()
+        sample = []
+        # pick equal no. random leaves from each first_cat - they are sampled without replacement
+        shapes = ["u", "l", "d", "c"]
+        for shape in shapes:
+            leaf = np.random.choice(
+                [key[1] for key in list(leaf_grouped.groups.keys()) if key[0] == shape],
+                size=int(shuffsize / len(shapes)), # ensure equal no. of each shape in the shuffsample
+                replace=False,
+            )
+            sample.extend(leaf)
+        sample_str = "-".join(str(x) for x in sample)
+        # retrieve the counts associated with each of the leaves in the sample
+        leaf_sum_sub = leaf_sum[leaf_sum["leafid"].isin(sample)][
+            ["transition", "sum"]
+        ].rename(columns={"sum": "count"})
+        # calculate the mean count of each transition type for each initial leaf
+        transitions = (
+            leaf_sum_sub.groupby("transition")["count"].agg("mean").reset_index()
+        )
+        # infer rates from this particular sample
+        init_params = np.random.uniform(init_lb, init_ub, (nwalkers, ndim)) # generate initial values to fill Q matrix for each walker
+
+        # set up file to save the run
+        filename = f"{run_id}/{run_id}_{i}.h5"
+        backend = emcee.backends.HDFBackend(filename)
+        backend.reset(nwalkers, ndim)
+        with multiprocessing.Pool() as pool:
+            sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, pool=pool, backend=backend)
+            state = sampler.run_mcmc(
+                init_params, nsteps, skip_initial_state_check=True, progress=True
+            )
+        # reduce the size of the saved chain by discarding the burnin and rounding each step and recording only every thin step
+        # samples = np.round(
+        #     sampler.get_chain(flat=True, discard=burnin, thin=thin), decimals=6
+        # )
+        plot_trace(sampler)
+        # tau = sampler.get_autocorr_time()
+        # print(f"No. steps until autocorrelation: {tau}")
+        # samples = pd.DataFrame(samples)
+        # samples.to_csv(f"{run_id}/emcee_run_log_{sample_str}_{i}.csv", index=False)
+        # here we take all steps for all parameters from one chain
+        chain = pd.DataFrame(chain)
+        chain["step"] = chain.index
+        chain_long = pd.melt(
+            chain, id_vars=["step"], var_name="parameter", value_name="rate"
+        )
+        chain_long["shuffle_id"] = i
+        chain_samples.append(chain_long)
+    chain_samples = pd.concat(chain_samples)
+    chain_samples.to_csv(f"{run_id}/emcee_run_chain1_.csv", index=False)
+    
+def corner_plot(sampler):
+    flat_samples = sampler.get_chain(flat=True)
+    corner_fig = corner.corner(flat_samples, labels=labels)
+    plt.tight_layout()
+    plt.show()
+
+def plot_trace(sampler):
+    fig, axes = plt.subplots(4, 4, figsize=(10,7), sharex=True)
+    samples = sampler.get_chain()
+    idx = 0
+    for i, row in enumerate(axes):
+        for j, ax in enumerate(row):
+            if i == j:
+                ax.axis("off")
+                continue
+            ax.plot(samples[:,:,idx], c="C0", alpha=0.3) # from the left to right the indicies represent: step, chain, parameter
+            ax.set_ylabel(labels[idx])
+            idx += 1
+    plt.tight_layout()
+    plt.show()
 
 
 def plot_posterior(samples, sampler):
@@ -512,9 +646,8 @@ def plot_posterior_fromfile(file):
     plt.show()
 
 
-def combine_posteriors_from_file():
+def combine_posteriors_from_file(directory):
 
-    directory = "markov_fitter_reports/emcee/24chains_25000steps_15000burnin_thin100_09-10-24"
     dfs = []
     for filename in os.listdir(directory):
         if (
@@ -606,11 +739,12 @@ def plot_chain_from_file():
 if __name__ == "__main__":
     # dfs = get_data()
     # get_transition_count_avg(dfs)
-    # run_leaf_uncert_parallel()
-    # run_mcmc_leaf_uncert(0)
+    run_leaf_uncert_parallel_pool(run_id="mcmc_29-11-24")
+    # run_mcmc_leaf_uncert()
     # plot_chain_from_file()
-    # combine_posteriors_from_file()
-    get_maximum_likelihood()
+    # combine_posteriors_from_file(directory="markov_fitter_reports/emcee/24chains_25000steps_15000burnin_thin100_09-10-24")
+    # combine_posteriors_from_file(directory="mcmc_29-11-24")
+    # get_maximum_likelihood()
     # samples, sampler = run_mcmc()
     # plot_posterior(samples, sampler)
     # plot_posterior_fromfile(
