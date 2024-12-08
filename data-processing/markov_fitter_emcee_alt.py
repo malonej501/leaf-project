@@ -9,7 +9,10 @@ import multiprocessing
 import os
 import corner
 import re
+import sys
 
+# set default parameters
+func = 0 # default value is running the mcmc inference
 n_processes = 10 # for parallelisation
 init_lb, init_ub = 0, 0.1 # lb and ub of uniform distribution for initial values
 ndim = 12 # no. rate parameters
@@ -21,8 +24,9 @@ thin = 10 #100 # only every thin iteration is kept
 t = 1 # the value of time for each timstep in P=exp[Q*t]
 wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
 # wd = "leaves_full_15-9-23_MUT1_CLEAN"
+cutoff = 60 # the simulation data is cutoff at this step number before being used to fit the CTMC model
 # run_id = "MUT2_mcmc_03-12-24"
-run_id = "MUT2_mcmc_04-12-24"
+run_id = "MUT2_mcmc_08-12-24"
 # run_id = "MUT1_mcmc_04-12-24"
 
 rates_map = {
@@ -132,7 +136,7 @@ def get_leaf_transitions(dfs):
             for i, curr in enumerate(steps):
                 if i == 0:
                     prev = initial_state
-                if i > 60: # only fit to data from the first 60 steps of each walk
+                if i > cutoff: # only fit to data from the first 60 steps of each walk
                     break
                 else:
                     prev = steps[i - 1]
@@ -306,6 +310,7 @@ def run_leaf_uncert_parallel_pool():
         file.write(f"burnin = {burnin}\n")
         file.write(f"thin = {thin}\n")
         file.write(f"t = {t}\n")
+        file.write(f"cutoff = {cutoff}\n")
         file.write(f"wd = {wd}\n")
 
     print("MCMC Hyper Parameters:")
@@ -318,6 +323,7 @@ def run_leaf_uncert_parallel_pool():
     print(f"burnin = {burnin}")
     print(f"thin = {thin}")
     print(f"t = {t}")
+    print(f"cutoff = {cutoff}")
     print(f"wd = {wd}")
 
     print(f"Parameters have been saved to {output_file}")
@@ -351,6 +357,7 @@ def run_leaf_uncert_parallel_pool():
     # )
     Q_ml = get_maximum_likelihood()
     plot_trace(sampler, Q_ml)
+    sample_chain(sampler)
     tau = sampler.get_autocorr_time()
     print(f"No. steps until autocorrelation: {tau}")
     # samples = pd.DataFrame(samples)
@@ -392,13 +399,10 @@ def plot_trace(sampler, ml_rates):
 
 def sample_chain(sampler):
     flat_samples = sampler.get_chain(discard=burnin, thin=thin, flat=True)
-    print(flat_samples)
-    print(np.shape(flat_samples))
     flat_samples_df = pd.DataFrame(flat_samples, columns=list(range(flat_samples.shape[1])))
-    print(flat_samples_df)
     flat_samples_df.to_csv(f"{run_id}/posteriors_{run_id}.csv",index=False)
 
-def sampler_from_file(func):
+def sampler_from_file():
     h_params_path = run_id + "/h_params_" + run_id + ".txt"
     with open(h_params_path, "r") as file:
         h_params = file.readlines()
@@ -410,18 +414,45 @@ def sampler_from_file(func):
     # print(f"No. steps until autocorrelation: {tau}")
     ml_rates = pd.read_csv(f"{run_id}/ML_{run_id}.csv")
 
-    if func == 1:
+    if func == 2:
         plot_trace(reader, ml_rates)
-    elif func == 2:
+    elif func == 3:
         sample_chain(reader)
     # corner_plot(reader)
 
+def print_help():
+    help_message = """
+    Usage: python3 markov_fitter_emcee_alt.py [options]
+
+    Options:
+        -h              Show this help messahe and exit.
+        -id [run id]    The name given to the mcmc/mle run.
+        -f  [function]  Pass function you want to perform:
+                        0   ...run mcmc inference
+                        1   ...run mle inference
+                        2   ...plot mcmc trace from file
+                        3   ...export mcmc posteriors from file
+    """
+    print(help_message)
+
 if __name__ == "__main__":
-    sampler_from_file(func=2)
+    args = sys.argv[1:]
+    if "-h" in args:
+        print_help()
+    
+    else:
+        if "-id" in args:
+            run_id = int(args[args.index("-id") + 1])
+        if "-f" in args:
+            func = int(args[args.index("-f") + 1])
+            if func  == 0:
+                run_leaf_uncert_parallel_pool()
+            if func == 1:
+                get_maximum_likelihood()
+            if func == 2 or func == 3:
+                sampler_from_file()
+    # sampler_from_file(func=2)
     # get_maximum_likelihood()
-    # dfs = get_data()
-    # get_transition_count_avg(dfs)
-    # run_leaf_uncert_parallel_pool(run_id="MUT2_mcmc_04-12-24")
     # run_mcmc_leaf_uncert()
     # plot_chain_from_file()
     # combine_posteriors_from_file(directory="markov_fitter_reports/emcee/24chains_25000steps_15000burnin_thin100_09-10-24")
