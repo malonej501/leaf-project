@@ -5,7 +5,7 @@ library(tibble)
 library(ggplot2)
 
 # Loading and processing data
-data = read.csv("MUT2.2.csv")
+data = read.csv("../MUT2.2.csv")
 # create state variable with shape as numbers
 data$state = as.numeric(factor(data$shape, levels = c("u","l","d","c")))
 # create id variable for each leaf for each walk
