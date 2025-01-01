@@ -16,7 +16,8 @@ from pyvirtualdisplay import Display
 
 #################################### Initialisation ####################################
 
-scheme = "mut3"  # model of mutation
+run_id = "explore_01-01-25"  # the id of the run
+scheme = "mut2"  # model of mutation
 testvals = [10, 1, 0.1]  # only relevant for scheme = "mut1"
 startleaf = 0  # the index of the leaf in pdict that the simulation will start at, 0 for the beginning
 # testvals = [0,0,0]
@@ -44,6 +45,30 @@ veinswidth_thresh = (
 wd = "/home/m/malone/GitHub/leaf-project/vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01"
 
 nleaves = len(pdict["pspace1"])
+
+# print hyperparameters to a file
+h_params = {
+    "scheme": scheme,
+    "testvals": testvals,
+    "startleaf": startleaf,
+    "ngen_thresh": ngen_thresh,
+    "ncores": ncores,
+    "timeout": timeout,
+    "symmetry_thresh": symmetry_thresh,
+    "weightdifference_thresh": weightdifference_thresh,
+    "primordium_thresh": primordium_thresh,
+    "overlappingmargin_thresh": overlappingmargin_thresh,
+    "veinarea_thresh": veinarea_thresh,
+    "veinsoutsidelamina_thresh": veinsoutsidelamina_thresh,
+    "veinswidth_thresh": veinswidth_thresh,
+    "wd": wd,
+    "nleaves": nleaves
+}
+
+with open(f"h_params_{run_id}.txt", 'w') as file:
+    for name, value in h_params.items():
+        file.write(f"{name}: {value}\n")
+
 
 # remove old leaf storage directory (if it exists) and create a new one
 if os.path.exists(wd + "/leaves"):
@@ -272,6 +297,7 @@ def testparams(plist, plist_i, step, wid, leafid, report):
                 print(f"#### leaf_{leafid}_{wid}_{step}.png failed to generate!")
 
     elif scheme == "mut3":
+        """Only sample morphogen parameters in INITSAMPLE"""
         p = random.randint(7, 20)
         print(
             f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####"
@@ -927,7 +953,7 @@ def start():
 
 
 if __name__ == "__main__":
-    # start()
+    start()
     pass
 
 ######################################################################################################################
@@ -963,11 +989,6 @@ def generatedefault():
     templist[-7] = 0
 
     runsim(step, templist, wid, leafid)
-
-
-generatedefault()
-# generatedefaults()
-
 
 def leafmeasure(mode):
     """Prints out the morphometrics by which leafs are assessed for validity"""
@@ -1052,6 +1073,3 @@ def leafmeasure(mode):
 
     else:
         print("ERROR: Invalid Mode")
-
-
-# leafmeasure("batch")
