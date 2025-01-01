@@ -1377,8 +1377,11 @@ def plot_sim_and_phylogeny_curves_nouncert():
 
     #### Get sim-rates ####
 
+    # sim_rates = (
+    #     pd.read_csv("markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv") * 0.1 # forgot to remove a * 0.1 in the emcee code so all rates were higher by a factor of 10
+    # )
     sim_rates = (
-        pd.read_csv("markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv") * 0.1
+        pd.read_csv("markov_fitter_reports/emcee/posteriors_MUT2_mcmc_03-12-24.csv")
     )
     name_map = {
         "0": "q01",
@@ -1572,7 +1575,8 @@ def plot_sim_and_phylogeny_curves_nouncert():
                     ax.set_xlabel("Step")
                     if idx == 0:
                         # ax.set_title("MUT2 Data")
-                        ax.set_ylabel("Mean Prop.")
+                        # ax.set_ylabel("Mean Prop.")
+                        ax.set_ylabel("P")
                         # ax.annotate(  # This adds the row labels
                         #     f"Initial shape\n{order_full[j]}",
                         #     xy=(0.5, 1),
@@ -1777,8 +1781,14 @@ def plot_sim_and_phylogeny_curves():
 
     #### Get sim-rates ####
 
+    # sim_rates = (
+    #     pd.read_csv("markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv") * 0.1
+    # )
+    # sim_rates = (
+    #     pd.read_csv("markov_fitter_reports/emcee/posteriors_MUT2_mcmc_04-12-24.csv")
+    # )   
     sim_rates = (
-        pd.read_csv("markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv") * 0.1
+        pd.read_csv("markov_fitter_reports/emcee/posteriors_MUT2_mcmc_05-12-24.csv")
     )
     name_map = {
         "0": "q01",
@@ -2664,8 +2674,8 @@ if __name__ == "__main__":
     # curves_CTMC_mcmcsimfit()
     # MLE_rates_barplot()
     # randomwalk_rates_firstswitch()
-    # plot_sim_and_phylogeny_curves()
-    plot_sim_and_phylogeny_curves_nouncert()
+    plot_sim_and_phylogeny_curves()
+    # plot_sim_and_phylogeny_curves_nouncert()
     # plot_sim_and_phylogeny_curves_vert()
 
     # stack_plot()

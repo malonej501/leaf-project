@@ -177,15 +177,18 @@ def import_phylo_and_sim_rates(plot_order, calc_diff):
     # to return differences between rates rather than raw rates, set calc_diff to true
     #### import data ####
     phylo_rates = get_rates_batch(directory="rates/uniform_1010000steps")
-    s1 = pd.read_csv(
-        "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT1.csv"
-    )
     # s1 = pd.read_csv(
-    #     "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2_09-10-24.csv"
+    #     "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT1.csv"
+    # )
+    s1 = pd.read_csv(
+        "../data-processing/markov_fitter_reports/emcee/posteriors_MUT1_mcmc_04-12-24.csv"
+    )
+    # s2 = pd.read_csv(
+    #     "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv"
     # )
     s2 = pd.read_csv(
-        "../data-processing/markov_fitter_reports/emcee/leaf_uncert_posteriors_MUT2.csv"
-    )
+        "../data-processing/markov_fitter_reports/emcee/posteriors_MUT2_mcmc_04-12-24.csv"
+    ) 
     s1["phylo-class"] = "MUT1_simulation"
     s2["phylo-class"] = "MUT2_simulation"
     sim_rates = pd.concat([s1, s2]).reset_index(drop=True)
@@ -278,11 +281,29 @@ def import_phylo_ML_rates(ML_data, plot_order, calc_diff):
     # ML_rates_long.rename(
     #     columns={"dataset": "Dataset"}
     # )  # rename to match column in mcmc rates
-
     return ML_rates_long
 
+def import_sim_ML_rates(calc_diff):
+    mut1_ml = pd.read_csv(f"../data-processing/markov_fitter_reports/emcee/ML_MUT1_mcmc_04-12-24.csv")
+    mut1_ml["Dataset"] = "MUT1_simulation"
+    mut2_ml = pd.read_csv(f"../data-processing/markov_fitter_reports/emcee/ML_MUT2_mcmc_04-12-24.csv")
+    mut2_ml["Dataset"] = "MUT2_simulation"
+    sim_ml = pd.concat([mut1_ml, mut2_ml], ignore_index=True)
+    sim_ml = sim_ml.rename(columns=rates_map2)
+    
+    if calc_diff:
+        transitions = rates_map3.values()
+        for fwd in transitions:
+            bwd = fwd[2] + "→" + fwd[0]
+            if fwd != bwd:
+                col_name = f"{fwd}-{bwd}"
+                sim_ml[col_name] = sim_ml[fwd] - sim_ml[bwd]
 
-def normalise_rates(phylo_sim_long, ML_phylo_rates_long, norm_method):
+    sim_ml_long = pd.melt(sim_ml, id_vars="Dataset",var_name="transition",value_name="rate")
+    sim_ml_long["dataname"] = sim_ml_long["Dataset"] + "_class"
+    return sim_ml_long
+
+def normalise_rates(phylo_sim_long, ML_phylo_rates_long, ML_sim_rates_long, norm_method):
     #### Normalise the rates across datasets ####
     phylo_sim_long_filt = phylo_sim_long[  # only calculate the mean rate for transitions, not transition differences
         phylo_sim_long["transition"].isin(rates_map3.values())
@@ -311,10 +332,20 @@ def normalise_rates(phylo_sim_long, ML_phylo_rates_long, norm_method):
             ),
             on="dataname",
         )
+        ML_sim_rates_long = pd.merge(
+            ML_sim_rates_long,
+            phylo_sim_long[["dataname", "mean_mean"]].drop_duplicates(
+                subset=["dataname"]
+            ),
+            on="dataname",
+        )
 
         # normalise ML rates
         ML_phylo_rates_long["rate_norm"] = (
             ML_phylo_rates_long["rate"] / ML_phylo_rates_long["mean_mean"]
+        )
+        ML_sim_rates_long["rate_norm"] = (
+            ML_sim_rates_long["rate"] / ML_sim_rates_long["mean_mean"]
         )
         # phylo_sim_long["initial_shape"], phylo_sim_long["final_shape"] = zip(
         #     *phylo_sim_long["transition"].map(rates_map)
@@ -418,7 +449,7 @@ def normalise_rates(phylo_sim_long, ML_phylo_rates_long, norm_method):
         ML_phylo_rates_long[ML_phylo_rates_long["dataname"] == "jan_phylo_geeta_class"]
     )
 
-    return phylo_sim_long, ML_phylo_rates_long, summary
+    return phylo_sim_long, ML_phylo_rates_long, ML_sim_rates_long, summary
 
 
 def plot_phylo_and_sim_rates(norm_method, ML_data, legend):
@@ -1978,10 +2009,12 @@ def arrow_w_viol(norm_method, ML_data, layout):
     shape_cats = ["Unlobed", "Lobed", "Dissected", "Compound"]
 
     ML_phylo_rates_long = import_phylo_ML_rates(ML_data, plot_order, calc_diff=True)
+    ML_sim_rates_long = import_sim_ML_rates(calc_diff=True)
     phylo_sim_long = import_phylo_and_sim_rates(plot_order, calc_diff=True)
-    phylo_sim_long, ML_phylo_rates_long, summary = normalise_rates(
-        phylo_sim_long, ML_phylo_rates_long, norm_method
+    phylo_sim_long, ML_phylo_rates_long, ML_sim_rates_long, summary = normalise_rates(
+        phylo_sim_long, ML_phylo_rates_long, ML_sim_rates_long, norm_method
     )
+
     rate_data = test_rates_diff_from_zero(phylo_sim_long)
     # rate_data = pd.read_csv("sim_phylo_rates_stats_meanmean_mixedpriors_18-09-24.csv")
     # rate_data.rename(columns={"Dataset_": "dataset"}, inplace=True)
@@ -2153,9 +2186,11 @@ def arrow_w_viol(norm_method, ML_data, layout):
             if (layout == "h" and i == 1) or (layout == "v" and j == 1):
 
                 mcmc_plot_data = phylo_sim_long[phylo_sim_long["Dataset"] == dataset]
-                ml_plot_data = ML_phylo_rates_long[
+                ml_phylo_plot_data = ML_phylo_rates_long[
                     ML_phylo_rates_long["dataname"].apply(lambda x: x in dataset)
                 ]
+                ml_sim_plot_data = ML_sim_rates_long[ML_sim_rates_long["Dataset"].apply(lambda x: x in dataset)]
+                print(ml_sim_plot_data)
                 rates = []
                 ml_rates = []
                 for transition in transitions:
@@ -2164,16 +2199,23 @@ def arrow_w_viol(norm_method, ML_data, layout):
                             mcmc_plot_data["transition"] == transition
                         ].squeeze()
                     )
-                    if not ml_plot_data.empty:
-                        x = ml_plot_data[
-                            ml_plot_data["transition"] == transition
+                    if not ml_phylo_plot_data.empty:
+                        x = ml_phylo_plot_data[
+                            ml_phylo_plot_data["transition"] == transition
                         ].reset_index(drop=True)
 
                         if not x.empty:
                             # ml_rates.append(x.loc[0, "rate_norm_diff"])
                             ml_rates.append(x.loc[0, "rate_norm"])
-                    else:
+                    if not ml_sim_plot_data.empty:
+                        x = ml_sim_plot_data[
+                            ml_sim_plot_data["transition"] == transition
+                        ].reset_index(drop=True)
+                        if not x.empty:
+                            ml_rates.append(x.loc[0, "rate_norm"])
+                    if ml_phylo_plot_data.empty and ml_sim_plot_data.empty:
                         ml_rates.append(np.nan)
+                print(ml_rates)
 
                 p = ax.violinplot(
                     rates,

@@ -362,13 +362,13 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
 
 # run_select_trees(
 #     datasets=["ALL"],
-#     run_name="ML_nqm_2",
+#     run_name="ML_7_species_genus",
 #     method="ML",
-#     ML_data="ML_1",
+#     ML_data="None",
 # )
-# run_select_trees(["ALL"], "uniform0-0.1_res_1", "MCMC", "ML_1")
+run_select_trees(["ALL"], "uniform0-0.1_species_genus", "MCMC", "ML_7_species_genus")
 # run_select_trees(["ALL"], "uniform0-100_res_1", "MCMC", "ML_res_1")
-run_select_trees(["ALL"], "exp1_1", "MCMC", "ML_3")
+# run_select_trees(["ALL"], "exp1_1", "MCMC", "ML_3")
 
 
 # run_select_trees(
@@ -380,5 +380,5 @@ run_select_trees(["ALL"], "exp1_1", "MCMC", "ML_3")
 #     "MCMC",
 #     "ML_3",
 # )
-# get_ML_rates("data/ML_jan_zun_equal_genus_5")
+# get_ML_rates("data/ML_7_species_genus")
 # get_marginal_likelihood("data/uniform0-0.1_unres_1")
