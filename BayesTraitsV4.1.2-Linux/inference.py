@@ -7,10 +7,40 @@ import multiprocessing
 import subprocess
 import os
 import shutil
+import sys
 
+# set default parameter values
+ML_data = "ML_6_genus"
 burnin = 100000
-plt.rcParams["font.family"] = "CMU Serif"
-plt.rcParams["font.size"] = 12
+datasets = [
+    "geeta_phylo_geeta_class",
+    "jan_genus_phylo_nat_26-09-24_class",
+    "zun_genus_phylo_nat_26-09-24_class"
+    ]
+log_exclude = [ # columns to exclude from the log file
+    # "Iteration",
+    "Tree No",
+    "Model string",
+    "Unnamed: 19",
+    "Unnamed: 22",
+]
+
+rate_map = {
+    "q01" : "ul",
+    "q02" : "ud",
+    "q03" : "uc",
+    "q10" : "lu",
+    "q12" : "ld",
+    "q13" : "lc",
+    "q20" : "du",
+    "q21" : "dl",
+    "q23" : "dc",
+    "q30" : "cu",
+    "q31" : "cl",
+    "q32" : "cd",
+}
+# plt.rcParams["font.family"] = "CMU Serif"
+# plt.rcParams["font.size"] = 12
 
 # file = "BayesTraitsV4.0.0-Linux/Janssens/sample_eud_21-1-24/mcmc/prior_0-1/img_labels_unambig_full_21-1-24.txt.Log.txt"
 # file = "BayesTraitsV4.0.0-Linux/Janssens/sample_eud_21-1-24/mcmc/prior_0-1_run2/img_labels_unambig_full_21-1-24.txt.Log.txt"
@@ -161,7 +191,7 @@ def get_marginal_likelihood(run_name):
     return marglhs_df
 
 
-def plot_trace(file, run_name, ML_data):
+def plot_trace_full(file, run_name, ML_data, export):
     save_fig_path = file.rsplit("/", 1)[0]
     log_file_name = file.rsplit("/", 1)[1]
     data_name = log_file_name.rsplit(".")[0]
@@ -205,13 +235,7 @@ def plot_trace(file, run_name, ML_data):
             var
             for var in log.columns
             if var
-            not in [
-                "Iteration",
-                "Tree No",
-                "Model string",
-                "Unnamed: 19",
-                "Unnamed: 22",
-            ]
+            not in log_exclude
         ]
     )
 
@@ -229,13 +253,7 @@ def plot_trace(file, run_name, ML_data):
 
     counter = 0
     for var in log.columns:
-        if var not in [
-            "Iteration",
-            "Tree No",
-            "Model string",
-            "Unnamed: 19",
-            "Unnamed: 22",
-        ]:
+        if var not in log_exclude:
             axes[counter].plot(log["Iteration"], log[var])
             axes[counter].set_ylabel(var)
             axes[counter].grid(True)
@@ -251,11 +269,55 @@ def plot_trace(file, run_name, ML_data):
     fig.tight_layout()
     # Adding a legend
 
-    # plt.savefig(save_fig_path + f"/{data_name}_trace.pdf", format="pdf")
+    if export:
+        plt.savefig(save_fig_path + f"/{run_name}_{data_name}_trace_single.pdf", format="pdf")
 
     # plt.show()
     return fig
 
+
+def plot_trace(file, run_name, ML_data, export):
+    save_fig_path = file.rsplit("/", 1)[0]
+    log_file_name = file.rsplit("/", 1)[1]
+    data_name = log_file_name.rsplit(".")[0]
+
+    # Get ML data for comparison
+    ML_data = pd.read_csv(f"data/{ML_data}/mean_rates_all.csv")
+    # ML_data = pd.read_csv("data/ML_scaletrees0.001_1/mean_rates_all.csv")
+    ML = ML_data[ML_data["dataset"] == data_name].reset_index()
+
+    log = get_log(file)
+    log_exclude.extend(["Lh", "Root P(0)", "Root P(1)", "Root P(2)", "Root P(3)"]) # additional log columns to exclude
+    log_filt = log.drop(columns=log_exclude, errors="ignore") # ignore if not all columns in log_exclude are present
+    fig, axes = plt.subplots(
+        nrows=4,
+        ncols=4,
+        figsize=(10, 7),
+        sharex=True,
+        sharey=True
+    )
+
+    idx = 1 # start from 1 to skip the iteration column
+    for i, row in enumerate(axes):
+        for j, ax in enumerate(row):
+            if i == j:
+                ax.axis("off")
+                continue
+            ax.plot(log_filt["Iteration"], log_filt.iloc[:, idx], c="C0")
+            ax.set_ylabel(rate_map.get(log_filt.columns[idx]))
+            ax.tick_params(axis="y", which="both", labelleft=True)
+            ax.axhline(ML.loc[0, log_filt.columns[idx]], linestyle="--", color="C1", label="ML")   
+            # ax.set_ylim(0, 1)
+            idx += 1
+
+    fig.text(0.5, 0.01, "Iteration", ha="center")
+    fig.tight_layout()
+    # Adding a legend
+
+    if export:
+        plt.savefig(save_fig_path + f"/{run_name}_{data_name}_trace_single.pdf", format="pdf")
+
+    return fig
 
 def plot_marglhs(run_name):
     marglhs = get_marginal_likelihood(run_name)
@@ -292,18 +354,9 @@ def run_BayesTraits(tree, labels):
     return result.stdout
 
 
-def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
+def run_select_trees(data, run_name: str, method: str, ML_data: str):
     run_dir = os.path.join("data", run_name)
     os.makedirs(run_dir, exist_ok=True)
-
-    if datasets == ["ALL"]:
-        data = import_data()
-    else:
-        data = sorted(
-            tuple(
-                (f"data/{dataset}.tre", f"data/{dataset}.txt") for dataset in datasets
-            )
-        )
 
     processes = []
     for tree, labels in data:
@@ -318,7 +371,7 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
         pdf = matplotlib.backends.backend_pdf.PdfPages(f"data/{run_name}_trace.pdf")
         for _, label in data:
             logfilepath = label + ".Log.txt"
-            fig = plot_trace(logfilepath, run_name, ML_data)
+            fig = plot_trace_full(logfilepath, run_name, ML_data, export=False)
             pdf.savefig(fig)
 
         if os.path.exists(datasets[0] + ".txt.Stones.txt"):
@@ -366,7 +419,7 @@ def run_select_trees(datasets: list, run_name: str, method: str, ML_data: str):
 #     method="ML",
 #     ML_data="None",
 # )
-run_select_trees(["ALL"], "uniform0-0.1_species_genus", "MCMC", "ML_7_species_genus")
+# run_select_trees(["ALL"], "uniform0-0.1_species_genus", "MCMC", "ML_7_species_genus")
 # run_select_trees(["ALL"], "uniform0-100_res_1", "MCMC", "ML_res_1")
 # run_select_trees(["ALL"], "exp1_1", "MCMC", "ML_3")
 
@@ -382,3 +435,56 @@ run_select_trees(["ALL"], "uniform0-0.1_species_genus", "MCMC", "ML_7_species_ge
 # )
 # get_ML_rates("data/ML_7_species_genus")
 # get_marginal_likelihood("data/uniform0-0.1_unres_1")
+
+def print_help():
+    help_message = """
+    Usage: python3 inference.py [options]
+
+    Options:
+        -h              Show this help messahe and exit.
+        -id [run id]    The name given to the mcmc/mle run.
+        -d  [datasets]  Pass datasets you want to run inference on, separated by ",":
+                        e.g. "ALL" or "jan_phylo_nat_class-geeta_phylo_geeta_class"
+        -ml [data]      Pass the ML dataset you want to compare the mcmc posteriors to.
+                        e.g. "ML_7_species_genus"
+        -f  [function]  Pass function you want to perform:
+                        0   ...run mcmc inference
+                        1   ...run mle inference
+                        2   ...plot individual mcmc trace from file
+    """
+    print(help_message)
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if "-h" in args:
+        print_help()
+    else:
+        if "-id" in args:
+            run_id = str(args[args.index("-id") + 1])
+        if "-d" in args:
+            datasets = args[args.index("-d") + 1].split(",")
+            if datasets == ["ALL"]:
+                data = import_data()
+            else:
+                data = sorted(
+                    tuple(
+                        (f"data/{dataset}.tre", f"data/{dataset}.txt") for dataset in datasets
+                    )
+                )
+        if "-ml" in args:
+            ML_data = str(args[args.index("-ml") + 1])
+        if "-f" in args:
+            func = int(args[args.index("-f") + 1])
+            if func  == 0:
+                method = "MCMC"
+                run_select_trees(data, run_id, method, ML_data)
+            if func == 1:
+                method = "MLE"
+                run_select_trees(data, run_id, method, ML_data)
+            if func == 2:
+                for _, label in data:
+                    # This assumes the log file is now in the run_id directory, rather than /data
+                    logfilename = label.replace("data/", "") + ".Log.txt"
+                    logfilepath = f"data/{run_id}/{logfilename}"
+                    plot_trace(logfilepath, run_id, ML_data, export=True)
+                # plot_marglhs(run_id)
