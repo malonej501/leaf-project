@@ -137,6 +137,71 @@ def runsim(step, templist, wid, leafid):
             print("##### TIMED OUT")
             break
 
+def take_step(plist, plist_i, p, n, step, wid, leafid, report):
+    print(f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####")
+    metrics = []
+    if prangelist[p] == 1:
+        templist = valchooser(plist, plist_i, n, p)
+        print(f"#### testval = {templist[p]} ####")
+        print(f"#### Current parameter values ####\n{templist}")
+        runsim(step, templist, wid, leafid)
+        if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png"):
+            print(
+                f"#### leaf_{leafid}_{wid}_{step}.png successfully generated! ####"
+            )
+            (margin, 
+             lamina_margintest, 
+             lamina_veinstest, 
+             veins,
+             silhouette,) = leafcomponents(leafid, wid, step)
+            check, failed_conditions = leafchecker(
+                margin, 
+                lamina_margintest, 
+                lamina_veinstest, 
+                veins, 
+                silhouette, 
+                metrics,)
+            if check:
+                # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
+                print(f"#### Leaf check passed!\n")
+                shutil.move(
+                    wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
+                    wd
+                    + f"/leaves/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}.png",
+                )
+                # report.append(f"{wid},{step},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
+                report.append(
+                    [
+                        [wid, step, "leaf_check_passed", list(pdict.keys())[p]]
+                        + templist
+                        + metrics
+                    ]
+                )
+                plist_i = templist
+            else:
+                print(f"#### leaf check failed!\n")
+                shutil.move(
+                    wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
+                    wd
+                    + f"/leaves/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}.png",
+                )
+                # report.append(f"{wid},{step},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
+                report.append(
+                    [
+                        [
+                            wid,
+                            step,
+                            "leaf_check_failed: " + ". ".join(failed_conditions),
+                            list(pdict.keys())[p],
+                        ]
+                        + templist
+                        + metrics
+                    ]
+                )
+        else:
+            # don't set plist_i to the templist
+            print(f"#### leaf_{leafid}_{wid}_{step}.png failed to generate!")
+
 
 def testparams(plist, plist_i, step, wid, leafid, report):
     """Tries different parameter combinations for every element in testvals"""
@@ -151,223 +216,16 @@ def testparams(plist, plist_i, step, wid, leafid, report):
             # try different values in the copy
             # if it doesn't work, return to the last copy of plist_i and try the next value
             # if it works, overwrite plist_i with the successful templist and proceed to the next element
-            print(
-                f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####"
-            )
-            metrics = []
-            if prangelist[p] == 0:
-                break
-            else:
-                templist = valchooser(plist, plist_i, n, p)  # testvals[n]
-                print(f"#### testval = {templist[p]} ####")
-                print(f"#### Current parameter values ####\n{templist}")
-                runsim(step, templist, wid, leafid)
-                if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png"):
-                    print(
-                        f"#### leaf_{leafid}_{wid}_{step}.png successfully generated! ####"
-                    )
-                    (
-                        margin,
-                        lamina_margintest,
-                        lamina_veinstest,
-                        veins,
-                        silhouette,
-                    ) = leafcomponents(leafid, wid, step)
-                    check, failed_conditions = leafchecker(
-                        margin,
-                        lamina_margintest,
-                        lamina_veinstest,
-                        veins,
-                        silhouette,
-                        metrics,
-                    )
-                    if check:
-                        # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
-                        print(f"#### Leaf check passed!")
-                        shutil.move(
-                            wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                            wd
-                            + f"/leaves/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        )
-                        # report.append(f"{wid},{step},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                        report.append(
-                            [
-                                [wid, step, "leaf_check_passed", list(pdict.keys())[p]]
-                                + templist
-                                + metrics
-                            ]
-                        )
-                        plist_i = templist
-                        break
-                    else:
-                        print(f"#### leaf check failed!")
-                        shutil.move(
-                            wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                            wd
-                            + f"/leaves/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}.png",
-                        )
-                        # report.append(f"{wid},{step},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                        report.append(
-                            [
-                                [
-                                    wid,
-                                    step,
-                                    "leaf_check_failed: "
-                                    + ". ".join(failed_conditions),
-                                    list(pdict.keys())[p],
-                                ]
-                                + templist
-                                + metrics
-                            ]
-                        )
-                        continue
-                else:
-                    # don't set plist_i to the templist
-                    print(f"#### leaf_{leafid}_{wid}_{step}.png failed to generate!")
-                    continue
+            take_step(plist, plist_i, p, n, step, wid, leafid, report)
 
     elif scheme == "mut2":
         p = random.randint(0, len(plist) - 1)  # select random parameter to vary
-        print(
-            f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####"
-        )
-        metrics = []
-        if prangelist[p] == 1:
-            templist = valchooser(plist, plist_i, _, p)
-            print(f"#### testval = {templist[p]} ####")
-            print(f"#### Current parameter values ####\n{templist}")
-            runsim(step, templist, wid, leafid)
-            if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png"):
-                print(
-                    f"#### leaf_{leafid}_{wid}_{step}.png successfully generated! ####"
-                )
-                (
-                    margin,
-                    lamina_margintest,
-                    lamina_veinstest,
-                    veins,
-                    silhouette,
-                ) = leafcomponents(leafid, wid, step)
-                check, failed_conditions = leafchecker(
-                    margin,
-                    lamina_margintest,
-                    lamina_veinstest,
-                    veins,
-                    silhouette,
-                    metrics,
-                )
-                if check:
-                    # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
-                    print(f"#### Leaf check passed!")
-                    shutil.move(
-                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        wd
-                        + f"/leaves/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}.png",
-                    )
-                    # report.append(f"{wid},{step},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                    report.append(
-                        [
-                            [wid, step, "leaf_check_passed", list(pdict.keys())[p]]
-                            + templist
-                            + metrics
-                        ]
-                    )
-                    plist_i = templist
-                else:
-                    print(f"#### leaf check failed!")
-                    shutil.move(
-                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        wd
-                        + f"/leaves/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}.png",
-                    )
-                    # report.append(f"{wid},{step},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                    report.append(
-                        [
-                            [
-                                wid,
-                                step,
-                                "leaf_check_failed: " + ". ".join(failed_conditions),
-                                list(pdict.keys())[p],
-                            ]
-                            + templist
-                            + metrics
-                        ]
-                    )
-            else:
-                # don't set plist_i to the templist
-                print(f"#### leaf_{leafid}_{wid}_{step}.png failed to generate!")
+        take_step(plist, plist_i, p, _, step, wid, leafid, report)
 
     elif scheme == "mut3":
         """Only sample morphogen parameters in INITSAMPLE"""
         p = random.randint(7, 20)
-        print(
-            f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####"
-        )
-        metrics = []
-        if prangelist[p] == 1:
-            templist = valchooser(plist, plist_i, _, p)
-            print(f"#### testval = {templist[p]} ####")
-            print(f"#### Current parameter values ####\n{templist}")
-            runsim(step, templist, wid, leafid)
-            if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png"):
-                print(
-                    f"#### leaf_{leafid}_{wid}_{step}.png successfully generated! ####"
-                )
-                (
-                    margin,
-                    lamina_margintest,
-                    lamina_veinstest,
-                    veins,
-                    silhouette,
-                ) = leafcomponents(leafid, wid, step)
-                check, failed_conditions = leafchecker(
-                    margin,
-                    lamina_margintest,
-                    lamina_veinstest,
-                    veins,
-                    silhouette,
-                    metrics,
-                )
-                if check:
-                    # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
-                    print(f"#### Leaf check passed!")
-                    shutil.move(
-                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        wd
-                        + f"/leaves/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}.png",
-                    )
-                    # report.append(f"{wid},{step},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                    report.append(
-                        [
-                            [wid, step, "leaf_check_passed", list(pdict.keys())[p]]
-                            + templist
-                            + metrics
-                        ]
-                    )
-                    plist_i = templist
-                else:
-                    print(f"#### leaf check failed!")
-                    shutil.move(
-                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        wd
-                        + f"/leaves/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}.png",
-                    )
-                    # report.append(f"{wid},{step},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                    report.append(
-                        [
-                            [
-                                wid,
-                                step,
-                                "leaf_check_failed: " + ". ".join(failed_conditions),
-                                list(pdict.keys())[p],
-                            ]
-                            + templist
-                            + metrics
-                        ]
-                    )
-            else:
-                # don't set plist_i to the templist
-                print(f"#### leaf_{leafid}_{wid}_{step}.png failed to generate!")
+        take_step(plist, plist_i, p, _, step, wid, leafid, report)
 
     elif scheme == "mut4.1" or scheme == "mut4.2":
         #### For 4.1 vary just morphogen competence
@@ -378,144 +236,12 @@ def testparams(plist, plist_i, step, wid, leafid, report):
         #### For 4.2 vary just
         elif scheme == "mut4.2":
             p = np.random.choice([47, 60, 73, 86])
-        print(
-            f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####"
-        )
-        metrics = []
-        if prangelist[p] == 1:
-            templist = valchooser(plist, plist_i, _, p)
-            print(f"#### testval = {templist[p]} ####")
-            print(f"#### Current parameter values ####\n{templist}")
-            runsim(step, templist, wid, leafid)
-            if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png"):
-                print(
-                    f"#### leaf_{leafid}_{wid}_{step}.png successfully generated! ####"
-                )
-                (
-                    margin,
-                    lamina_margintest,
-                    lamina_veinstest,
-                    veins,
-                    silhouette,
-                ) = leafcomponents(leafid, wid, step)
-                check, failed_conditions = leafchecker(
-                    margin,
-                    lamina_margintest,
-                    lamina_veinstest,
-                    veins,
-                    silhouette,
-                    metrics,
-                )
-                if check:
-                    # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
-                    print(f"#### Leaf check passed!")
-                    shutil.move(
-                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        wd
-                        + f"/leaves/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}.png",
-                    )
-                    # report.append(f"{wid},{step},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                    report.append(
-                        [
-                            [wid, step, "leaf_check_passed", list(pdict.keys())[p]]
-                            + templist
-                            + metrics
-                        ]
-                    )
-                    plist_i = templist
-                else:
-                    print(f"#### leaf check failed!")
-                    shutil.move(
-                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        wd
-                        + f"/leaves/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}.png",
-                    )
-                    # report.append(f"{wid},{step},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                    report.append(
-                        [
-                            [
-                                wid,
-                                step,
-                                "leaf_check_failed: " + ". ".join(failed_conditions),
-                                list(pdict.keys())[p],
-                            ]
-                            + templist
-                            + metrics
-                        ]
-                    )
-            else:
-                # don't set plist_i to the templist
-                print(f"#### leaf_{leafid}_{wid}_{step}.png failed to generate!")
+        take_step(plist, plist_i, p, _, step, wid, leafid, report)
     
     elif scheme == "mut5":
         """Scale step size to be 10% of the total value"""
         p = random.randint(0, len(plist) - 1)  # select random parameter to vary
-        p = 2
-        print(
-            f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####"
-        )
-        metrics = []
-        if prangelist[p] == 1:
-            templist = valchooser(plist, plist_i, _, p)
-            print(f"#### testval = {templist[p]} ####")
-            print(f"#### Current parameter values ####\n{templist}")
-            runsim(step, templist, wid, leafid)
-            if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png"):
-                print(
-                    f"#### leaf_{leafid}_{wid}_{step}.png successfully generated! ####"
-                )
-                (
-                    margin,
-                    lamina_margintest,
-                    lamina_veinstest,
-                    veins,
-                    silhouette,
-                ) = leafcomponents(leafid, wid, step)
-                check, failed_conditions = leafchecker(
-                    margin,
-                    lamina_margintest,
-                    lamina_veinstest,
-                    veins,
-                    silhouette,
-                    metrics,
-                )
-                if check:
-                    # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
-                    print(f"#### Leaf check passed!")
-                    shutil.move(
-                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        wd
-                        + f"/leaves/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}.png",
-                    )
-                    # report.append(f"{wid},{step},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                    report.append(
-                        [
-                            [wid, step, "leaf_check_passed", list(pdict.keys())[p]]
-                            + templist
-                            + metrics
-                        ]
-                    )
-                    plist_i = templist
-                else:
-                    print(f"#### leaf check failed!")
-                    shutil.move(
-                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
-                        wd
-                        + f"/leaves/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}.png",
-                    )
-                    # report.append(f"{wid},{step},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
-                    report.append(
-                        [
-                            [
-                                wid,
-                                step,
-                                "leaf_check_failed: " + ". ".join(failed_conditions),
-                                list(pdict.keys())[p],
-                            ]
-                            + templist
-                            + metrics
-                        ]
-                    )
+        take_step(plist, plist_i, p, _, step, wid, leafid, report)
 
     return plist_i
 
@@ -1022,33 +748,6 @@ def randomwalk(wid, leafid):
         step = 0
         # only moves onto the next leafid once a threshold number of leaves have been generated
         # while ngenerated_thresh == False: # improve this condition - don't need so many lines
-        #     plist_i = testparams(plist, plist_i, step, wid, leafid, report)
-        #     step += 1
-        #     n0 = len(os.listdir(wd + f"/leaves/{leafid}/walk0"))
-        #     n1 = len(os.listdir(wd + f"/leaves/{leafid}/walk1"))
-        #     n2 = len(os.listdir(wd + f"/leaves/{leafid}/walk2"))
-        #     n3 = len(os.listdir(wd + f"/leaves/{leafid}/walk3"))
-        #     n4 = len(os.listdir(wd + f"/leaves/{leafid}/walk4"))
-        #     n5 = len(os.listdir(wd + f"/leaves/{leafid}/walk5"))
-        #     n6 = len(os.listdir(wd + f"/leaves/{leafid}/walk6"))
-        #     n7 = len(os.listdir(wd + f"/leaves/{leafid}/walk7"))
-        #     n8 = len(os.listdir(wd + f"/leaves/{leafid}/walk8"))
-        #     n9 = len(os.listdir(wd + f"/leaves/{leafid}/walk9"))
-
-        #     if (
-        #         n0 > ngen_thresh
-        #         or n1 > ngen_thresh
-        #         or n2 > ngen_thresh
-        #         or n3 > ngen_thresh
-        #         or n4 > ngen_thresh
-        #         or n5 > ngen_thresh
-        #         or n6 > ngen_thresh
-        #         or n7 > ngen_thresh
-        #         or n8 > ngen_thresh
-        #         or n9 > ngen_thresh
-        #     ):
-        #         ngenerated_thresh = True
-        #         print("#### n_generated threshold reached!")
         while True:
             plist_i = testparams(plist, plist_i, step, wid, leafid, report)
             step += 1
