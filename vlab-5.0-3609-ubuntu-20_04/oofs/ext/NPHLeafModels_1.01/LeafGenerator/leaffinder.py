@@ -3,6 +3,7 @@ import pwriter
 import copy
 import subprocess
 import os
+import sys
 import shutil
 import random
 import time
@@ -16,14 +17,14 @@ from pyvirtualdisplay import Display
 
 #################################### Initialisation ####################################
 
-run_id = "explore_01-01-25"  # the id of the run
-scheme = "mut2"  # model of mutation
+run_id = "explore_15-01-25"  # the id of the run
+scheme = "mut5"  # model of mutation
 testvals = [10, 1, 0.1]  # only relevant for scheme = "mut1"
 startleaf = 0  # the index of the leaf in pdict that the simulation will start at, 0 for the beginning
 # testvals = [0,0,0]
 # nrounds = 100
 ngen_thresh = 120  # threshold no. leaves which, if reached in at least 1 of the walks, will terminate the simulation
-ncores = 10  # no. cores and also no. walks - performed in parallel
+ncores = 1 # no. cores and also no. walks - performed in parallel
 timeout = 160  # simulation will skip to next iteration if a leaf takes longer than this number of seconds to generate
 
 # Walk constraint parameters
@@ -445,6 +446,76 @@ def testparams(plist, plist_i, step, wid, leafid, report):
             else:
                 # don't set plist_i to the templist
                 print(f"#### leaf_{leafid}_{wid}_{step}.png failed to generate!")
+    
+    elif scheme == "mut5":
+        """Scale step size to be 10% of the total value"""
+        p = random.randint(0, len(plist) - 1)  # select random parameter to vary
+        p = 2
+        print(
+            f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####"
+        )
+        metrics = []
+        if prangelist[p] == 1:
+            templist = valchooser(plist, plist_i, _, p)
+            print(f"#### testval = {templist[p]} ####")
+            print(f"#### Current parameter values ####\n{templist}")
+            runsim(step, templist, wid, leafid)
+            if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png"):
+                print(
+                    f"#### leaf_{leafid}_{wid}_{step}.png successfully generated! ####"
+                )
+                (
+                    margin,
+                    lamina_margintest,
+                    lamina_veinstest,
+                    veins,
+                    silhouette,
+                ) = leafcomponents(leafid, wid, step)
+                check, failed_conditions = leafchecker(
+                    margin,
+                    lamina_margintest,
+                    lamina_veinstest,
+                    veins,
+                    silhouette,
+                    metrics,
+                )
+                if check:
+                    # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
+                    print(f"#### Leaf check passed!")
+                    shutil.move(
+                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
+                        wd
+                        + f"/leaves/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}.png",
+                    )
+                    # report.append(f"{wid},{step},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
+                    report.append(
+                        [
+                            [wid, step, "leaf_check_passed", list(pdict.keys())[p]]
+                            + templist
+                            + metrics
+                        ]
+                    )
+                    plist_i = templist
+                else:
+                    print(f"#### leaf check failed!")
+                    shutil.move(
+                        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
+                        wd
+                        + f"/leaves/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}.png",
+                    )
+                    # report.append(f"{wid},{step},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
+                    report.append(
+                        [
+                            [
+                                wid,
+                                step,
+                                "leaf_check_failed: " + ". ".join(failed_conditions),
+                                list(pdict.keys())[p],
+                            ]
+                            + templist
+                            + metrics
+                        ]
+                    )
 
     return plist_i
 
@@ -491,7 +562,7 @@ def valchooser(plist, plist_i, n, p):
         if 7 < p < 21:
             if np.isnan(plist[p]):
                 templist[p] = np.nan
-            elif 7 < p < 14:
+            elif 7 < p < 14: # Explore the initial state array using integers
                 # testval = templist[p] + np.random.choice([1,-1])*testvals[n]
                 templist[p] = templist[p] + np.random.choice([1, -1])
                 templist[p + (2 * (14 - p))] = templist[
@@ -567,6 +638,61 @@ def valchooser(plist, plist_i, n, p):
         templist[p] = round(
             templist[p] + (multiplier * np.random.choice(mutations)), 10
         )
+    
+    elif scheme == "mut5":
+        if 7 < p < 21: # initial state sample
+            if np.isnan(plist[p]):
+                templist[p] = np.nan
+            elif 7 < p < 14:
+                # testval = templist[p] + np.random.choice([1,-1])*testvals[n]
+                templist[p] = templist[p] + np.random.choice([1, -1])
+                templist[p + (2 * (14 - p))] = templist[
+                    p
+                ]  # do the same to the opposite side of the array
+            elif p == 14:
+                templist[p] = 0
+            elif 14 < p < 21:
+                templist[p] = templist[p] + np.random.choice([1, -1])
+                templist[p - (2 * (p - 14))] = templist[p]
+        elif isinstance(plist[p], str) and ("true" in plist[p] or "false" in plist[p]):
+            templist[p] = random.choice(["true", "false"])
+        else:
+            step_scale = 0.1 # this fraction of the total range will scale the step size
+            mutations = [
+                np.random.uniform(0, 0.1),
+                np.random.uniform(0.1, 1),
+                np.random.uniform(1, 10),
+            ]
+            ptypes = list(p_types().values())
+            ranges = p_ranges()
+            ranges10 = {key: value * step_scale for key, value in ranges.items()} # scale the mutation size by step_scale
+            ranges10_list = list(ranges10.values())
+            # print(ranges10_list)
+            # print([type(i) for i in ranges10_list])
+            # exit()
+            ##### NEED TO DEAL WITH INITSTATE SAMPLES
+            ##### ALSO NEED TO DEAL WITH NAN VALUES - NEED TO SET THE MULTIPLIER TO SOMETHING ELSE
+            ##### ADD stuff from MUT2
+            multiplier = ranges10_list[p] # get the scale multiplier for the current parameter p - ranges and plist should be the same length
+            # print("#### currval = ", templist[p])   
+            # print("#### prange =", list(ranges.values())[p])
+            # print("#### Multiplier = ", multiplier)
+            # print("#### Mutations = ", mutations)
+            # print("#### Mutation*multiplier = ", [mutation*multiplier for mutation in mutations])
+            if isinstance(plist[p], str) and "M_PI" in plist[p]:
+                # Extract number and sample in same way
+                currval = re.findall(r"\d+(\.\d+)?", templist[p])
+                currval_float = float(currval[0])
+                templist[p] = "M_PI*" + str(
+                    round(currval_float + (multiplier * np.random.choice([1, -1]) * np.random.choice(mutations)), 10)
+                )
+            
+            elif ptypes[p] == int: # integers
+                print("HELLO\n\n\n")
+                templist[p] = int(round(templist[p] + (multiplier * np.random.choice([1, -1]) * np.random.choice(mutations)), 0))             
+            else: # floats
+                templist[p] = float(round(templist[p] + (multiplier * np.random.choice([1, -1]) * np.random.choice(mutations)), 10))
+            print("#### templist[p] = ", templist[p]) 
 
     return templist
 
@@ -881,7 +1007,7 @@ def veinsioutsidelaminachecker(lamina, veins, metrics):
 
 def randomwalk(wid, leafid):
     """Runs the random walk on a given leafid until one of the 10 parallel walks generates a threshold amount"""
-    # set random seed to ensure the random numbers occur independently
+    # set random seed based on walk id to ensure the random numbers occur independently across walks
     np.random.seed(wid)
 
     leafid_index = leafids.index(leafid)
@@ -895,34 +1021,49 @@ def randomwalk(wid, leafid):
         # 	plist_i = testparams(plist, plist_i, step, wid, leafid, report)
         step = 0
         # only moves onto the next leafid once a threshold number of leaves have been generated
-        while ngenerated_thresh == False:
+        # while ngenerated_thresh == False: # improve this condition - don't need so many lines
+        #     plist_i = testparams(plist, plist_i, step, wid, leafid, report)
+        #     step += 1
+        #     n0 = len(os.listdir(wd + f"/leaves/{leafid}/walk0"))
+        #     n1 = len(os.listdir(wd + f"/leaves/{leafid}/walk1"))
+        #     n2 = len(os.listdir(wd + f"/leaves/{leafid}/walk2"))
+        #     n3 = len(os.listdir(wd + f"/leaves/{leafid}/walk3"))
+        #     n4 = len(os.listdir(wd + f"/leaves/{leafid}/walk4"))
+        #     n5 = len(os.listdir(wd + f"/leaves/{leafid}/walk5"))
+        #     n6 = len(os.listdir(wd + f"/leaves/{leafid}/walk6"))
+        #     n7 = len(os.listdir(wd + f"/leaves/{leafid}/walk7"))
+        #     n8 = len(os.listdir(wd + f"/leaves/{leafid}/walk8"))
+        #     n9 = len(os.listdir(wd + f"/leaves/{leafid}/walk9"))
+
+        #     if (
+        #         n0 > ngen_thresh
+        #         or n1 > ngen_thresh
+        #         or n2 > ngen_thresh
+        #         or n3 > ngen_thresh
+        #         or n4 > ngen_thresh
+        #         or n5 > ngen_thresh
+        #         or n6 > ngen_thresh
+        #         or n7 > ngen_thresh
+        #         or n8 > ngen_thresh
+        #         or n9 > ngen_thresh
+        #     ):
+        #         ngenerated_thresh = True
+        #         print("#### n_generated threshold reached!")
+        while True:
             plist_i = testparams(plist, plist_i, step, wid, leafid, report)
             step += 1
-            n0 = len(os.listdir(wd + f"/leaves/{leafid}/walk0"))
-            n1 = len(os.listdir(wd + f"/leaves/{leafid}/walk1"))
-            n2 = len(os.listdir(wd + f"/leaves/{leafid}/walk2"))
-            n3 = len(os.listdir(wd + f"/leaves/{leafid}/walk3"))
-            n4 = len(os.listdir(wd + f"/leaves/{leafid}/walk4"))
-            n5 = len(os.listdir(wd + f"/leaves/{leafid}/walk5"))
-            n6 = len(os.listdir(wd + f"/leaves/{leafid}/walk6"))
-            n7 = len(os.listdir(wd + f"/leaves/{leafid}/walk7"))
-            n8 = len(os.listdir(wd + f"/leaves/{leafid}/walk8"))
-            n9 = len(os.listdir(wd + f"/leaves/{leafid}/walk9"))
 
-            if (
-                n0 > ngen_thresh
-                or n1 > ngen_thresh
-                or n2 > ngen_thresh
-                or n3 > ngen_thresh
-                or n4 > ngen_thresh
-                or n5 > ngen_thresh
-                or n6 > ngen_thresh
-                or n7 > ngen_thresh
-                or n8 > ngen_thresh
-                or n9 > ngen_thresh
-            ):
-                ngenerated_thresh = True
+            # Check the number of generated leaves for each walk
+            ngenerated = False
+            for i in range(ncores):
+                n = len(os.listdir(f"{wd}/leaves/{leafid}/walk{i}"))
+                if n > ngen_thresh:
+                    ngenerated = True
+                    break
+
+            if ngenerated:
                 print("#### n_generated threshold reached!")
+                break
     finally:
         with open(
             wd + f"/leaves/{leafid}/walk{wid}/report_{leafid}_{wid}.csv", "w"
@@ -941,6 +1082,7 @@ def start():
         processes = []
         for leafid in leafids[startleaf:]:  # [-39:]:
             for wid in range(ncores):
+                print(wid)
                 process = multiprocessing.Process(target=randomwalk, args=(wid, leafid))
                 processes.append(process)
                 process.start()
