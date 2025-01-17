@@ -17,95 +17,101 @@ from pyvirtualdisplay import Display
 
 #################################### Initialisation ####################################
 
-run_id = "explore_15-01-25"  # the id of the run
+# Simulation parameters
+run_id = "test"  # the id of the run
 scheme = "mut5"  # model of mutation
 testvals = [10, 1, 0.1]  # only relevant for scheme = "mut1"
 startleaf = 0  # the index of the leaf in pdict that the simulation will start at, 0 for the beginning
 # testvals = [0,0,0]
 # nrounds = 100
-ngen_thresh = 120  # threshold no. leaves which, if reached in at least 1 of the walks, will terminate the simulation
-ncores = 1 # no. cores and also no. walks - performed in parallel
+ngen_thresh = 120  # threshold no. leaves which must be reached by all walks before moving to the next leafid
+ncores = 10 # no. cores and also no. walks - performed in parallel
 timeout = 160  # simulation will skip to next iteration if a leaf takes longer than this number of seconds to generate
+nattempts = 100 # no. attempts to find a valid step before exiting walk (and moving to next leaf)
+v = False  # verbose mode for debugging
 
 # Walk constraint parameters
-symmetry_thresh = (
-    0.05  # 0.1 #the acceptable limit for the proportion of non_overlapping area
-)
+symmetry_thresh = 0.05  # 0.1 # the acceptable limit for the proportion of non_overlapping area
 weightdifference_thresh = 0.06  # the absolute difference between the area of the left and right side of the leaf
 primordium_thresh = 1.1  # this is how many times the width of the scale bar the maxwidth of the leaf must be greater than to pass the primordium check
 overlappingmargin_thresh = 0.005  # 0.006 #0.08 #0.012 for 12b # the fraction of the lamina area that is permitted to be occupied by margin
-veinarea_thresh = (
-    0.02  # vein area must be greater than this fraction of the silhouette area
-)
+veinarea_thresh = 0.02  # vein area must be greater than this fraction of the silhouette area
 veinsoutsidelamina_thresh = 0.01  # 0.037 #0.75 for 12de and 12f 0.2 for everything else. # The proportion of vein area permitted to be non-overlapping with the lamina
-veinswidth_thresh = (
-    0.05  # veins must be greater than this fraction of the total width of the image
-)
+veinswidth_thresh = 0.05  # veins must be greater than this fraction of the total width of the image
+prangelist = list(prange10_alt.values()) # list of parameters which will be held constant
 
-# paths
+# Default paths
 wd = "/home/m/malone/GitHub/leaf-project/vlab-5.0-3609-ubuntu-20_04/oofs/ext/NPHLeafModels_1.01"
 
-nleaves = len(pdict["pspace1"])
 
-# print hyperparameters to a file
-h_params = {
-    "scheme": scheme,
-    "testvals": testvals,
-    "startleaf": startleaf,
-    "ngen_thresh": ngen_thresh,
-    "ncores": ncores,
-    "timeout": timeout,
-    "symmetry_thresh": symmetry_thresh,
-    "weightdifference_thresh": weightdifference_thresh,
-    "primordium_thresh": primordium_thresh,
-    "overlappingmargin_thresh": overlappingmargin_thresh,
-    "veinarea_thresh": veinarea_thresh,
-    "veinsoutsidelamina_thresh": veinsoutsidelamina_thresh,
-    "veinswidth_thresh": veinswidth_thresh,
-    "wd": wd,
-    "nleaves": nleaves
-}
 
-with open(f"h_params_{run_id}.txt", 'w') as file:
+def initialise():
+    """Print hyperparameters and build leaf storage directories"""
+
+    h_params = {
+        "run_id": run_id,
+        "scheme": scheme,
+        "testvals": testvals,
+        "startleaf": startleaf,
+        "ngen_thresh": ngen_thresh,
+        "ncores": ncores,
+        "timeout": timeout,
+        "nattempts": nattempts,
+        "verbose" : v,
+        "symmetry_thresh": symmetry_thresh,
+        "weightdifference_thresh": weightdifference_thresh,
+        "primordium_thresh": primordium_thresh,
+        "overlappingmargin_thresh": overlappingmargin_thresh,
+        "veinarea_thresh": veinarea_thresh,
+        "veinsoutsidelamina_thresh": veinsoutsidelamina_thresh,
+        "veinswidth_thresh": veinswidth_thresh,
+        "wd": wd,
+        "nleaves": len(pdict["pspace1"]) # no. initial leaves
+    }
+
+    print("Simulation hyperparameters:")
     for name, value in h_params.items():
-        file.write(f"{name}: {value}\n")
+        print(f"{name}: {value}")
+    print("\n")
+
+    with open(f"h_params_{run_id}.txt", 'w') as file:
+        for name, value in h_params.items():
+            file.write(f"{name}: {value}\n")
 
 
-# remove old leaf storage directory (if it exists) and create a new one
-if os.path.exists(wd + "/leaves"):
-    shutil.rmtree(wd + "/leaves")
-os.makedirs(wd + "/leaves")
+    # remove old leaf storage directory (if it exists) and create a new one
+    if os.path.exists(wd + f"/leaves_{run_id}"):
+        shutil.rmtree(wd + f"/leaves_{run_id}")
+    os.makedirs(wd + f"/leaves_{run_id}")
 
-# make a directory for every leaf and within that a directory for every walk
-for leafid in leafids:
-    os.makedirs(wd + f"/leaves/{leafid}")
-    for wid in range(ncores):
-        os.makedirs(wd + f"/leaves/{leafid}/walk{wid}")
-        os.makedirs(wd + f"/leaves/{leafid}/walk{wid}/rejected")
+    # make a directory for every leaf and within that a directory for every walk
+    for leafid in leafids:
+        os.makedirs(wd + f"/leaves_{run_id}/{leafid}")
+        for wid in range(ncores):
+            os.makedirs(wd + f"/leaves_{run_id}/{leafid}/walk{wid}")
+            os.makedirs(wd + f"/leaves_{run_id}/{leafid}/walk{wid}/rejected")
 
-# remove any .png files in wd at the start of the simulation
-for _, directories, _ in os.walk(wd):
-    for name in directories:
-        if "bin" in name:
-            bin_path = wd + "/" + name
-            for i in os.listdir(bin_path):
-                if i.endswith(".png"):
-                    os.remove(bin_path + "/" + i)
+    # remove any .png files in wd at the start of the simulation
+    for _, directories, _ in os.walk(wd):
+        for name in directories:
+            if "bin" in name:
+                bin_path = wd + "/" + name
+                for i in os.listdir(bin_path):
+                    if i.endswith(".png"):
+                        os.remove(bin_path + "/" + i)
 
-# retrieve list of parameters which will be held constant
-prangelist = list(prange10_alt.values())
 
 
 #################################### Main Functions ####################################
 
 
-def runsim(step, templist, wid, leafid):
+def runsim(attempt, step, templist, wid, leafid):
     """Runs lpfg with a given set of parameters, kills lpfg if "Error" occurs in the output or after timeout"""
     input_parameters = dict(zip(pdict.keys(), templist))
     pwriter.Input(input_parameters, wd + f"/bin{wid}", wid)  # + f"/parameters{wid}")
     process = subprocess.Popen(
         wd
-        + f"/LeafGenerator/Start.sh bin{wid} plant{wid}.l leaf_{leafid}_{wid}_{step}.png",
+        + f"/LeafGenerator/Start.sh bin{wid} plant{wid}.l leaf_{leafid}_{wid}_{step}_{attempt}.png",
         shell=True,
         stdout=subprocess.PIPE,
         bufsize=1,
@@ -113,7 +119,7 @@ def runsim(step, templist, wid, leafid):
         preexec_fn=os.setpgrp,
     )
     # pwriter.Input(input_parameters, wd + "/bin0", 0) #+ f"/parameters{wid}")
-    # process = subprocess.Popen(wd + f"/LeafGenerator/Start.sh bin0 plant0.l leaf_{leafid}_{wid}_{step}.png", shell=True, stdout=subprocess.PIPE, bufsize=1, universal_newlines=True, preexec_fn=os.setpgrp)
+    # process = subprocess.Popen(wd + f"/LeafGenerator/Start.sh bin0 plant0.l leaf_{leafid}_{wid}_{step}_{attempt}.png", shell=True, stdout=subprocess.PIPE, bufsize=1, universal_newlines=True, preexec_fn=os.setpgrp)
     start_time = time.monotonic()
     while True:
         if process.poll() is not None:
@@ -126,34 +132,34 @@ def runsim(step, templist, wid, leafid):
         if ready:
             line = process.stdout.readline()
             if line:
-                print(line)
-                if "Error" in line:
+                print(line) if v else None
+                if "Error" in line or "ERROR" in line:
                     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
                     break
         elapsed_time = time.monotonic() - start_time
-        # print(f"###### Elapsed time = {round(elapsed_time,2)} seconds")
+        print(f"###### Elapsed time = {round(elapsed_time,2)} seconds") if v else None
         if elapsed_time > timeout:
             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
             print("##### TIMED OUT")
             break
 
-def take_step(plist, plist_i, p, n, step, wid, leafid, report):
-    print(f"#### Iteration: {leafid}_{wid}_{step} ####\n#### Parameter: {list(pdict.keys())[p]} ####")
+def testparams(plist, plist_i, p, attempt, step, wid, leafid, report):
+    """Runs leaf model with a given set of parameters and checks if the output is valid"""
+    print(f"#### Iteration: {leafid}_{wid}_{step}_{attempt} ####\n#### Parameter: {list(pdict.keys())[p]} ####")
+    status = 0 # 0- leaf failed to generate, 1- leaf generated but failed checks, 2- leaf generated and passed checks
     metrics = []
     if prangelist[p] == 1:
-        templist = valchooser(plist, plist_i, n, p)
-        print(f"#### testval = {templist[p]} ####")
-        print(f"#### Current parameter values ####\n{templist}")
-        runsim(step, templist, wid, leafid)
-        if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png"):
-            print(
-                f"#### leaf_{leafid}_{wid}_{step}.png successfully generated! ####"
-            )
+        templist = valchooser(plist, plist_i, p)
+        print(f"#### testval = {templist[p]} ####") if v else None
+        print(f"#### Current parameter values ####\n{templist}") if v else None
+        runsim(attempt, step, templist, wid, leafid)
+        if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png"):
+            print(f"#### leaf_{leafid}_{wid}_{step}_{attempt}.png successfully generated! ####")
             (margin, 
-             lamina_margintest, 
-             lamina_veinstest, 
-             veins,
-             silhouette,) = leafcomponents(leafid, wid, step)
+            lamina_margintest, 
+            lamina_veinstest, 
+            veins,
+            silhouette,) = leafcomponents(leafid, wid, step, attempt)
             check, failed_conditions = leafchecker(
                 margin, 
                 lamina_margintest, 
@@ -161,93 +167,97 @@ def take_step(plist, plist_i, p, n, step, wid, leafid, report):
                 veins, 
                 silhouette, 
                 metrics,)
-            if check:
+            metrics = [float(elem) for elem in metrics]
+            if check: # leaf generated and passed checks
                 # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
                 print(f"#### Leaf check passed!\n")
                 shutil.move(
-                    wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
+                    wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png",
                     wd
-                    + f"/leaves/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}.png",
+                    +  f"/leaves_{run_id}/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png",
                 )
-                # report.append(f"{wid},{step},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
+                # report.append(f"{wid},{step}_{attempt},leaf_check_passed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
                 report.append(
-                    [
-                        [wid, step, "leaf_check_passed", list(pdict.keys())[p]]
+                        [wid, step, attempt, "leaf_check_passed", list(pdict.keys())[p]]
                         + templist
                         + metrics
-                    ]
                 )
                 plist_i = templist
-            else:
+                status = 2
+            else: # leaf generated but failed checks
                 print(f"#### leaf check failed!\n")
                 shutil.move(
-                    wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png",
+                    wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png",
                     wd
-                    + f"/leaves/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}.png",
+                    + f"/leaves_{run_id}/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}_{attempt}.png",
                 )
-                # report.append(f"{wid},{step},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
+                # report.append(f"{wid},{step}_{attempt},leaf_check_failed,{list(pdict.keys())[p]},{str(templist)[1:-1],{str(metrics)}}\n")
                 report.append(
-                    [
-                        [
-                            wid,
-                            step,
-                            "leaf_check_failed: " + ". ".join(failed_conditions),
-                            list(pdict.keys())[p],
-                        ]
+                        [wid, step, attempt, "leaf_check_failed: " + ". ".join(failed_conditions), list(pdict.keys())[p]]
                         + templist
                         + metrics
-                    ]
                 )
-        else:
-            # don't set plist_i to the templist
-            print(f"#### leaf_{leafid}_{wid}_{step}.png failed to generate!")
-
-
-def testparams(plist, plist_i, step, wid, leafid, report):
-    """Tries different parameter combinations for every element in testvals"""
-
-    if scheme == "mut1":
-        # p is the index of the parameter being varied in pdict, step is the iteration number of the random walk
-        p = step % len(plist)
-        # p = random.randint(0,len(plist))
-        # While leaf.png is unable to generate, try running the simulation with each of the different testvals
-        for n in range(len(testvals)):
-            # save a copy of the latest version of plist_i
-            # try different values in the copy
-            # if it doesn't work, return to the last copy of plist_i and try the next value
-            # if it works, overwrite plist_i with the successful templist and proceed to the next element
-            take_step(plist, plist_i, p, n, step, wid, leafid, report)
-
-    elif scheme == "mut2":
-        p = random.randint(0, len(plist) - 1)  # select random parameter to vary
-        take_step(plist, plist_i, p, _, step, wid, leafid, report)
-
-    elif scheme == "mut3":
-        """Only sample morphogen parameters in INITSAMPLE"""
-        p = random.randint(7, 20)
-        take_step(plist, plist_i, p, _, step, wid, leafid, report)
-
-    elif scheme == "mut4.1" or scheme == "mut4.2":
-        #### For 4.1 vary just morphogen competence
-        if scheme == "mut4.1":
-            p = np.random.choice(
-                [46, 59, 72, 85]
-            )  # sample just the competence parameter for each of the morphogen blocks
-        #### For 4.2 vary just
-        elif scheme == "mut4.2":
-            p = np.random.choice([47, 60, 73, 86])
-        take_step(plist, plist_i, p, _, step, wid, leafid, report)
+                status = 1
+        else: # leaf failed to generate
+            print(f"#### leaf_{leafid}_{wid}_{step}_{attempt}.png failed to generate!")
+            report.append(
+                        [wid, step, attempt, "leaf_failed_to_generate", list(pdict.keys())[p]]
+                        + templist
+                        + [None] * 7 # fill in the metrics with None - assume 7 metrics
+                )
+    else:
+        print(f"#### Parameter {list(pdict.keys())[p]} held constant ####")
     
-    elif scheme == "mut5":
-        """Scale step size to be 10% of the total value"""
-        p = random.randint(0, len(plist) - 1)  # select random parameter to vary
-        take_step(plist, plist_i, p, _, step, wid, leafid, report)
-
-    return plist_i
+    return status
 
 
-def valchooser(plist, plist_i, n, p):
-    """Generates values for the random walk"""
+
+
+# def testparams_old(plist, plist_i, step, wid, leafid, report):
+#     """Tries different parameter combinations for every element in testvals"""
+
+#     p = None # the index of the parameter being varied in pdict
+#     if scheme == "mut1":
+#         p = step % len(plist)
+#         # p = random.randint(0,len(plist))
+#         # While leaf.png is unable to generate, try running the simulation with each of the different testvals
+#         for n in range(len(testvals)):
+#             # save a copy of the latest version of plist_i
+#             # try different values in the copy
+#             # if it doesn't work, return to the last copy of plist_i and try the next value
+#             # if it works, overwrite plist_i with the successful templist and proceed to the next element
+#             take_step(plist, plist_i, p, n, step, wid, leafid, report)
+
+#     elif scheme == "mut2":
+#         p = random.randint(0, len(plist) - 1)  # select random parameter to vary
+#         take_step(plist, plist_i, p, _, step, wid, leafid, report)
+
+#     elif scheme == "mut3":
+#         """Only sample morphogen parameters in INITSAMPLE"""
+#         p = random.randint(7, 20)
+#         take_step(plist, plist_i, p, _, step, wid, leafid, report)
+
+#     elif scheme == "mut4.1" or scheme == "mut4.2":
+#         #### For 4.1 vary just morphogen competence
+#         if scheme == "mut4.1":
+#             p = np.random.choice(
+#                 [46, 59, 72, 85]
+#             )  # sample just the competence parameter for each of the morphogen blocks
+#         #### For 4.2 vary just
+#         elif scheme == "mut4.2":
+#             p = np.random.choice([47, 60, 73, 86])
+#         take_step(plist, plist_i, p, _, step, wid, leafid, report)
+    
+#     elif scheme == "mut5":
+#         """Scale step size to be 10% of the total value"""
+#         p = random.randint(0, len(plist) - 1)  # select random parameter to vary
+#         take_step(plist, plist_i, p, _, step, wid, leafid, report)
+    
+#     return plist_i, p
+
+
+def valchooser(plist, plist_i, p):
+    """Generates parameter values for the random walk"""
 
     templist = copy.deepcopy(plist_i)
 
@@ -393,12 +403,6 @@ def valchooser(plist, plist_i, n, p):
             ranges = p_ranges()
             ranges10 = {key: value * step_scale for key, value in ranges.items()} # scale the mutation size by step_scale
             ranges10_list = list(ranges10.values())
-            # print(ranges10_list)
-            # print([type(i) for i in ranges10_list])
-            # exit()
-            ##### NEED TO DEAL WITH INITSTATE SAMPLES
-            ##### ALSO NEED TO DEAL WITH NAN VALUES - NEED TO SET THE MULTIPLIER TO SOMETHING ELSE
-            ##### ADD stuff from MUT2
             multiplier = ranges10_list[p] # get the scale multiplier for the current parameter p - ranges and plist should be the same length
             # print("#### currval = ", templist[p])   
             # print("#### prange =", list(ranges.values())[p])
@@ -414,11 +418,9 @@ def valchooser(plist, plist_i, n, p):
                 )
             
             elif ptypes[p] == int: # integers
-                print("HELLO\n\n\n")
                 templist[p] = int(round(templist[p] + (multiplier * np.random.choice([1, -1]) * np.random.choice(mutations)), 0))             
             else: # floats
                 templist[p] = float(round(templist[p] + (multiplier * np.random.choice([1, -1]) * np.random.choice(mutations)), 10))
-            print("#### templist[p] = ", templist[p]) 
 
     return templist
 
@@ -432,6 +434,7 @@ def leafchecker(
     ew = equalweightchecker(silhouette, veins, metrics)
     pr = primordiumchecker(silhouette, metrics)
     om = overlappingmarginchecker(margin, lamina_margintest, metrics)
+    va = minveinschecker(silhouette, veins, metrics)
     vw = veinswidthchecker(veins, metrics)
     vo = veinsioutsidelaminachecker(lamina_veinstest, veins, metrics)
 
@@ -442,6 +445,8 @@ def leafchecker(
         failed_conditions.append("Arrested development")
     if not om:
         failed_conditions.append("Overlapping margin")
+    if not va:
+        failed_conditions.append("Insufficient vein area")
     if not vw:
         failed_conditions.append("Veins too narrow")
     if not vo:
@@ -460,11 +465,11 @@ def leafchecker(
 #################################### Leaf Features ####################################
 
 
-def leafcomponents(leafid, wid, step):
+def leafcomponents(leafid, wid, step, attempt):
     """Extracts key visual components from the leaf image"""
     # returns them as a np array - "black" has the greyscale value of 32 in this case
     leaf = cv2.imread(
-        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}.png", cv2.IMREAD_GRAYSCALE
+        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png", cv2.IMREAD_GRAYSCALE
     )  # Need greyscale so matrix is 2D
 
     silhouette = (leaf < 255).astype(np.uint8)
@@ -534,8 +539,8 @@ def barfinder(matrix):
         if np.all(current_row == 0) and np.any(next_row == 1):
             isbar = True
 
-    print(f"#### Bar Found: {isbar}")
-    print(f"#### Barrow index: {barrow}")
+    print(f"#### Bar Found: {isbar}") if v else None
+    print(f"#### Barrow index: {barrow}") if v else None
     return isbar, firstcolumn, lastcolumn, matrixbottom
 
 
@@ -547,7 +552,7 @@ def middlefinder(isbar, veins, firstcolumn, lastcolumn):
         nmaxlength = (
             lastcolumn - firstcolumn
         )  # return the length of the bar as nmaxlength
-        print(f"#### Middle (bar): {middle}")
+        print(f"#### Middle (bar): {middle}") if v else None
         return middle, nmaxlength
     # if there is no bar, instead choose the column with the longest uninterrupted stretch of 1s
     else:
@@ -560,7 +565,7 @@ def middlefinder(isbar, veins, firstcolumn, lastcolumn):
             )  # N.B int() rounds down to nearest integer
         else:  # if odd, set middle to column in the centre group
             middle = maxlength_i + int(nmaxlength / 2)
-        print(f"#### Middle (veins): {middle}")
+        print(f"#### Middle (veins): {middle}") if v else None
         return middle, nmaxlength
 
 
@@ -653,7 +658,7 @@ def equalweightchecker(matrix, veins, metrics):
         # print(np.sum(matrix_left), np.sum(matrix_right_aug), print(weightdifference))
         metrics.append(weightdifference_prop)
         metrics.append(middle)
-        print(f"#### Weight difference prop. = {weightdifference_prop}")
+        print(f"#### Weight difference prop. = {weightdifference_prop}") if v else None
         return weightdifference_prop < weightdifference_thresh
 
 
@@ -665,7 +670,7 @@ def primordiumchecker(matrix, metrics):
         _, _, _, matrixbottom = barfinder(matrix)
         barwidth = maxwidth(matrixbottom)
         leafwidth = maxwidth(matrix)
-        print(f"#### Bar width = {barwidth}", f"#### Leaf width = {leafwidth}")
+        print(f"#### Bar width = {barwidth}", f"#### Leaf width = {leafwidth}") if v else None
         metrics.append(leafwidth)
     return leafwidth > barwidth * primordium_thresh
 
@@ -682,7 +687,7 @@ def overlappingmarginchecker(margin, lamina, metrics):
         # cv2.imwrite(wd + "/LeafGenerator/overlap.png", overlap)
         prop_overlap = np.sum(overlap) / np.sum(lamina)
         # prop_overlap = np.sum(overlap)/np.sum(margin)
-        print(f"#### Prop. margin inside lamina = {prop_overlap}")
+        print(f"#### Prop. margin inside lamina = {prop_overlap}") if v else None
         metrics.append(prop_overlap)
         return prop_overlap < overlappingmargin_thresh
 
@@ -695,7 +700,7 @@ def minveinschecker(silhouette, veins, metrics):
     else:
         veinarea_insideleaf = np.logical_and(silhouette, veins)
         prop_veinarea = np.sum(veinarea_insideleaf) / np.sum(silhouette)
-        print(f"#### Prop. silhouette area that is veins = {prop_veinarea}")
+        print(f"#### Prop. silhouette area that is veins = {prop_veinarea}") if v else None
         metrics.append(prop_veinarea)
         return prop_veinarea > veinarea_thresh
 
@@ -708,7 +713,7 @@ def veinswidthchecker(veins, metrics):
     else:
         veinswidth = maxwidth_interrupted(veins)
         imagewidth = np.shape(veins)[1]
-        print(f"#### Vein maxwidth = {veinswidth}")
+        print(f"#### Vein maxwidth = {veinswidth}") if v else None
         metrics.append(veinswidth)
         return veinswidth > imagewidth * veinswidth_thresh
 
@@ -723,7 +728,7 @@ def veinsioutsidelaminachecker(lamina, veins, metrics):
         # np.savetxt(wd + "/LeafGenerator/veinsoutsidelamina.csv", veinsoutsidelamina, delimiter=",")
         # calculate as a proportion of the total vein area
         prop_veinsoutsidelamina = np.sum(veinsoutsidelamina) / np.sum(veins)
-        print(f"#### Prop. vein area outside lamina = {prop_veinsoutsidelamina}")
+        print(f"#### Prop. vein area outside lamina = {prop_veinsoutsidelamina}") if v else None
         metrics.append(prop_veinsoutsidelamina)
         return prop_veinsoutsidelamina < veinsoutsidelamina_thresh
 
@@ -739,37 +744,123 @@ def randomwalk(wid, leafid):
     leafid_index = leafids.index(leafid)
     plist = [ele[leafid_index] for ele in list(pdict.values())]
     plist_i = copy.deepcopy(plist)
+    target_idxs = [i for i, val in enumerate(prangelist) if val == 1] # get indicies of target parameters
     report = []
     ngenerated_thresh = False
-    print(f"#### Starting parameter values ####\n{plist}")
-    try:
-        # for step in range(40): #nrounds*len(plist)):
-        # 	plist_i = testparams(plist, plist_i, step, wid, leafid, report)
-        step = 0
-        # only moves onto the next leafid once a threshold number of leaves have been generated
-        # while ngenerated_thresh == False: # improve this condition - don't need so many lines
-        while True:
-            plist_i = testparams(plist, plist_i, step, wid, leafid, report)
-            step += 1
+    print(f"#### Starting parameter values ####\n{plist}") if v else None
+    # try:
+    #     # for step in range(40): #nrounds*len(plist)):
+    #     # 	plist_i = testparams(plist, plist_i, step, wid, leafid, report)
+    #     step = 0
+    #     # only moves onto the next leafid once a threshold number of leaves have been generated
+    #     # while ngenerated_thresh == False: # improve this condition - don't need so many lines
+    #     while True:
+    #         plist_i = testparams(plist, plist_i, step, wid, leafid, report)
+    #         step += 1
 
-            # Check the number of generated leaves for each walk
-            ngenerated = False
-            for i in range(ncores):
-                n = len(os.listdir(f"{wd}/leaves/{leafid}/walk{i}"))
-                if n > ngen_thresh:
-                    ngenerated = True
-                    break
+    #         # Check the number of generated leaves for each walk
+    #         ngenerated = False
+    #         for i in range(ncores):
+    #             n = len(os.listdir(f"{wd}/leaves_{run_id}/{leafid}/walk{i}"))
+    #             if n > ngen_thresh:
+    #                 ngenerated = True
+    #                 break
 
-            if ngenerated:
-                print("#### n_generated threshold reached!")
-                break
-    finally:
-        with open(
-            wd + f"/leaves/{leafid}/walk{wid}/report_{leafid}_{wid}.csv", "w"
-        ) as csvfile:
-            for step in report:
-                csvfile.write(",".join(str(elem) for elem in step)[1:-1] + "\n")
+    #         if ngenerated:
+    #             print("#### n_generated threshold reached!")
+    #             break
+    # finally:
+    #     with open(
+    #         wd + f"/leaves_{run_id}/{leafid}/walk{wid}/report_{leafid}_{wid}.csv", "w"
+    #     ) as csvfile:
+    #         for step in report:
+    #             csvfile.write(",".join(str(elem) for elem in step)[1:-1] + "\n")
+    # try:
+    # step = 0
+    # while True: # don't stop until ngen_thresh is reached
+    #     if scheme == "mut1":
+    #         p = step % len(plist)
+    #         for n in range(len(testvals)):
+    #             testparams(plist, plist_i, p, n, step, wid, leafid, report)
+    #     else:
+    #         if scheme == "mut2" or scheme == "mut5":
+    #             p = random.randint(0, len(plist) - 1)
+    #         elif scheme == "mut3":
+    #             p = random.randint(7, 20)
+    #         elif scheme == "mut4.1":
+    #             p = np.random.choice([46, 59, 72, 85])
+    #         elif scheme == "mut4.2":
+    #             p = np.random.choice([47, 60, 73, 86])
+            
+    #         testparams(plist, plist_i, p, _, step, wid, leafid, report)  
+        
+    #     # Check the number of generated leaves for each walk
+    #     all_generated = True
+    #     for i in range(ncores):
+    #         n = len(os.listdir(f"{wd}/leaves_{run_id}/{leafid}/walk{i}"))
+    #         if n <= ngen_thresh:
+    #             all_generated = False
+    #             break
 
+    #     if all_generated:
+    #         print("#### All directories reached n_generated threshold!")
+    #         break
+
+    #     # Write out report at every step
+    #     report_out(report, leafid, wid)
+    #     step += 1
+
+
+    # except Exception as e:
+    #     print(f"ERROR: {e}, exiting simulation...")
+    #     with open(wd + f"/leaves_{run_id}/{leafid}/walk{wid}/report_{leafid}_{wid}.csv", "w") as csvfile:
+    #         for step in report:
+    #             csvfile.write(",".join(str(elem) for elem in step)[1:-1] + "\n")
+
+    for step in range(0, ngen_thresh):
+        for attempt in range(0, nattempts):
+            if attempt < nattempts:
+                p = None
+                ### NEED TO REPORT ERRORS BETTER
+                if scheme == "mut1":
+                    p = step % len(plist) # cycles through all parameters, not just those in target_idxs
+                    for n in range(len(testvals)):
+                        status = testparams(plist, plist_i, p, attempt, step, wid, leafid, report)
+                else:
+                    if scheme == "mut2" or scheme == "mut5":
+                        # p = random.randint(0, len(plist) - 1) # old scheme
+                        p = random.choice(target_idxs) # don't randomly choose targets that are held constant
+                    elif scheme == "mut3":
+                        p = random.randint(7, 20)
+                    elif scheme == "mut4.1":
+                        p = np.random.choice([46, 59, 72, 85])
+                    elif scheme == "mut4.2":
+                        p = np.random.choice([47, 60, 73, 86])
+                    
+                    status = testparams(plist, plist_i, p, attempt, step, wid, leafid, report)  
+                report_out(report, leafid, wid)
+                if status == 2:
+                    break # exit attempt loop if leaf generated and passed checks, continue if not
+    print(f"#### Walk {wid} finished")
+
+def report_out(report, leafid, wid):
+    """Writes the details of each step of the random walk to csv"""
+    header = ["walk_id", "step", "attempt", "status", "target"]
+    header.extend(list(pdict.keys()))
+    header.extend([
+        "prop_weightdifference",
+        "middle",
+        "leafwidth",
+        "prop_overlappingmargin",
+        "prop_veinarea",
+        "veinswidth",
+        "prop_veinsoutsidelamina",
+        ])
+    with open(wd + f"/leaves_{run_id}/{leafid}/walk{wid}/report_{leafid}_{wid}.csv", "w") as csvfile:
+        csvfile.write(",".join(header) + "\n")
+        for line in report:
+            # csvfile.write(",".join(str(elem) for elem in line)[1:-1] + "\n")
+            csvfile.write(",".join(str(elem) for elem in line) + "\n")
 
 def start():
     """For each leafid, starts [ncores] random walks, moving onto the next when all processes are finished"""
@@ -777,23 +868,26 @@ def start():
     display = Display(visible=0, size=(1366, 768))
     display.start()
 
-    if __name__ == "__main__":
-        processes = []
-        for leafid in leafids[startleaf:]:  # [-39:]:
-            for wid in range(ncores):
-                print(wid)
-                process = multiprocessing.Process(target=randomwalk, args=(wid, leafid))
-                processes.append(process)
-                process.start()
+    
+    processes = []
+    for leafid in leafids[startleaf:]:  # [-39:]:
+        for wid in range(ncores):
+            process = multiprocessing.Process(target=randomwalk, args=(wid, leafid))
+            processes.append(process)
+            process.start()
 
-            # this waits for each wid process to finish before moving onto the next leafid
-            for process in processes:
-                process.join()
+        # this waits for each wid process to finish before moving onto the next leafid
+        for process in processes:
+            process.join()
 
     display.stop()
 
 
 if __name__ == "__main__":
+    args = sys.argv[1:]   
+    if "-id" in args:
+        run_id = str(args[args.index("-id") + 1])
+    initialise()
     start()
     pass
 
