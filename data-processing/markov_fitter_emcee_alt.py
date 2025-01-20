@@ -26,7 +26,7 @@ wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
 # wd = "leaves_full_15-9-23_MUT1_CLEAN"
 cutoff = 60 # the simulation data is cutoff at this step number before being used to fit the CTMC model
 # run_id = "MUT2_mcmc_03-12-24"
-run_id = "MUT2_mcmc_08-12-24"
+# run_id = "MUT2_mcmc_08-12-24"
 # run_id = "MUT1_mcmc_04-12-24"
 
 rates_map = {
@@ -69,7 +69,7 @@ def concatenator():
     dfs = []
     print(f"\n\nCurrent directory: {wd}\n\n")
     for leafdirectory in os.listdir(wd):
-        print(f"Current = {leafdirectory}")
+        # print(f"Current = {leafdirectory}")
         leafdirectory_path = os.path.join(wd, leafdirectory)
         for walkdirectory in os.listdir(leafdirectory_path):
             walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
@@ -136,7 +136,7 @@ def get_leaf_transitions(dfs):
             for i, curr in enumerate(steps):
                 if i == 0:
                     prev = initial_state
-                if i > cutoff: # only fit to data from the first 60 steps of each walk
+                if i > cutoff: # only fit to data from the first "cutoff" steps of each walk
                     break
                 else:
                     prev = steps[i - 1]
@@ -351,27 +351,10 @@ def run_leaf_uncert_parallel_pool():
         state = sampler.run_mcmc(
             init_params, nsteps, skip_initial_state_check=True, progress=True
         )
-    # reduce the size of the saved chain by discarding the burnin and rounding each step and recording only every thin step
-    # samples = np.round(
-    #     sampler.get_chain(flat=True, discard=burnin, thin=thin), decimals=6
-    # )
     Q_ml = get_maximum_likelihood()
     plot_trace(sampler, Q_ml)
     sample_chain(sampler)
-    tau = sampler.get_autocorr_time()
-    print(f"No. steps until autocorrelation: {tau}")
-    # samples = pd.DataFrame(samples)
-    # samples.to_csv(f"{run_id}/emcee_run_log_{sample_str}_{i}.csv", index=False)
-    # here we take all steps for all parameters from one chain
-    # chain = pd.DataFrame(chain)
-    # chain["step"] = chain.index
-    # chain_long = pd.melt(
-    #     chain, id_vars=["step"], var_name="parameter", value_name="rate"
-    # )
-    # chain_long["shuffle_id"] = i
-    # chain_samples.append(chain_long)
-    # chain_samples = pd.concat(chain_samples)
-    # chain_samples.to_csv(f"{run_id}/emcee_run_chain1_.csv", index=False)
+    autocorrelation_analysis(sampler)
     
 def corner_plot(sampler):
     flat_samples = sampler.get_chain(flat=True)
@@ -393,11 +376,13 @@ def plot_trace(sampler, ml_rates):
             ax.set_ylabel(labels[idx])
             ax.set_ylim(init_lb, init_ub)
             idx += 1
+    fig.supxlabel("Iteration")
     plt.tight_layout()
     fig.savefig(f"{run_id}/trace_{run_id}.pdf", format="pdf")
     plt.show()
 
 def sample_chain(sampler):
+    """Reduce the size of the saved chain by discarding the burnin and rounding each step and recording only every thin step."""
     flat_samples = sampler.get_chain(discard=burnin, thin=thin, flat=True)
     flat_samples_df = pd.DataFrame(flat_samples, columns=list(range(flat_samples.shape[1])))
     flat_samples_df.to_csv(f"{run_id}/posteriors_{run_id}.csv",index=False)
@@ -420,13 +405,20 @@ def sampler_from_file():
         sample_chain(reader)
     # corner_plot(reader)
 
+def autocorrelation_analysis(sampler):
+    tau = sampler.get_autocorr_time()
+    print(f"No. steps until autocorrelation: {tau}")
+
 def print_help():
     help_message = """
     Usage: python3 markov_fitter_emcee_alt.py [options]
 
     Options:
-        -h              Show this help messahe and exit.
+        -h              Show this help message and exit.
         -id [run id]    The name given to the mcmc/mle run.
+        -d  [sim data]  Specify the simulation data to fit the model to
+                        1   ...MUT1
+                        2   ...MUT2
         -f  [function]  Pass function you want to perform:
                         0   ...run mcmc inference
                         1   ...run mle inference
@@ -442,7 +434,15 @@ if __name__ == "__main__":
     
     else:
         if "-id" in args:
-            run_id = int(args[args.index("-id") + 1])
+            run_id = str(args[args.index("-id") + 1])
+        else:
+            raise RuntimeError("No run_id specified")
+        if "-d" in args:
+            data = int(args[args.index("-d") + 1])
+            if data == 1:
+                wd = "leaves_full_15-9-23_MUT1_CLEAN"
+            elif data == 2:
+                wd = "leaves_full_21-9-23_MUT2.2_CLEAN"
         if "-f" in args:
             func = int(args[args.index("-f") + 1])
             if func  == 0:
@@ -451,17 +451,3 @@ if __name__ == "__main__":
                 get_maximum_likelihood()
             if func == 2 or func == 3:
                 sampler_from_file()
-    # sampler_from_file(func=2)
-    # get_maximum_likelihood()
-    # run_mcmc_leaf_uncert()
-    # plot_chain_from_file()
-    # combine_posteriors_from_file(directory="markov_fitter_reports/emcee/24chains_25000steps_15000burnin_thin100_09-10-24")
-    # combine_posteriors_from_file(directory="mcmc_29-11-24")
-    # get_maximum_likelihood(run_id=run_id)
-    # samples, sampler = run_mcmc()
-    # plot_posterior(samples, sampler)
-    # plot_posterior_fromfile(
-    #     "markov_fitter_reports/emcee/24chains_25000steps_15000burnin/emcee_run_log_24-04-24.csv"
-    # )
-    # plot_posterior_fromfile("emcee_run_log.csv")
-    # print(get_transition_count(get_data()))
