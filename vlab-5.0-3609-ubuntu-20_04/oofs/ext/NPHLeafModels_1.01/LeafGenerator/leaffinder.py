@@ -24,7 +24,7 @@ testvals = [10, 1, 0.1]  # only relevant for scheme = "mut1"
 startleaf = 0  # the index of the leaf in pdict that the simulation will start at, 0 for the beginning
 # testvals = [0,0,0]
 # nrounds = 100
-ngen_thresh = 120  # threshold no. leaves which must be reached by all walks before moving to the next leafid
+ngen_thresh = 80  # threshold no. leaves which must be reached by all walks before moving to the next leafid
 ncores = 10 # no. cores and also no. walks - performed in parallel
 timeout = 160  # simulation will skip to next iteration if a leaf takes longer than this number of seconds to generate
 nattempts = 100 # no. attempts to find a valid step before exiting walk (and moving to next leaf)
@@ -143,13 +143,13 @@ def runsim(attempt, step, templist, wid, leafid):
             print("##### TIMED OUT")
             break
 
-def testparams(plist, plist_i, p, attempt, step, wid, leafid, report):
+def testparams(plist, plist_i, p, attempt, step, wid, n, leafid, report):
     """Runs leaf model with a given set of parameters and checks if the output is valid"""
     print(f"#### Iteration: {leafid}_{wid}_{step}_{attempt} ####\n#### Parameter: {list(pdict.keys())[p]} ####")
     status = 0 # 0- leaf failed to generate, 1- leaf generated but failed checks, 2- leaf generated and passed checks
     metrics = []
     if prangelist[p] == 1:
-        templist = valchooser(plist, plist_i, p)
+        templist = valchooser(plist, plist_i, n, p)
         print(f"#### testval = {templist[p]} ####") if v else None
         print(f"#### Current parameter values ####\n{templist}") if v else None
         runsim(attempt, step, templist, wid, leafid)
@@ -210,53 +210,7 @@ def testparams(plist, plist_i, p, attempt, step, wid, leafid, report):
     
     return status
 
-
-
-
-# def testparams_old(plist, plist_i, step, wid, leafid, report):
-#     """Tries different parameter combinations for every element in testvals"""
-
-#     p = None # the index of the parameter being varied in pdict
-#     if scheme == "mut1":
-#         p = step % len(plist)
-#         # p = random.randint(0,len(plist))
-#         # While leaf.png is unable to generate, try running the simulation with each of the different testvals
-#         for n in range(len(testvals)):
-#             # save a copy of the latest version of plist_i
-#             # try different values in the copy
-#             # if it doesn't work, return to the last copy of plist_i and try the next value
-#             # if it works, overwrite plist_i with the successful templist and proceed to the next element
-#             take_step(plist, plist_i, p, n, step, wid, leafid, report)
-
-#     elif scheme == "mut2":
-#         p = random.randint(0, len(plist) - 1)  # select random parameter to vary
-#         take_step(plist, plist_i, p, _, step, wid, leafid, report)
-
-#     elif scheme == "mut3":
-#         """Only sample morphogen parameters in INITSAMPLE"""
-#         p = random.randint(7, 20)
-#         take_step(plist, plist_i, p, _, step, wid, leafid, report)
-
-#     elif scheme == "mut4.1" or scheme == "mut4.2":
-#         #### For 4.1 vary just morphogen competence
-#         if scheme == "mut4.1":
-#             p = np.random.choice(
-#                 [46, 59, 72, 85]
-#             )  # sample just the competence parameter for each of the morphogen blocks
-#         #### For 4.2 vary just
-#         elif scheme == "mut4.2":
-#             p = np.random.choice([47, 60, 73, 86])
-#         take_step(plist, plist_i, p, _, step, wid, leafid, report)
-    
-#     elif scheme == "mut5":
-#         """Scale step size to be 10% of the total value"""
-#         p = random.randint(0, len(plist) - 1)  # select random parameter to vary
-#         take_step(plist, plist_i, p, _, step, wid, leafid, report)
-    
-#     return plist_i, p
-
-
-def valchooser(plist, plist_i, p):
+def valchooser(plist, plist_i, n, p):
     """Generates parameter values for the random walk"""
 
     templist = copy.deepcopy(plist_i)
@@ -598,7 +552,7 @@ def maxlength(matrix):
     """Finds the maximum uninterrupted vertical stretch of 1s and the associated column index"""
     maxlength = 0
     nmaxlength = 0
-    maxlength_i = np.NAN
+    maxlength_i = np.nan
     for i, col in enumerate(range(len(matrix[0]))):
         collength = 0
         for row in matrix:
@@ -746,77 +700,8 @@ def randomwalk(wid, leafid):
     plist_i = copy.deepcopy(plist)
     target_idxs = [i for i, val in enumerate(prangelist) if val == 1] # get indicies of target parameters
     report = []
-    ngenerated_thresh = False
     print(f"#### Starting parameter values ####\n{plist}") if v else None
-    # try:
-    #     # for step in range(40): #nrounds*len(plist)):
-    #     # 	plist_i = testparams(plist, plist_i, step, wid, leafid, report)
-    #     step = 0
-    #     # only moves onto the next leafid once a threshold number of leaves have been generated
-    #     # while ngenerated_thresh == False: # improve this condition - don't need so many lines
-    #     while True:
-    #         plist_i = testparams(plist, plist_i, step, wid, leafid, report)
-    #         step += 1
-
-    #         # Check the number of generated leaves for each walk
-    #         ngenerated = False
-    #         for i in range(ncores):
-    #             n = len(os.listdir(f"{wd}/leaves_{run_id}/{leafid}/walk{i}"))
-    #             if n > ngen_thresh:
-    #                 ngenerated = True
-    #                 break
-
-    #         if ngenerated:
-    #             print("#### n_generated threshold reached!")
-    #             break
-    # finally:
-    #     with open(
-    #         wd + f"/leaves_{run_id}/{leafid}/walk{wid}/report_{leafid}_{wid}.csv", "w"
-    #     ) as csvfile:
-    #         for step in report:
-    #             csvfile.write(",".join(str(elem) for elem in step)[1:-1] + "\n")
-    # try:
-    # step = 0
-    # while True: # don't stop until ngen_thresh is reached
-    #     if scheme == "mut1":
-    #         p = step % len(plist)
-    #         for n in range(len(testvals)):
-    #             testparams(plist, plist_i, p, n, step, wid, leafid, report)
-    #     else:
-    #         if scheme == "mut2" or scheme == "mut5":
-    #             p = random.randint(0, len(plist) - 1)
-    #         elif scheme == "mut3":
-    #             p = random.randint(7, 20)
-    #         elif scheme == "mut4.1":
-    #             p = np.random.choice([46, 59, 72, 85])
-    #         elif scheme == "mut4.2":
-    #             p = np.random.choice([47, 60, 73, 86])
-            
-    #         testparams(plist, plist_i, p, _, step, wid, leafid, report)  
-        
-    #     # Check the number of generated leaves for each walk
-    #     all_generated = True
-    #     for i in range(ncores):
-    #         n = len(os.listdir(f"{wd}/leaves_{run_id}/{leafid}/walk{i}"))
-    #         if n <= ngen_thresh:
-    #             all_generated = False
-    #             break
-
-    #     if all_generated:
-    #         print("#### All directories reached n_generated threshold!")
-    #         break
-
-    #     # Write out report at every step
-    #     report_out(report, leafid, wid)
-    #     step += 1
-
-
-    # except Exception as e:
-    #     print(f"ERROR: {e}, exiting simulation...")
-    #     with open(wd + f"/leaves_{run_id}/{leafid}/walk{wid}/report_{leafid}_{wid}.csv", "w") as csvfile:
-    #         for step in report:
-    #             csvfile.write(",".join(str(elem) for elem in step)[1:-1] + "\n")
-
+ 
     for step in range(0, ngen_thresh):
         for attempt in range(0, nattempts):
             if attempt < nattempts:
@@ -825,7 +710,7 @@ def randomwalk(wid, leafid):
                 if scheme == "mut1":
                     p = step % len(plist) # cycles through all parameters, not just those in target_idxs
                     for n in range(len(testvals)):
-                        status = testparams(plist, plist_i, p, attempt, step, wid, leafid, report)
+                        status = testparams(plist, plist_i, p, attempt, step, wid, n, leafid, report)
                 else:
                     if scheme == "mut2" or scheme == "mut5":
                         # p = random.randint(0, len(plist) - 1) # old scheme
@@ -837,7 +722,7 @@ def randomwalk(wid, leafid):
                     elif scheme == "mut4.2":
                         p = np.random.choice([47, 60, 73, 86])
                     
-                    status = testparams(plist, plist_i, p, attempt, step, wid, leafid, report)  
+                    status = testparams(plist, plist_i, p, attempt, step, wid, None, leafid, report)  
                 report_out(report, leafid, wid)
                 if status == 2:
                     break # exit attempt loop if leaf generated and passed checks, continue if not
