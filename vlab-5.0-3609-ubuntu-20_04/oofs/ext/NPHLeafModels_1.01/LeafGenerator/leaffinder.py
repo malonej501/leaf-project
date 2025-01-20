@@ -208,7 +208,7 @@ def testparams(plist, plist_i, p, attempt, step, wid, n, leafid, report):
     else:
         print(f"#### Parameter {list(pdict.keys())[p]} held constant ####")
     
-    return status
+    return plist_i, status
 
 def valchooser(plist, plist_i, n, p):
     """Generates parameter values for the random walk"""
@@ -710,7 +710,7 @@ def randomwalk(wid, leafid):
                 if scheme == "mut1":
                     p = step % len(plist) # cycles through all parameters, not just those in target_idxs
                     for n in range(len(testvals)):
-                        status = testparams(plist, plist_i, p, attempt, step, wid, n, leafid, report)
+                        plist_i, status = testparams(plist, plist_i, p, attempt, step, wid, n, leafid, report)
                 else:
                     if scheme == "mut2" or scheme == "mut5":
                         # p = random.randint(0, len(plist) - 1) # old scheme
@@ -722,7 +722,7 @@ def randomwalk(wid, leafid):
                     elif scheme == "mut4.2":
                         p = np.random.choice([47, 60, 73, 86])
                     
-                    status = testparams(plist, plist_i, p, attempt, step, wid, None, leafid, report)  
+                    plist_i, status = testparams(plist, plist_i, p, attempt, step, wid, None, leafid, report)  
                 report_out(report, leafid, wid)
                 if status == 2:
                     break # exit attempt loop if leaf generated and passed checks, continue if not
