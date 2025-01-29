@@ -10,6 +10,7 @@ import os
 import corner
 import re
 import sys
+import warnings
 
 # set default parameters
 func = 0 # default value is running the mcmc inference
@@ -25,6 +26,7 @@ t = 1 # the value of time for each timstep in P=exp[Q*t]
 wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
 # wd = "leaves_full_15-9-23_MUT1_CLEAN"
 cutoff = 60 # the simulation data is cutoff at this step number before being used to fit the CTMC model
+run_id = "test" # the name of the run
 # run_id = "MUT2_mcmc_03-12-24"
 # run_id = "MUT2_mcmc_08-12-24"
 # run_id = "MUT1_mcmc_04-12-24"
@@ -409,6 +411,21 @@ def autocorrelation_analysis(sampler):
     tau = sampler.get_autocorr_time()
     print(f"No. steps until autocorrelation: {tau}")
 
+def print_hyperparams():
+    print("Inference Hyper Parameters:")
+    print(f"n_processes = {n_processes}")
+    print(f"init_lb = {init_lb}, init_ub = {init_ub}")
+    print(f"ndim = {ndim}")
+    print(f"nwalkers = {nwalkers}")
+    print(f"nsteps = {nsteps}")
+    print(f"nshuffle = {nshuffle}")
+    print(f"burnin = {burnin}")
+    print(f"thin = {thin}")
+    print(f"t = {t}")
+    print(f"cutoff = {cutoff}")
+    print(f"wd = {wd}")
+    print(f"run_id = {run_id}")
+
 def print_help():
     help_message = """
     Usage: python3 markov_fitter_emcee_alt.py [options]
@@ -424,6 +441,7 @@ def print_help():
                         1   ...run mle inference
                         2   ...plot mcmc trace from file
                         3   ...export mcmc posteriors from file
+                        4   ...get transition counts from simulation data
     """
     print(help_message)
 
@@ -433,10 +451,11 @@ if __name__ == "__main__":
         print_help()
     
     else:
+        print_hyperparams()
         if "-id" in args:
             run_id = str(args[args.index("-id") + 1])
         else:
-            raise RuntimeError("No run_id specified")
+            warnings.warn(f"No run_id specified, defaulting to {run_id}")
         if "-d" in args:
             data = int(args[args.index("-d") + 1])
             if data == 1:
@@ -451,3 +470,8 @@ if __name__ == "__main__":
                 get_maximum_likelihood()
             if func == 2 or func == 3:
                 sampler_from_file()
+            if func == 4:
+                dfs = get_data()
+                counts = get_leaf_transitions(dfs)
+                print(counts)
+
