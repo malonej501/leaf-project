@@ -56,31 +56,19 @@ labels = ["ul","ud","uc","lu","ld","lc","du","dl","dc","cu","cl","cd"]
 
 
 def init_env():
-
     """Create a run directory."""
-
     if os.path.exists(run_id):
-        # confirm = input(f"The directory '{run_id}' already exists. Do you want to replace it? (y/n): ")
-        # if confirm.lower() == 'y':
-        #     shutil.rmtree(run_id)  # remove the existing directory and its contents
-        #     os.mkdir(run_id)  # create a new directory
-        # else:
-        #     print("Operation cancelled.")
-        #     sys.exit() # terminate the program
         shutil.rmtree(run_id)
-        os.mkdir(run_id)  # create a new directory
+        os.mkdir(run_id)
     else:
-        os.mkdir(run_id)  # create a new directory
+        os.mkdir(run_id)  
 
 
 def concatenator():
-
     """Concatenate all the shape_report files from the random walks into a single dataframe."""
-
     dfs = []
     print(f"\nCurrent directory: {wd}\n")
     for leafdirectory in os.listdir(wd):
-        # print(f"Current = {leafdirectory}")
         leafdirectory_path = os.path.join(wd, leafdirectory)
         for walkdirectory in os.listdir(leafdirectory_path):
             walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
@@ -102,7 +90,6 @@ def concatenator():
 
 
 def get_transition_counts():
-
     """Get the total no. each transition type across the all walks in the dataset."""
 
     walks = concatenator()
@@ -140,7 +127,6 @@ def get_transition_counts():
 
 
 def log_prior(params):  # define a uniform prior from 0 to 0.1 for every transition rate
-
     """Uniform prior between unif_lb and unif_ub. Return -np.inf if any parameter is outside the prior range."""
 
     if all(unif_lb <= q <= unif_ub for q in params): # all q parameters must be within the prior range to return 0
@@ -149,7 +135,6 @@ def log_prior(params):  # define a uniform prior from 0 to 0.1 for every transit
 
 
 def log_likelihood(params, counts):
-
     """Calculate the log likelihood of the data given a set of transition rates Q."""
 
     Q = np.array(
@@ -165,8 +150,6 @@ def log_likelihood(params, counts):
     for i, transition in enumerate(counts["transition"]):
         Pt_i = Pt[transition_map_rates[transition]] # get transition probabilty from Pt matrix
         counts_i = counts["count"][i] # get the count of the transition
-        # if counts_i == 0:
-        #     continue
         if Pt_i > 0:
             log_likelihood +=  counts_i * np.log(Pt_i) # see Kalbfleisch 1985 eq 3.2
         else:
@@ -179,9 +162,8 @@ def log_likelihood(params, counts):
 
 
 def log_probability(params, counts):
-
     """Calculate the log posterior probability of Q given the data by adding log prior and log likelihood."""
-
+    
     lp = log_prior(params)
     if not np.isfinite(lp): # if any of the proposed parameters are outside the prior range, skip the likelihood calculation and return -np.inf
         return -np.inf
@@ -191,7 +173,6 @@ def log_probability(params, counts):
 
 
 def get_maximum_likelihood():
-
     """Get the maximum likelihood estimate of the transition rates Q given the data."""
 
     counts = get_transition_counts()
@@ -209,7 +190,6 @@ def get_maximum_likelihood():
 
 
 def run_leaf_uncert_parallel_pool():
-
     """Run parallelised MCMC inference to find the posterior distributions for all transition rate parameters given data."""
 
     output_file = f'{run_id}/h_params_{run_id}.txt'
@@ -257,7 +237,6 @@ def corner_plot(sampler):
 
 
 def plot_trace(sampler, ml_rates):
-
     """Plot the trace of the MCMC chains for each parameter."""
 
     fig, axes = plt.subplots(4, 4, figsize=(10,7), sharex=True)
@@ -280,7 +259,6 @@ def plot_trace(sampler, ml_rates):
 
 
 def sample_chain(sampler):
-
     """Reduce the size of the saved chain by discarding the burnin and rounding each step and recording only every thin step."""
 
     flat_samples = sampler.get_chain(discard=burnin, thin=thin, flat=True)
