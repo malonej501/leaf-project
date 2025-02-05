@@ -11,6 +11,8 @@ import corner
 import re
 import sys
 import warnings
+import shutil
+from dataprocessing import first_cats
 
 # set default parameters
 func = 0 # default value is running the mcmc inference
@@ -20,12 +22,12 @@ ndim = 12 # no. rate parameters
 nwalkers = 24 # no. markov chains run in parallel
 nsteps = 5000 #25000 # no. steps for each markov chain
 nshuffle = 1# 25 # no. times the leaf dataset is shuffled
-burnin = 2000 #15000 # these first iterations are discarded from the chain
+burnin = 2500 #15000 # these first iterations are discarded from the chain
 thin = 10 #100 # only every thin iteration is kept
 t = 1 # the value of time for each timstep in P=exp[Q*t]
 wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
 # wd = "leaves_full_15-9-23_MUT1_CLEAN"
-cutoff = 60 # the simulation data is cutoff at this step number before being used to fit the CTMC model
+cutoff = 59 # the simulation data is cutoff at this step number before being used to fit the CTMC model
 run_id = "test" # the name of the run
 # run_id = "MUT2_mcmc_03-12-24"
 # run_id = "MUT2_mcmc_08-12-24"
@@ -67,6 +69,18 @@ transition_map_rates = {
 
 labels = ["ul","ud","uc","lu","ld","lc","du","dl","dc","cu","cl","cd"]
 
+def init_env():
+    if os.path.exists(run_id):
+        confirm = input(f"The directory '{run_id}' already exists. Do you want to replace it? (y/n): ")
+        if confirm.lower() == 'y':
+            shutil.rmtree(run_id)  # remove the existing directory and its contents
+            os.mkdir(run_id)  # create a new directory
+        else:
+            print("Operation cancelled.")
+            sys.exit() # terminate the program
+    else:
+        os.mkdir(run_id)  # create a new directory
+
 def concatenator():
     dfs = []
     print(f"\n\nCurrent directory: {wd}\n\n")
@@ -84,6 +98,7 @@ def concatenator():
                     df = pd.read_csv(os.path.join(walkdirectory_path, file))
                     df.insert(0, "leafid", leafdirectory)
                     df.insert(1, "walkid", int(re.findall(r"\d+", walkdirectory)[0]))
+                    df = df.reset_index().rename(columns={"index": "step"}) # reset index and rename to step
                     dfs.append(df)
     return dfs
 
@@ -164,7 +179,32 @@ def get_leaf_transitions(dfs):
         .reset_index()
     )
 
+    counts = leaf_sum.groupby(["transition"])["sum"].agg(["sum"]).rename(columns={"sum":"count"}).reset_index()
+
     return leaf_sum
+
+def get_transition_counts():
+    walks = concatenator()
+    walks = pd.concat(walks)
+    walks = pd.merge(walks, first_cats[["leafid", "first_cat"]], on="leafid")
+
+    walks_sub = walks[["leafid","walkid","shape","step","first_cat"]]
+    walks_sub.to_csv("MUT2.2_04-02-25.csv", index=False)
+
+    # Drop rows where leafid is "pc4" and walkid is 3
+    walks = walks[~((walks["leafid"] == "pc4") & (walks["walkid"] == 3))] # should only remove 1 row
+
+    walks["prevshape"] = walks["shape"].shift(+1) # get transitions by shifting shape columns down by one and combining
+    walks["transition"] = walks["prevshape"] + walks["shape"]
+    walks.loc[walks["step"] == 0, "transition"] = walks["first_cat"] + walks["shape"] # replace 0th step with first_cat + shape
+    # walks.loc[walks["step"] == 0, "transition"] = None # replace 0th step with first_cat + shape
+    
+
+    walks = walks.loc[walks["step"] <= cutoff] # only fit to data from the first "cutoff" steps of each walk
+
+    counts = walks["transition"].value_counts().reset_index()
+
+    return counts
 
 def get_transition_count_avg(dfs):
     count_dfs = []
@@ -250,7 +290,7 @@ def log_prior(params):  # define a uniform prior from 0 to 0.1 for every transit
     return -np.inf
 
 
-def log_likelihood(params, t_mean, t_err):
+def log_likelihood(params, counts):
     Q = np.array(
         [
             [-(params[0] + params[1] + params[2]), params[0], params[1], params[2]],
@@ -261,8 +301,8 @@ def log_likelihood(params, t_mean, t_err):
     )
     log_likelihood = 0
     Pt = scipy.linalg.expm(Q * t)  # * 0.1)  # t=1 for every transition
-    for i, transition in enumerate(t_mean["transition"]):
-        log_likelihood +=  t_mean["count"][i] * np.log( # see Kalbfleisch 1985 eq 3.2
+    for i, transition in enumerate(counts["transition"]):
+        log_likelihood +=  counts["count"][i] * np.log( # see Kalbfleisch 1985 eq 3.2
             Pt[transition_map_rates[transition]]
         )
         if np.isnan(log_likelihood):
@@ -271,22 +311,23 @@ def log_likelihood(params, t_mean, t_err):
     return log_likelihood
 
 
-def log_probability(params, t_mean, t_err):
+def log_probability(params, t_mean):
     lp = log_prior(params)
     if not np.isfinite(lp):
         return -np.inf
-    return lp + log_likelihood(params, t_mean, t_err)
+    return lp + log_likelihood(params, t_mean)
 
 def get_maximum_likelihood():
-    dfs = get_data()
-    t_mean, t_std, t_sem, t_lb, t_ub = get_transition_count_avg(dfs)
-    print(t_mean)
-    counts = get_leaf_transitions(dfs)
-    counts = counts.groupby(["transition"])["sum"].agg(["sum"]).rename(columns={"sum":"count"}).reset_index()
-    print(counts)
-    # exit()
+    # dfs = get_data()
+    # t_mean, t_std, t_sem, t_lb, t_ub = get_transition_count_avg(dfs)
+    # print(t_mean)
+    # counts = get_leaf_transitions(dfs)
+    # print(counts)
+    # counts = counts.groupby(["transition"])["sum"].agg(["sum"]).rename(columns={"sum":"count"}).reset_index()
+    # print(counts)
+    counts = get_transition_counts()
 
-    nll = lambda Q: -log_likelihood(Q, counts, None)
+    nll = lambda Q: -log_likelihood(Q, counts)
     np.random.seed()
     init = np.random.uniform(init_lb, init_ub, ndim) # initialise 12 random numbers for Q matrix
     soln = optimize.minimize(nll, init)
@@ -298,7 +339,7 @@ def get_maximum_likelihood():
 
 
 def run_leaf_uncert_parallel_pool():
-    os.mkdir(run_id)
+    # os.mkdir(run_id)
     output_file = f'{run_id}/h_params_{run_id}.txt'
 
     with open(output_file, 'w') as file:
@@ -315,26 +356,15 @@ def run_leaf_uncert_parallel_pool():
         file.write(f"cutoff = {cutoff}\n")
         file.write(f"wd = {wd}\n")
 
-    print("MCMC Hyper Parameters:")
-    print(f"n_processes = {n_processes}")
-    print(f"init_lb = {init_lb}, init_ub = {init_ub}")
-    print(f"ndim = {ndim}")
-    print(f"nwalkers = {nwalkers}")
-    print(f"nsteps = {nsteps}")
-    print(f"nshuffle = {nshuffle}")
-    print(f"burnin = {burnin}")
-    print(f"thin = {thin}")
-    print(f"t = {t}")
-    print(f"cutoff = {cutoff}")
-    print(f"wd = {wd}")
+    print(f"Hyper parameters have been saved to {output_file}")
 
-    print(f"Parameters have been saved to {output_file}")
-
-    dfs = get_data()
+    # dfs = get_data()
     global transitions
     # t_mean, t_std, t_sem, t_lb, t_ub = get_transition_count_avg(dfs)
-    counts = get_leaf_transitions(dfs)
-    counts = counts.groupby(["transition"])["sum"].agg(["sum"]).rename(columns={"sum":"count"}).reset_index()
+    # counts = get_leaf_transitions(dfs)
+    # counts = counts.groupby(["transition"])["sum"].agg(["sum"]).rename(columns={"sum":"count"}).reset_index()
+    # print(counts)
+    counts = get_transition_counts()
     t_mean = counts
     t_sem = None
     print(t_mean)
@@ -349,7 +379,7 @@ def run_leaf_uncert_parallel_pool():
     backend = emcee.backends.HDFBackend(filename)
     backend.reset(nwalkers, ndim)
     with multiprocessing.Pool() as pool:
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(t_mean, t_sem),pool=pool, backend=backend)
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(t_mean,),pool=pool, backend=backend)
         state = sampler.run_mcmc(
             init_params, nsteps, skip_initial_state_check=True, progress=True
         )
@@ -393,8 +423,10 @@ def sampler_from_file():
     h_params_path = run_id + "/h_params_" + run_id + ".txt"
     with open(h_params_path, "r") as file:
         h_params = file.readlines()
+        print("\n")
         for line in h_params:
             print(line[:-1])
+        print("\n")
     reader_path = run_id + "/" + run_id + ".h5"
     reader = emcee.backends.HDFBackend(reader_path) 
     # tau = reader.get_autocorr_time()
@@ -412,7 +444,7 @@ def autocorrelation_analysis(sampler):
     print(f"No. steps until autocorrelation: {tau}")
 
 def print_hyperparams():
-    print("Inference Hyper Parameters:")
+    print("\nHyper Parameters:\n")
     print(f"n_processes = {n_processes}")
     print(f"init_lb = {init_lb}, init_ub = {init_ub}")
     print(f"ndim = {ndim}")
@@ -424,7 +456,7 @@ def print_hyperparams():
     print(f"t = {t}")
     print(f"cutoff = {cutoff}")
     print(f"wd = {wd}")
-    print(f"run_id = {run_id}")
+    print(f"run_id = {run_id}\n\n")
 
 def print_help():
     help_message = """
@@ -451,7 +483,6 @@ if __name__ == "__main__":
         print_help()
     
     else:
-        print_hyperparams()
         if "-id" in args:
             run_id = str(args[args.index("-id") + 1])
         else:
@@ -465,8 +496,12 @@ if __name__ == "__main__":
         if "-f" in args:
             func = int(args[args.index("-f") + 1])
             if func  == 0:
+                print_hyperparams()
+                init_env()
                 run_leaf_uncert_parallel_pool()
             if func == 1:
+                print_hyperparams()
+                init_env()
                 get_maximum_likelihood()
             if func == 2 or func == 3:
                 sampler_from_file()
@@ -474,4 +509,5 @@ if __name__ == "__main__":
                 dfs = get_data()
                 counts = get_leaf_transitions(dfs)
                 print(counts)
+                print(sum(counts["count"]))
 
