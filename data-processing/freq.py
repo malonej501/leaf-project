@@ -2,6 +2,9 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np# values from stochastic_character_map in an_rec.R - averages from 100 simulations
 
+drop = 0 # drop first n steps
+
+
 # Create the DataFrame with the specified index
 phylo_transitions = pd.DataFrame({
     "transition": ["uu", "ul", "ud", "uc", "lu", "ll", "ld", "lc", "du", "dl", "dd", "dc", "cu", "cl", "cd", "cc"],
@@ -11,8 +14,8 @@ phylo_transitions = pd.DataFrame({
 def get_walks():
     """Return the details of random walks along with transition type at each step"""
     walks = pd.read_csv("MUT2.2.csv") # Not 100% sure if this is the correct file - perhaps some data is missing?
-    walks["nextshape"] = walks["shape"].shift(+1) # get transitions by shifting shape columns down by one and combining
-    walks["transition"] = walks["shape"] + walks["nextshape"]
+    walks["prevshape"] = walks["shape"].shift(+1) # get transitions by shifting shape columns down by one and combining
+    walks["transition"] = walks["shape"] + walks["prevshpape"]
     walks.loc[walks["step"] == 0, "transition"] = walks["first_cat"] + walks["shape"] # replace 0th step with first_cat + shape
 
     return walks
@@ -23,10 +26,14 @@ def get_phylo():
     phylo["shape"] = phylo["shape"].replace({0:"u",1:"l",2:"d",3:"c"}) # replace numerical values with letters
     return phylo
 
-def plot_trans_freq(log_scale=False, rm_self=False):
+def plot_trans_freq_sim(log_scale=False, rm_self=False):
     """Plot the frequency of each transition type"""
     walks = get_walks()
+    if drop > 0:
+        walks = walks[walks["step"] >= drop].reset_index() # drop first n steps
     freq = walks["transition"].value_counts() # count transitions
+    print(freq)
+    print(freq.sum())
    
     if rm_self: # remove self transitions
         freq = freq.drop(["uu","ll","dd","cc"])
@@ -40,9 +47,11 @@ def plot_trans_freq(log_scale=False, rm_self=False):
     plt.ylabel("Proportion")
     plt.show()
 
-def plot_trans_prop(rm_self=False):
+def plot_trans_prop_sim(rm_self=False):
     """Plot the proportion of each transition type"""
     walks = get_walks()
+    if drop > 0:
+        walks = walks[walks["step"] >= drop].reset_index() # drop first n steps
     freq = walks["transition"].value_counts() # count transitions
 
     if rm_self: # remove self transitions before calculating proportion
@@ -54,7 +63,7 @@ def plot_trans_prop(rm_self=False):
     plt.ylabel("Proportion")
     plt.show()
 
-def plot_phylo_sim_shape_freq(drop=0, e=False):
+def plot_shape_freq_phylo_sim(e=False):
     """Plot the frequency/proportion of each shape in the phylogenies and simulation"""
     walks = get_walks()
     if drop > 0:
@@ -75,7 +84,7 @@ def plot_phylo_sim_shape_freq(drop=0, e=False):
     plt.savefig(f"zun_MUT2.2-drop{drop}_shape_prop.pdf") if e else None
     plt.show()
 
-def plot_phylo_sim_trans_prop(drop=0, rm_self=False, e=False):
+def plot_trans_prop_phylo_sim(rm_self=False, e=False):
     walks = get_walks()
     if drop > 0:
         walks = walks[walks["step"] >= drop].reset_index()
@@ -109,4 +118,5 @@ def plot_phylo_sim_trans_prop(drop=0, rm_self=False, e=False):
 
 if __name__ == "__main__":
     # plot_phylo_sim_trans_prop(rm_self=True, drop=0)
-    plot_phylo_sim_shape_freq(drop=0)
+    # plot_phylo_sim_shape_freq()
+    plot_trans_freq_sim()
