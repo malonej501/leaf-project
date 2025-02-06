@@ -4,6 +4,8 @@ library(ggplot2)
 library(ggtree)
 library(dplyr)
 library(svglite)
+library(stringr)
+library(RColorBrewer)
 
 import_trees <- function(){
   # import trees
@@ -34,11 +36,19 @@ import_labels <- function(){
   return(label_data)
 }
 
+map_higher_order_labels <- function(labels){
+  # add higher order taxon classification to the tree labels using data from Naturalis
+  nat_samp <- read.csv("shape_data/Naturalis/jan_zun_nat_ang_26-09-24/Naturalis_multimedia_ang_sample_26-09-24.csv") # read in full herabrium data on angiosperm sample
+  tax_map <- nat_samp[,c("class","order","family","genus","specificEpithet")]
+  tax_map <- tax_map[!duplicated(tax_map$genus), ] # remove rows of duplicate genera
+  labels <- left_join(labels, tax_map, by = c("label" = "genus"))
+  return(labels)
+}
+
 get_treeness <- function(summary){
   # calculate treeness - sum of all internal branch lengths (e.g. branches not leading to a tip) divided by the sum over all branch lengths
   for (dataset in summary$dataset) {
     tree = read.nexus(paste0("phylo_data/trees_final/", dataset))
-    print(tree)
     if (class(tree) == "phylo") {
       summary[summary$dataset == dataset, "treeness"] <- treeness(tree)  
       summary[summary$dataset == dataset, "mean_branch_length"] <- mean_branch_length(tree)
@@ -75,7 +85,6 @@ get_treeness <- function(summary){
 }
 
 plot_trees <- function(summary){
-  print(length(summary$dataset))
   layout(matrix(1:length(summary$dataset), ncol = 2, byrow = TRUE)) 
   par()
   for (dataset in summary$dataset) {
@@ -90,39 +99,70 @@ plot_trees <- function(summary){
 }
 
 plot_ggtrees <- function(summary){
+  tiplab_text_size = 0.2 # set the size for tip labels and heatmap labels
+  tiplab_vjust = 0.25 # set the vertical justification for tip labels and heatmap labels to ensure alignmnet with tree tips
   label_data = import_labels()
+  label_data = map_higher_order_labels(label_data)
   tree_names <- summary$dataset
-  tree_names <- list("zuntini_genera_phylo_nat_class_10-09-24.tre")
+  # tree_names <- list("jan_genus_phylo_nat_class_26-09-24.tre")
+  tree_names <- list("zun_genus_phylo_nat_class_26-09-24.tre")
+  # tree_names <- list("geeta_phylo_geeta_class_23-04-24.tre")
   trees <- list()  # Initialize an empty list to store trees
+  heatmap_data <- c()
   
   for (dataset in tree_names) {
-    data_name = sub("^(.*class).*", "\\1", dataset)
+    data_name <- sub("^(.*class).*", "\\1", dataset)
     tree_path <- paste0("phylo_data/trees_final/", dataset)
     tree <- read.nexus(tree_path)
     labels <- label_data[label_data$dataset == data_name, ]
-    #print(labels[1,])
+    label_data_ordered <- data.frame("label" = tree$tip.label) # Create a data frame with the tree tip labels in the tree order
+    label_data_ordered <- left_join(label_data_ordered, labels, by="label") # Join with the labels data frame to get the order
+    heatmap_data <- data.frame("order"=label_data_ordered$order) # here we specify the taxonomic level to be used for the heatmap
+    rownames(heatmap_data) <- label_data_ordered$label
 
     if (inherits(tree, "phylo")) {
-      tree <- full_join(tree, labels, by="label")
-      #print(tree, n=1000)
+      tree <- left_join(tree, labels, by="label")
       trees[[dataset]] <- tree
     } else if (inherits(tree, "multiPhylo")) {
-      tree <- full_join(tree[[1]], labels, by="label")
+      tree <- left_join(tree[[1]], labels, by="label")
       trees[[dataset]] <- tree  # Select the first tree if it's a multiPhylo object
     }
-    print(tree)
   }
   class(trees) <- "multiPhylo"
-  #print(trees[[1]])
-  p <- ggtree(trees, layout="circular", size=ifelse(length(trees) == 1, 0.5, 0.07)) +
+  print(trees[[1]])
+  p <- ggtree(trees, layout="circular", size=ifelse(length(trees) == 1, 0.1, 0.07)) +
     aes(colour=shape) +
     facet_wrap(~.id, scale="free", ncol = 4) +
     # theme_tree2() +
-    #geom_tippoint(aes(colour=factor(shape))) +
-    scale_color_manual(values=c("unlobed"="#0173B2","lobed"="#DE8F05","dissected"="#029E73","compound"="#D55E00"))
+    # geom_tippoint(aes(colour=factor(order))) +
+    geom_tiplab(size=tiplab_text_size, vjust=tiplab_vjust) + #, aes(colour=factor(order))) +
+    scale_color_manual(values=c("unlobed"="#0173B2","lobed"="#DE8F05","dissected"="#029E73","compound"="#D55E00")) +
+    geom_treescale(x=0, y=0, width=100, offset=5) #width=0.1 for geeta, 100 for jan, zun
   
+ 
+  tips_plot_order <- rev(get_taxa_name(p)) # gives the tip labels in the order they appear in ggplot
+  tips_ape_order <- rownames(heatmap_data)
+  idx_ape_in_plot <- match(tips_ape_order, tips_plot_order) # find the index of each ape tip label in the plot
+  ang <- ((360 * idx_ape_in_plot) / length(idx_ape_in_plot)) # calculate the angle for each tip label based on the plot order, not order in the ape phylo object
+  ang[ang > 90 & ang < 270] <- ang[ang > 90 & ang < 270] - 180
+
+
+  # extend the angle list to include NULL values for internal nodes
+  total_nodes <- Ntip(trees[[1]]) + Nnode(trees[[1]])
+  add_nodes <- total_nodes - length(ang) 
+  ang_ext <- c(ang, rep(list(NULL), add_nodes)) 
+
+  p <- gheatmap(p, heatmap_data, offset = 0.05, width=0.1, color=NULL, colnames=TRUE, hjust=0.5, colnames_offset_x = 5) +
+    # scale_fill_brewer(palette="Set2")
+    # scale_fill_manual(values = col_vector)
+    scale_fill_viridis_d(option="D" ) +
+    geom_text(aes(label=order, angle=ang_ext), color="white", size=tiplab_text_size, nudge_x=20, vjust=tiplab_vjust, hjust=0.5) +
+    # geom_text(aes(label=as.character(1:total_nodes), angle=ang_ext), color="white", size=tiplab_text_size, nudge_x=12, vjust=tiplab_vjust, hjust=0) +
+    guides(fill = "none") # remove heatmap legend
+    # labs(fill = "order")
   #return(fig)
-  ggsave(file="ggtreeplot.svg", plot=p, width=10, height=10)
+  # ggsave(file="ggtreeplot.svg", plot=p, width=10, height=10)
+  ggsave(file="jan_genus_phylo_nat_class_26-09-24.pdf", plot=p, width=10, height=10, dpi=10000) #text below a certain size will not be rendered with .pdf
 }
 
 get_shape_counts <- function(summary){
@@ -140,10 +180,10 @@ get_shape_counts <- function(summary){
   }
   shape_freq_df[is.na(shape_freq_df)] <- 0
   shape_freq_df$n_tips <- rowSums(shape_freq_df[grep("^Freq", names(shape_freq_df), value = TRUE)])
-  print(shape_freq_df)
+  # print(shape_freq_df)
   colnames(shape_freq_df) <- c("dataset","u","l","d","c","ld","lc","ldc", "n_tips")
   summary <- merge(summary,shape_freq_df, by = "dataset")
-  print(summary)
+  # print(summary)
   
 }
 summary <- import_trees()
@@ -151,7 +191,6 @@ summary <- get_treeness(summary)
 summary <- get_shape_counts(summary)
 
 
-print(summary)
 write.csv(summary, "tree_statistics.csv", row.names = FALSE)
 plot_ggtrees(summary)
 #ggsave("my_ggtree_plot.svg", plot = fig, width = 8, height = 6)
