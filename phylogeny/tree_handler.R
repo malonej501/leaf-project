@@ -78,10 +78,11 @@ nat_tree_intersect <- function(tree_path){
     tree$tip.label <- sub("^[^_]*_[^_]*_(.*)", "\\1", tree$tip.label) # set tip labels to genus_species
     print(paste("original tree length =",length(tree$tip.label)))
     
-    nat_samp <- nat_samp_data[[grep(name, names(nat_samp_data))]]
-    nat_tree_intersect_species <- nat_samp[nat_samp$species %in% intersect(nat_samp$species, tips_genus_species),]
+    nat_samp <- nat_samp_data[[grep(name, names(nat_samp_data))]] # return the naturalis data for the current tree
+    nat_tree_intersect_species <- nat_samp[nat_samp$species %in% intersect(nat_samp$species, tips_genus_species),] # subset nat data to species present in the tree
     print(paste("nat phylo species intersect =", nrow(nat_tree_intersect_species)))
-    nat_tree_intersect_genus <- nat_samp[nat_samp$genus %in% intersect(nat_samp$genus, tips_genus),]
+    
+    nat_tree_intersect_genus <- nat_samp[nat_samp$genus %in% intersect(nat_samp$genus, tips_genus),] # subset nat data to genera present in the tree
     nat_tree_intersect_genus <- nat_tree_intersect_genus[!duplicated(nat_tree_intersect_genus$genus), ] # keep only the first occurring species in each genera
     print(paste("nat phylo genus intersect =", nrow(nat_tree_intersect_genus)))
 
@@ -89,32 +90,26 @@ nat_tree_intersect <- function(tree_path){
     #write.csv(nat_tree_intersect_genus, paste(substr(name, 1, 3), "nat_genus.csv", sep="_"), row.names=FALSE)
 
     #subset the trees
-
-
-
-    
     #print(setdiff(tree$tip.label, nat_tree_intersect_species$species))
-    tree_species_sub <- drop.tip(tree, setdiff(tree$tip.label, nat_tree_intersect_species$species))
-    tree_species_sub <- unique_tips(tree_species_sub)
+    tree_species_sub <- drop.tip(tree, setdiff(tree$tip.label, nat_tree_intersect_species$species)) # drop tree tips not present in the nat species subset
+    tree_species_sub <- unique_tips(tree_species_sub) # if some tips are duplicated, remove all copies but one
     print(paste("tree_pruned_species length =",length(tree_species_sub$tip.label)))
     #print(setdiff(tree$tip.label, nat_tree_intersect_species$species))
     
     # keep one tip per genus
-    tree_tip_info <- data.frame(tip = tree$tip.label, tip_genus_species = tips_genus_species, tip_genus = tips_genus)
+    tree_tip_info <- data.frame(tip = tree$tip.label, tip_genus_species = tips_genus_species, tip_genus = tips_genus) # construct df with tip label, genus and species
     # Randomly select one species from each genus
     unique_genus <- unique(tree_tip_info$tip_genus)
     selected_tips <- sapply(unique_genus, function(genus) {
       species_options <- tree_tip_info$tip[tree_tip_info$tip_genus == genus]
       sample(species_options, 1)  # Randomly select one species
     })
-    
     tree_pruned <- drop.tip(tree, setdiff(tree$tip.label, selected_tips)) # drop all but one tip from each genera
     
     tree_pruned$tip.label <- sub("^(.*?)_.*", "\\1", tree_pruned$tip.label) # set tip labels to genus
     print(paste("tree_pruned_1_tip_per_genus length =",length(tree_pruned$tip.label)))
-    
-    tree_genus_sub <- drop.tip(tree_pruned, setdiff(tree_pruned$tip.label, nat_tree_intersect_genus$genus))
-    tree_genus_sub <- unique_tips(tree_genus_sub)
+    tree_genus_sub <- drop.tip(tree_pruned, setdiff(tree_pruned$tip.label, nat_tree_intersect_genus$genus)) # drop tips not present in the nat genus subset
+    tree_genus_sub <- unique_tips(tree_genus_sub) # if some tips are duplicated, remove all copies but one
     print("Tree length")
     #print(length(tree_species_sub$tip.label))
     print(paste("pruned_tree intersect with naturalis tree intersect length =", length(tree_genus_sub$tip.label)))
