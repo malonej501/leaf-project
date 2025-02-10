@@ -20,18 +20,15 @@ n_processes = 10 # for parallelisation
 unif_lb, unif_ub = 0, 0.1 # lb and ub of uniform distribution for prior and initial values
 ndim = 12 # no. rate parameters
 nwalkers = 24 #24 # no. markov chains run in parallel
-nsteps = 100 #25000 # no. steps for each markov chain
+nsteps = 5000 #25000 # no. steps for each markov chain
 nshuffle = 1# 25 # no. times the leaf dataset is shuffled
 burnin = 2500 #15000 # these first iterations are discarded from the chain
 thin = 10 #100 # only every thin iteration is kept
 t = 1 # the value of time for each timstep in P=exp[Q*t]
-wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
-# wd = "leaves_full_15-9-23_MUT1_CLEAN"
+# wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
+wd = "leaves_full_15-9-23_MUT1_CLEAN"
 cutoff = 59 # the simulation data is cutoff at this step number before being used to fit the CTMC model
-run_id = "test" # the name of the run
-# run_id = "MUT2_mcmc_03-12-24"
-# run_id = "MUT2_mcmc_08-12-24"
-# run_id = "MUT1_mcmc_04-12-24"
+run_id = "test" # the name of the run WARNING - test will be overwritten by default
 
 transition_map_rates = {
     "uu": (0, 0),
@@ -58,6 +55,14 @@ labels = ["ul","ud","uc","lu","ld","lc","du","dl","dc","cu","cl","cd"]
 def init_env():
     """Create a run directory."""
     if os.path.exists(run_id):
+        if not run_id == "test": # don't ask for confirmation if the run_id is "test"
+            confirm = input(f"The directory '{run_id}' already exists. Do you want to replace it? (y/n): ")
+            if confirm.lower() == 'y':
+                shutil.rmtree(run_id)  # remove the existing directory and its contents
+                os.mkdir(run_id)  # create a new directory
+            else:
+                print("Operation cancelled.")
+                sys.exit() # terminate the program
         shutil.rmtree(run_id)
         os.mkdir(run_id)
     else:
@@ -118,7 +123,7 @@ def get_transition_counts():
     all_transitions["count"] = 0
 
     # merge with the existing counts DataFrame
-    counts = all_transitions.merge(counts, on="transition", how="left").fillna(0) # fill missing counts with 1 for numerical stability
+    counts = all_transitions.merge(counts, on="transition", how="left").fillna(1) # fill missing counts with 1 for numerical stability
     counts["count"] = (counts["count_x"] + counts["count_y"]).astype(int)
     counts = counts[["transition", "count"]]
     print(counts)
@@ -210,6 +215,8 @@ def run_leaf_uncert_parallel_pool():
 
     print(f"Hyper parameters have been saved to {output_file}")
 
+    shutil.copy("markov_fitter_emcee.py", f"{run_id}/markov_fitter_emcee_{run_id}.txt") # save copy of code to run dir for reference
+
     counts = get_transition_counts()
 
     init_params = np.random.uniform(unif_lb, unif_ub, (nwalkers, ndim)) # generate initial values to fill Q matrix for each walker
@@ -227,6 +234,7 @@ def run_leaf_uncert_parallel_pool():
     plot_trace(sampler, Q_ml)
     sample_chain(sampler)
     autocorrelation_analysis(sampler)
+
     
 
 def corner_plot(sampler):
