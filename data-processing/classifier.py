@@ -11,14 +11,14 @@ import multiprocessing
 # Bigger means more blurring, needs to be a positive odd integer
 kernel_size = (5, 5)
 contourbuff_size = 40
-wd = "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01"
-wd1 = "/home/m/malone/vlab-5.0-ubuntu-20.04/oofs/ext/NPHLeafModels_1.01/LeafGenerator/testleaves/"
-wd2 = "/home/m/malone/leaf_storage/Fig"
-
-randomwalkleaves = "leaves_full_21-9-23_MUT2.2_CLEAN"
+randomwalkleaves = "leaves_full_10-02-25_MUT5_CLEAN" #"leaves_full_21-9-23_MUT2.2_CLEAN"
+v = False # verbose mode for debugging
 
 
 def imageprocessing(leaf):
+
+    """Extract contour veins and silhouette from leaf image."""
+
     # binarise the image
     ret1, thresh = cv2.threshold(leaf, 254, 255, cv2.THRESH_BINARY)
 
@@ -44,28 +44,10 @@ def imageprocessing(leaf):
     return contour, contour_compressed, veins, img, thresh
 
 
-def centreveinsfinder(veins):
-    # Need to add the condition that the stretch of uninterrupted 1s is centred on the middle of the image
-    # Or just the first branching point of the veins - start from the bottom work up until the width gets larger
-    max_length = 0
-    for row_index, row in enumerate(veins):
-        row_length = 0
-        for value in row:
-            if value == 1:
-                row_length += 1
-                if row_length > max_length:
-                    max_length = row_length
-                    max_length_index = row_index
-            else:
-                row_length = 0
-    # print(f"#### Max width = {max_length}")
-    # print(f"#### Max length index = {max_length_index}")
-    x = int(round(np.shape(veins)[1] / 2))
-    y = max_length_index
-    return (x, y)
-
-
 def barfinder(rawmatrix):
+
+    """Estimate the position of the scale bar, by finding the first row with a 1 in it."""
+
     matrix = np.invert(np.array(rawmatrix, dtype=bool))
     matrixflipped = np.flip(matrix)
     row_number = 0
@@ -73,7 +55,7 @@ def barfinder(rawmatrix):
         if 1 in row:
             break
         row_number += 1
-    # print(f"#### Bottom = {row_number}")
+    print(f"#### Bottom = {row_number}") if v else None
     matrixbottom = matrixflipped[: row_number + 1, :]
     barrow = row_number + 1
 
@@ -81,6 +63,7 @@ def barfinder(rawmatrix):
 
 
 def middlefinder(rawmatrix, barrow):
+    """Find the centre column of the leaf shape, by finding the center of the scale bar."""
     matrix = np.invert(np.array(rawmatrix, dtype=bool))
     # extract the barrow in the non-flipped matrix
     bar = matrix[-barrow, :]
@@ -95,15 +78,20 @@ def middlefinder(rawmatrix, barrow):
 
 
 def centreveinsfinder_alt(veins, centre_col):
+
+    """
+    Find the x,y coordinate where the veins first start branching. x is the center column, y is found by iterating 
+    through the veins in reverse order and finding the longest uninterrupted stretch of 1s that also contains the
+    center column.
+    """
+
     max_length_column_indices = []
     max_length_index = 0
-    for row_index in range(len(veins) - 1, -1, -1):
-        row_length = 0
+    for row_index in range(len(veins) - 1, -1, -1): # iterate through veins rows in reverse order
         max_length_column_indices_i = []
-        for i, value in enumerate(veins[row_index]):
+        for i, value in enumerate(veins[row_index]): # count the length of uninterrupted stretches of 1s in each row
             if value == 1:
-                row_length += 1
-                max_length_column_indices_i.append(i)
+                max_length_column_indices_i.append(i) # store all stretches of 1s
 
         longest_seq = []
         temp_seq = []
@@ -138,19 +126,21 @@ def centreveinsfinder_alt(veins, centre_col):
         else:
             max_length_index = len(max_length_column_indices) - startveinindex_inv
 
-    # #if the algorithm proposes a centreveins point very high up on the leaf we change it to the middle of the image
+    # if the algorithm proposes a centreveins point very high up on the leaf we change it to the middle of the image
     if max_length_index < round(0.3 * 490):
         max_length_index = round(0.6 * 490)
-    print(f"#### Max length index = {max_length_index}")
+    print(f"#### Max length index = {max_length_index}") if v else None
 
     x = centre_col
     y = max_length_index
-    # print(x,y)
 
     return (x, y)
 
 
 def dist_to_point(rawcontour, refpoint):
+
+    """Calculate the distance from each point on the contour to the reference point."""
+
     contour = rawcontour[:, 0]
 
     refdist = []
@@ -171,6 +161,9 @@ def dist_to_point(rawcontour, refpoint):
 
 
 def getextrema(contour, refdist):
+
+    """Get local minima and maxima coordinates and contour indices."""
+
     refdist_inv = [-1 * i for i in refdist]
 
     local_maxima_indices, _ = find_peaks(refdist, prominence=25, distance=10)
@@ -188,6 +181,9 @@ def getextrema(contour, refdist):
 def morphometrics(
     rawcontour, local_maxima_indices, local_minima_indices, local_minima, refpoint
 ):
+    
+    """Calculate various morphometrics from the leaf image."""
+
     contour = rawcontour[:, 0]
 
     minmax_dist_avg_i = []
@@ -197,8 +193,9 @@ def morphometrics(
     minmax_resultant_i = []
     minima_samerow_dist_i = []
 
-    # print(local_minima_indices)
-    # print(local_maxima_indices)
+    if v:
+        print(local_minima_indices)
+        print(local_maxima_indices)
 
     if local_minima_indices.any() and local_maxima_indices.any():
         # add the last and first local_minima_indices to the start and end of local_minima indices respectively, so that the minima preceeding the first maxima and proceeding the last maxima can be returned later
@@ -209,9 +206,10 @@ def morphometrics(
                 [local_minima_indices[0]],
             )
         )
-        # print(len(local_minima_indices))
-        # print(local_minima_indices_buffered)
-        # print(len(local_minima_indices_buffered))
+        if v:
+            print(len(local_minima_indices))
+            print(local_minima_indices_buffered)
+            print(len(local_minima_indices_buffered))
 
         for i, value in enumerate(local_maxima_indices):
 
@@ -329,42 +327,6 @@ def morphometrics(
         all_extrema,
     )  # , refmin_dist_4lowest_max
 
-
-def classifier_old(
-    minmax_dist_avg,
-    minmax_angle_avg,
-    minima_samerow_dist_avg,
-    unlobed_ub,
-    lobed_ub,
-    dissected_ub,
-    all_extrema,
-):  # , refmin_dist_4lowest_max):
-    if (
-        minmax_dist_avg >= dissected_ub
-        and len(all_extrema) > 5
-        and minmax_angle_avg < 30
-    ) or (minima_samerow_dist_avg < 25 and len(all_extrema) > 5):
-        return "c"
-    elif (
-        minmax_dist_avg >= lobed_ub
-        and minmax_dist_avg < dissected_ub
-        and len(all_extrema) > 5
-        and minmax_angle_avg < 30
-    ):
-        return "d"
-    elif (
-        minmax_dist_avg >= unlobed_ub
-        and minmax_dist_avg < lobed_ub
-        and len(all_extrema) > 5
-        and minmax_angle_avg < 50
-    ):
-        return "l"
-    elif minmax_dist_avg < unlobed_ub or len(all_extrema) <= 5 or minmax_angle_avg > 50:
-        return "u"
-    else:
-        return "unclassified"
-
-
 def classifier(
     minmax_dist_avg,
     minmax_angle_avg,
@@ -374,6 +336,9 @@ def classifier(
     dissected_ub,
     all_extrema,
 ):  # , refmin_dist_4lowest_max):
+    
+    """Classify the leaf shape based on threshold values of the morphometrics."""
+
     if (len(all_extrema) > 5 and minmax_angle_avg < 8) or (
         minima_samerow_dist_avg < 25 and len(all_extrema) > 5
     ):
@@ -388,7 +353,10 @@ def classifier(
         return "unclassified"
 
 
-def main_batch(directory):
+def main_batch(directory, plot=False):
+
+    """Analyse shape and return classification for all leaf images in a directory. Save results to a csv report file."""
+
     # remove all previous pertinent points images
     for filename in os.listdir(directory):
         if "-points" in filename or "-graph" in filename:
@@ -434,44 +402,45 @@ def main_batch(directory):
             local_minima_indices,
         ) = getextrema(contour, refdist)
 
-        # annotate the silhouette of the leaf with the pertinent points and write to file
-        for points in local_maxima:
-            for x, y in points:
-                cv2.circle(img, (x, y), 10, (0, 0, 255), -1)
-        for points in local_minima:
-            for x, y in points:
-                cv2.circle(img, (x, y), 10, (255, 191, 0), -1)
-        cv2.circle(img, refpoint, 10, (0, 165, 255), -1)
-        # cv2.imwrite(directory + f"/{file[:-4]}-points.png", img)
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # Save the image as a PDF
-        plt.imsave(directory + f"/{file[:-4]}-points.pdf", img_rgb)
+        if plot:
+            # annotate the silhouette of the leaf with the pertinent points and write to file
+            for points in local_maxima:
+                for x, y in points:
+                    cv2.circle(img, (x, y), 10, (0, 0, 255), -1)
+            for points in local_minima:
+                for x, y in points:
+                    cv2.circle(img, (x, y), 10, (255, 191, 0), -1)
+            cv2.circle(img, refpoint, 10, (0, 165, 255), -1)
+            # cv2.imwrite(directory + f"/{file[:-4]}-points.png", img)
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            # Save the image as a PDF
+            plt.imsave(directory + f"/{file[:-4]}-points.pdf", img_rgb)
 
-        plt.figure(figsize=(4, 3))
-        plt.rcParams["font.family"] = "CMU Serif"
-        seaborn.scatterplot(refdist, color="black", s=10, edgecolor="none")
-        seaborn.scatterplot(
-            y=refdist[local_maxima_indices + 40],
-            x=local_maxima_indices + 40,
-            color="red",
-            s=100,
-            edgecolor="none",
-        )
-        seaborn.scatterplot(
-            y=refdist[local_minima_indices + 40],
-            x=local_minima_indices + 40,
-            color="#00bfff",
-            s=100,
-            edgecolor="none",
-        )
-        plt.xlabel("Contour position", fontsize=12)
-        plt.ylabel("Distance from ref. point", fontsize=12)
-        # plt.xticks(fontsize=14)
-        # plt.yticks(fontsize=14)
-        plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.95)
-        plt.show()
-        # plt.savefig(directory + f"/{file[:-4]}-graph.png")
-        plt.clf()
+            plt.figure(figsize=(4, 3))
+            plt.rcParams["font.family"] = "CMU Serif"
+            seaborn.scatterplot(refdist, color="black", s=10, edgecolor="none")
+            seaborn.scatterplot(
+                y=refdist[local_maxima_indices + 40],
+                x=local_maxima_indices + 40,
+                color="red",
+                s=100,
+                edgecolor="none",
+            )
+            seaborn.scatterplot(
+                y=refdist[local_minima_indices + 40],
+                x=local_minima_indices + 40,
+                color="#00bfff",
+                s=100,
+                edgecolor="none",
+            )
+            plt.xlabel("Contour position", fontsize=12)
+            plt.ylabel("Distance from ref. point", fontsize=12)
+            # plt.xticks(fontsize=14)
+            # plt.yticks(fontsize=14)
+            plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.95)
+            plt.show()
+            # plt.savefig(directory + f"/{file[:-4]}-graph.png")
+            plt.clf()
 
         (
             minmax_dist_avg,
@@ -494,7 +463,6 @@ def main_batch(directory):
             dissected_ub,
             all_extrema,
         )
-        # print(category)
 
         rowdf = pd.DataFrame.from_dict(
             {
@@ -515,12 +483,13 @@ def main_batch(directory):
 
         report = pd.concat([report, rowdf], ignore_index=True)
 
-        # print(report)
-
     report.to_csv(directory + "/" + "shape_report.csv", index=False)
 
 
 def categorise(leaf):
+
+    """Categorise the shape of a single leaf image."""
+
     contour, contour_compressed, veins, img, thresh = imageprocessing(leaf)
     barrow, _ = barfinder(thresh)
     centre_col = middlefinder(thresh, barrow)
@@ -553,6 +522,9 @@ def categorise(leaf):
 
 
 def refdistout(directory):
+
+    """Output a report containing the distance of ~200 equally spaced points on the contour of each leaf to a reference point."""
+
     # load all the leaf image files
     files = os.listdir(directory)
     image_files = [f for f in files if f.endswith(".png")]
@@ -590,6 +562,9 @@ def refdistout(directory):
 
 
 def contour_out(directory):
+
+    """Output the compressed contour of each leaf image."""
+
     # load all the leaf image files
     files = os.listdir(directory)
     image_files = [f for f in files if f.endswith(".png")]
@@ -606,7 +581,6 @@ def contour_out(directory):
 
         contour, contour_compressed, veins, img, thresh = imageprocessing(leaf)
         print(contour_compressed)
-        exit()
 
     report = pd.DataFrame.from_dict(dict(zip(leafidslist, refdistlist)), orient="index")
     print(report)
@@ -614,23 +588,26 @@ def contour_out(directory):
     report.to_csv(directory + "/" + "refdist_report.csv", header=False)
 
 
-def parallel(wd, function):
-    if __name__ == "__main__":
-        processes = []
-        for leafdirectory in os.listdir(wd):
-            leafdirectory_path = os.path.join(wd, leafdirectory)
-            for walkdirectory in os.listdir(leafdirectory_path):
-                walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
-                process = multiprocessing.Process(
-                    target=function, args=(walkdirectory_path,)
-                )
-                processes.append(process)
-                process.start()
+def parallel(dir, function):
 
-            # this waits for each wid process to finish before moving onto the next leafid
-            for process in processes:
-                process.join()
+    """Run target function in parallel on all walk directories in sequence for all leaf directories in dir"""
 
+    processes = []
+    for leafdirectory in os.listdir(dir):
+        leafdirectory_path = os.path.join(dir, leafdirectory)
+        for walkdirectory in os.listdir(leafdirectory_path):
+            walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
+            process = multiprocessing.Process(
+                target=function, args=(walkdirectory_path,)
+            )
+            processes.append(process)
+            process.start()
 
-main_batch("leaf")
-# parallel(randomwalkleaves, contour_out)
+        # this waits for each wid process to finish before moving onto the next leafid
+        for process in processes:
+            process.join()
+
+if __name__ == "__main__":
+    # main_batch("leaf")
+    # parallel(randomwalkleaves, contour_out)
+    parallel(randomwalkleaves, main_batch)
