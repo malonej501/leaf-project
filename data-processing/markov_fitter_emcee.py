@@ -25,32 +25,27 @@ nshuffle = 1# 25 # no. times the leaf dataset is shuffled
 burnin = 2500 #15000 # these first iterations are discarded from the chain
 thin = 10 #100 # only every thin iteration is kept
 t = 1 # the value of time for each timstep in P=exp[Q*t]
-# wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
-wd = "leaves_full_15-9-23_MUT1_CLEAN"
-cutoff = 59 # the simulation data is cutoff at this step number before being used to fit the CTMC model
+wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
+# wd = "leaves_full_15-9-23_MUT1_CLEAN"
+# wd = "leaves_full_10-02-25_MUT5_CLEAN"
+cutoff = 79 # the simulation data is cutoff at this step number before being used to fit the CTMC model
+eq_init = False # whether to plot timeseries from equal numbers of each initial shape by dropping all leafids in excl
+filt = ["u","l","d","c"] # only fit the ctmc to transitions from walks that started in these states
 run_id = "test" # the name of the run WARNING - test will be overwritten by default
 
 transition_map_rates = {
-    "uu": (0, 0),
-    "ul": (0, 1),
-    "ud": (0, 2),
-    "uc": (0, 3),
-    "lu": (1, 0),
-    "ll": (1, 1),
-    "ld": (1, 2),
-    "lc": (1, 3),
-    "du": (2, 0),
-    "dl": (2, 1),
-    "dd": (2, 2),
-    "dc": (2, 3),
-    "cu": (3, 0),
-    "cl": (3, 1),
-    "cd": (3, 2),
-    "cc": (3, 3),
+    "uu": (0, 0),"ul": (0, 1),"ud": (0, 2),"uc": (0, 3),
+    "lu": (1, 0),"ll": (1, 1),"ld": (1, 2),"lc": (1, 3),
+    "du": (2, 0),"dl": (2, 1),"dd": (2, 2),"dc": (2, 3),
+    "cu": (3, 0),"cl": (3, 1),"cd": (3, 2),"cc": (3, 3),
 }
 
 labels = ["ul","ud","uc","lu","ld","lc","du","dl","dc","cu","cl","cd"]
 
+# exclude these in concatenator if you want to infer from equal numbers of each initshape
+excl = ["p0_121","p1_82","p2_195","p9_129","p5_249","pu3","p2_78_alt","p3_60", #unlobed
+        "p8_1235","p1_35","p12b", # dissected
+        "pc4","p12de","p7_437","p2_346_alt","p6_1155"] # compound
 
 def init_env():
     """Create a run directory."""
@@ -67,6 +62,7 @@ def init_env():
         os.mkdir(run_id)
     else:
         os.mkdir(run_id)  
+    shutil.copy("markov_fitter_emcee.py", f"{run_id}/markov_fitter_emcee_{run_id}.txt") # save copy of code to run dir for reference
 
 
 def concatenator():
@@ -74,6 +70,8 @@ def concatenator():
     dfs = []
     print(f"\nCurrent directory: {wd}\n")
     for leafdirectory in os.listdir(wd):
+        if eq_init and leafdirectory in excl: # only fit to equal number of initial leaves
+            continue
         leafdirectory_path = os.path.join(wd, leafdirectory)
         for walkdirectory in os.listdir(leafdirectory_path):
             walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
@@ -102,7 +100,7 @@ def get_transition_counts():
     walks = pd.merge(walks, first_cats[["leafid", "first_cat"]], on="leafid")
 
     walks_sub = walks[["leafid","walkid","shape","step","first_cat"]]
-    walks_sub.to_csv("MUT1_05-02-25.csv", index=False)
+    walks_sub.to_csv(f"{run_id}.csv", index=False)
 
     # Drop rows where leafid is "pc4" and walkid is 3
     walks = walks[~((walks["leafid"] == "pc4") & (walks["walkid"] == 3))] # should only remove 1 row
@@ -113,8 +111,9 @@ def get_transition_counts():
     # walks.loc[walks["step"] == 0, "transition"] = None # replace 0th step with None
     
     walks = walks.loc[walks["step"] <= cutoff] # only fit to data from the first "cutoff" steps of each walk
-
-    counts = walks["transition"].value_counts().reset_index()
+    walks = walks[walks["first_cat"].isin(filt)] # only fit to transitions from walks that started in these states
+    
+    counts = walks["transition"].value_counts().reset_index() # count no. transitions of each type
 
     # make sure all transitions are included in the counts DataFrame even if they are 0
     all_transitions = pd.DataFrame(
@@ -173,7 +172,7 @@ def log_probability(params, counts):
     if not np.isfinite(lp): # if any of the proposed parameters are outside the prior range, skip the likelihood calculation and return -np.inf
         return -np.inf
     
-    # posterior is proportional to likelihood * prior therefore log(posterior) = log(likelihood) + log(prior)
+    # posterior is proportional to likelihood * prior therefore log(posterior) is proportional to log(likelihood) + log(prior)
     return lp + log_likelihood(params, counts)
 
 
@@ -197,28 +196,7 @@ def get_maximum_likelihood():
 def run_leaf_uncert_parallel_pool():
     """Run parallelised MCMC inference to find the posterior distributions for all transition rate parameters given data."""
 
-    output_file = f'{run_id}/h_params_{run_id}.txt'
-
-    with open(output_file, 'w') as file:
-        file.write(f"Run {run_id} MCMC Hyper Parameters:\n")
-        file.write(f"n_processes = {n_processes}\n")
-        file.write(f"unif_lb = {unif_lb}, unif_ub = {unif_ub}\n")
-        file.write(f"ndim = {ndim}\n")
-        file.write(f"nwalkers = {nwalkers}\n")
-        file.write(f"nsteps = {nsteps}\n")
-        file.write(f"nshuffle = {nshuffle}\n")
-        file.write(f"burnin = {burnin}\n")
-        file.write(f"thin = {thin}\n")
-        file.write(f"t = {t}\n")
-        file.write(f"cutoff = {cutoff}\n")
-        file.write(f"wd = {wd}\n")
-
-    print(f"Hyper parameters have been saved to {output_file}")
-
-    shutil.copy("markov_fitter_emcee.py", f"{run_id}/markov_fitter_emcee_{run_id}.txt") # save copy of code to run dir for reference
-
     counts = get_transition_counts()
-
     init_params = np.random.uniform(unif_lb, unif_ub, (nwalkers, ndim)) # generate initial values to fill Q matrix for each walker
     # set up file to save the run
     filename = f"{run_id}/{run_id}.h5"
@@ -234,7 +212,6 @@ def run_leaf_uncert_parallel_pool():
     plot_trace(sampler, Q_ml)
     sample_chain(sampler)
     autocorrelation_analysis(sampler)
-
     
 
 def corner_plot(sampler):
@@ -312,8 +289,36 @@ def print_hyperparams():
     print(f"thin = {thin}")
     print(f"t = {t}")
     print(f"cutoff = {cutoff}")
+    print(f"eq_init = {eq_init}")
+    print(f"filt = {filt}")
     print(f"wd = {wd}")
     print(f"run_id = {run_id}")
+
+
+def save_hyperparams():
+
+    """Write hyperparameters to file in output directory."""
+    
+    print_hyperparams()
+    output_file = f'{run_id}/h_params_{run_id}.txt'
+
+    with open(output_file, 'w') as file:
+        file.write(f"Run {run_id} MCMC Hyper Parameters:\n")
+        file.write(f"n_processes = {n_processes}\n")
+        file.write(f"unif_lb = {unif_lb}, unif_ub = {unif_ub}\n")
+        file.write(f"ndim = {ndim}\n")
+        file.write(f"nwalkers = {nwalkers}\n")
+        file.write(f"nsteps = {nsteps}\n")
+        file.write(f"nshuffle = {nshuffle}\n")
+        file.write(f"burnin = {burnin}\n")
+        file.write(f"thin = {thin}\n")
+        file.write(f"t = {t}\n")
+        file.write(f"cutoff = {cutoff}\n")
+        file.write(f"eq_init = {eq_init}\n")
+        file.write(f"filt = {filt}\n")
+        file.write(f"wd = {wd}\n")
+
+    print(f"Hyper parameters have been saved to {output_file}")
 
 
 def print_help():
@@ -355,17 +360,17 @@ if __name__ == "__main__":
         if "-f" in args:
             func = int(args[args.index("-f") + 1])
             if func  == 0:
-                print_hyperparams()
                 init_env()
+                save_hyperparams()
                 run_leaf_uncert_parallel_pool()
             if func == 1:
-                print_hyperparams()
                 init_env()
+                save_hyperparams()
                 get_maximum_likelihood()
             if func == 2 or func == 3:
                 sampler_from_file()
             if func == 4:
                 counts = get_transition_counts()
-                print(counts)
-                print(sum(counts["count"]))
+                total = sum(counts["count"])
+                print(f"total transitions {total}")
 
