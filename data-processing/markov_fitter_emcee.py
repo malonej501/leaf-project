@@ -28,6 +28,7 @@ t = 1 # the value of time for each timstep in P=exp[Q*t]
 wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
 # wd = "leaves_full_15-9-23_MUT1_CLEAN"
 # wd = "leaves_full_10-02-25_MUT5_CLEAN"
+cuton = 39 # the simulation data is removed before this step number and everything above is used to fit the CTMC
 cutoff = 79 # the simulation data is cutoff at this step number before being used to fit the CTMC model
 eq_init = False # whether to plot timeseries from equal numbers of each initial shape by dropping all leafids in excl
 filt = ["u","l","d","c"] # only fit the ctmc to transitions from walks that started in these states
@@ -111,6 +112,7 @@ def get_transition_counts():
     # walks.loc[walks["step"] == 0, "transition"] = None # replace 0th step with None
     
     walks = walks.loc[walks["step"] <= cutoff] # only fit to data from the first "cutoff" steps of each walk
+    walks = walks.loc[walks["step"] >= cuton] # only fit to data after the first "cuton" steps of each walk
     walks = walks[walks["first_cat"].isin(filt)] # only fit to transitions from walks that started in these states
     
     counts = walks["transition"].value_counts().reset_index() # count no. transitions of each type
@@ -288,6 +290,7 @@ def print_hyperparams():
     print(f"burnin = {burnin}")
     print(f"thin = {thin}")
     print(f"t = {t}")
+    print(f"cuton = {cuton}")
     print(f"cutoff = {cutoff}")
     print(f"eq_init = {eq_init}")
     print(f"filt = {filt}")
@@ -313,6 +316,7 @@ def save_hyperparams():
         file.write(f"burnin = {burnin}\n")
         file.write(f"thin = {thin}\n")
         file.write(f"t = {t}\n")
+        file.write(f"cuton = {cuton}\n")
         file.write(f"cutoff = {cutoff}\n")
         file.write(f"eq_init = {eq_init}\n")
         file.write(f"filt = {filt}\n")
