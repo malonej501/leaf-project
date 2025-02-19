@@ -19,13 +19,14 @@ from pyvirtualdisplay import Display
 
 # Simulation parameters
 run_id = "test"  # the id of the run
-scheme = "mut5"  # model of mutation
+scheme = "mut2"  # model of mutation
 testvals = [10, 1, 0.1]  # only relevant for scheme = "mut1"
 startleaf = 0  # the index of the leaf in pdict that the simulation will start at, 0 for the beginning
 # testvals = [0,0,0]
 # nrounds = 100
-ngen_thresh = 80  # threshold no. leaves which must be reached by all walks before moving to the next leafid
-ncores = 10 # no. cores and also no. walks - performed in parallel
+ngen_thresh = 320  # threshold no. leaves which must be reached by all walks before moving to the next leafid
+ncores = 10 # no. cores allocated - each core gets one walk
+nwalks = 5 #no. walks per leafid
 timeout = 160  # simulation will skip to next iteration if a leaf takes longer than this number of seconds to generate
 nattempts = 100 # no. attempts to find a valid step before exiting walk (and moving to next leaf)
 v = False  # verbose mode for debugging
@@ -87,7 +88,7 @@ def initialise():
     # make a directory for every leaf and within that a directory for every walk
     for leafid in leafids:
         os.makedirs(wd + f"/leaves_{run_id}/{leafid}")
-        for wid in range(ncores):
+        for wid in range(nwalks):
             os.makedirs(wd + f"/leaves_{run_id}/{leafid}/walk{wid}")
             os.makedirs(wd + f"/leaves_{run_id}/{leafid}/walk{wid}/rejected")
 
@@ -767,13 +768,38 @@ def start():
 
     display.stop()
 
+def randomwalk_wrapper(args):
+    """Wrapper function to unpack arguments for randomwalk."""
+    wid, leafid = args
+    randomwalk(wid, leafid)
+
+def start_pool():
+    """For each leafid, starts 5 random walks, ensuring 10 processes run concurrently."""
+    # Start an Xcfb virtual screen on which the leaves can generate while remaining hidden
+    display = Display(visible=0, size=(1366, 768))
+    display.start()
+
+    # Create a pool of worker processes
+    with multiprocessing.Pool(processes=ncores) as pool:
+        tasks = []
+        for leafid in leafids[startleaf:]:
+            # Create a list of arguments for the worker processes
+            args = [(wid, leafid) for wid in range(nwalks)]
+            tasks.extend(args)
+            print(args)
+        exit()
+        # Use pool.map to run the randomwalk function in parallel
+        pool.map(randomwalk_wrapper, tasks)
+
+    display.stop()
+
 
 if __name__ == "__main__":
     args = sys.argv[1:]   
     if "-id" in args:
         run_id = str(args[args.index("-id") + 1])
     initialise()
-    start()
+    start_pool()
     pass
 
 ######################################################################################################################
