@@ -48,7 +48,7 @@ def walk_merge():
                             if mode == 1:
                                 # get step numbers from .png file names
                                 steps = set([int(file.split('_')[-2]) for file in os.listdir(walk_path) if file.endswith('.png')])
-                                if 79 not in steps: # stop looping through walks if step 79 is not present in .png filenames
+                                if walk_len - 1 not in steps: # stop looping through walks if last step is not present in .png filenames
                                     print(f"No. steps < {walk_len} in {walk_path}")
                                     all_present = False
                                     break
@@ -99,7 +99,7 @@ def check_steps(dir):
                         walk_path = os.path.join(leaf_path, walk_dir)
                         if os.path.isdir(walk_path):
                             steps = set([int(file.split('_')[-2]) for file in os.listdir(walk_path) if file.endswith('.png')])
-                            if 79 in steps: # if a file with step 79 is present, return the steps for which pngs are missing
+                            if walk_len - 1 in steps: # if a file with last step is present, return the steps for which pngs are missing
                                 missing = expected_steps.symmetric_difference(steps)
                                 if missing:
                                     all_present = False
@@ -114,14 +114,77 @@ def check_steps(dir):
             sys.exit(1)                       
 
 
-if __name__ == "__main__":
-    print("Merge parameters:")
-    print(f"root = {root}")
-    print(f"merged_dir = {merged_dir}")
-    print(f"walk_len = {walk_len}")
-    print(f"mode = {mode}")
-    check_steps(root)
-    initialise()
-    walk_merge()
-    check_complete()
+def check_empty(dir):
+
+    """Check which directories contain leaf images."""
+
+    no_empty_walks = 0
+    incomplete_leafids = []
+    complete_leafids = []
+    for leaf_dir in os.listdir(dir):
+        complete = True # assume each leaf directory is complete until we find an empty directory
+        leaf_path = os.path.join(dir, leaf_dir)
+        if os.path.isdir(leaf_path):
+            for walk_dir in os.listdir(leaf_path):
+                walk_path = os.path.join(leaf_path, walk_dir)
+                if os.path.isdir(walk_path):
+                    steps = set([int(file.split('_')[-2]) for file in os.listdir(walk_path) if file.endswith('.png')])
+                    if walk_len - 1 not in steps:
+                        # print(f"Incomplete directory: {walk_path}")
+                        complete = False
+                        no_empty_walks += 1
+            if complete:
+                complete_leafids.append(leaf_dir)
+            else:
+                incomplete_leafids.append(leaf_dir)
     
+    print(f"Complete leaf directories found in {dir}: {complete_leafids}")
+    print(f"Empty walks found in {dir}: {incomplete_leafids}")
+    print(f"Total incomplete leaf directories: {len(incomplete_leafids)}")
+    print(f"Total empty walks: {no_empty_walks}")
+    
+def print_help():
+    help_message = """
+    Usage: python3 walk_merge.py [options]
+
+    Options:
+        -h              Show this help message and exit.
+        -id [string]    Specify the root directory containing separate 
+                        leaffinder runs, or separate walks if using -f 1.
+        -wl [int]       Specify the expected walk length to check if walks are 
+                        complete.
+        -f  [function]  Pass function you want to perform:
+                        0   ...merge leaf directories
+                        1   ...print empty walk directories
+    """
+    print(help_message)
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if "-h" in args:
+        print_help()
+    else:
+        if "-id" in args:
+            root = str(args[args.index("-id") + 1])
+        else:
+            print(f"WARNING: No run_id specified, defaulting to {root}")
+        if "-wl" in args:
+            walk_len = int(args[args.index("-wl") + 1])
+        if "-f" in args:
+            func = int(args[args.index("-f") + 1])
+            if func == 0:
+                print("Merge parameters:")
+                print(f"root = {root}")
+                print(f"merged_dir = {merged_dir}")
+                print(f"walk_len = {walk_len}")
+                print(f"mode = {mode}")
+                check_steps(root)
+                initialise()
+                walk_merge()
+                check_complete()
+            if func == 1:
+                print("Checking for empty walk directories in:")
+                print(f"root = {root}")
+                print(f"walk_len = {walk_len}")
+                check_empty(root)
+            
