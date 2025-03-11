@@ -11,7 +11,7 @@ import multiprocessing
 # Bigger means more blurring, needs to be a positive odd integer
 kernel_size = (5, 5)
 contourbuff_size = 40
-randomwalkleaves = "leaves_full_10-02-25_MUT5_CLEAN" #"leaves_full_21-9-23_MUT2.2_CLEAN"
+randomwalkleaves = "leaves_full_26-02-25_MUT2_CLEAN" #"leaves_full_21-9-23_MUT2.2_CLEAN"
 v = False # verbose mode for debugging
 
 
@@ -595,17 +595,18 @@ def parallel(dir, function):
     processes = []
     for leafdirectory in os.listdir(dir):
         leafdirectory_path = os.path.join(dir, leafdirectory)
-        for walkdirectory in os.listdir(leafdirectory_path):
-            walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
-            process = multiprocessing.Process(
-                target=function, args=(walkdirectory_path,)
-            )
-            processes.append(process)
-            process.start()
+        if os.path.isdir(leafdirectory_path):
+            for walkdirectory in os.listdir(leafdirectory_path):
+                walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
+                process = multiprocessing.Process(
+                    target=function, args=(walkdirectory_path,)
+                )
+                processes.append(process)
+                process.start()
 
-        # this waits for each wid process to finish before moving onto the next leafid
-        for process in processes:
-            process.join()
+            # this waits for each wid process to finish before moving onto the next leafid
+            for process in processes:
+                process.join()
 
 if __name__ == "__main__":
     # main_batch("leaf")
