@@ -25,10 +25,10 @@ startleaf = 0  # the index of the leaf in pdict that the simulation will start a
 # testvals = [0,0,0]
 # nrounds = 100
 ngen_thresh = 320  # threshold no. leaves which must be reached by all walks before moving to the next leafid
-ncores = 10 # no. cores allocated - each core gets one walk
+ncores = 12 # no. cores allocated - each core gets one walk
 nwalks = 5 #no. walks per leafid
 timeout = 160  # simulation will skip to next iteration if a leaf takes longer than this number of seconds to generate
-nattempts = 100 # no. attempts to find a valid step before exiting walk (and moving to next leaf)
+nattempts = 1000 # no. attempts to find a valid step before exiting walk (and moving to next leaf)
 v = False  # verbose mode for debugging
 
 # Walk constraint parameters
@@ -109,10 +109,10 @@ def initialise():
 def runsim(attempt, step, templist, wid, leafid):
     """Runs lpfg with a given set of parameters, kills lpfg if "Error" occurs in the output or after timeout"""
     input_parameters = dict(zip(pdict.keys(), templist))
-    pwriter.Input(input_parameters, wd + f"/bin{wid}", wid)  # + f"/parameters{wid}")
+    pwriter.Input(input_parameters, wd + f"/bin{wrkid}", wrkid)  # + f"/parameters{wid}")
     process = subprocess.Popen(
         wd
-        + f"/LeafGenerator/Start.sh bin{wid} plant{wid}.l leaf_{leafid}_{wid}_{step}_{attempt}.png",
+        + f"/LeafGenerator/Start.sh bin{wrkid} plant{wrkid}.l leaf_{leafid}_{wid}_{step}_{attempt}.png",
         shell=True,
         stdout=subprocess.PIPE,
         bufsize=1,
@@ -154,7 +154,7 @@ def testparams(plist, plist_i, p, attempt, step, wid, n, leafid, report):
         print(f"#### testval = {templist[p]} ####") if v else None
         print(f"#### Current parameter values ####\n{templist}") if v else None
         runsim(attempt, step, templist, wid, leafid)
-        if os.path.isfile(wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png"):
+        if os.path.isfile(wd + f"/bin{wrkid}/leaf_{leafid}_{wid}_{step}_{attempt}.png"):
             print(f"#### leaf_{leafid}_{wid}_{step}_{attempt}.png successfully generated! ####")
             (margin, 
             lamina_margintest, 
@@ -173,7 +173,7 @@ def testparams(plist, plist_i, p, attempt, step, wid, n, leafid, report):
                 # categorise(leaf): # include this condition to restrict the walk to only particular shape categories
                 print(f"#### Leaf check passed!\n")
                 shutil.move(
-                    wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png",
+                    wd + f"/bin{wrkid}/leaf_{leafid}_{wid}_{step}_{attempt}.png",
                     wd
                     +  f"/leaves_{run_id}/{leafid}/walk{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png",
                 )
@@ -188,7 +188,7 @@ def testparams(plist, plist_i, p, attempt, step, wid, n, leafid, report):
             else: # leaf generated but failed checks
                 print(f"#### leaf check failed!\n")
                 shutil.move(
-                    wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png",
+                    wd + f"/bin{wrkid}/leaf_{leafid}_{wid}_{step}_{attempt}.png",
                     wd
                     + f"/leaves_{run_id}/{leafid}/walk{wid}/rejected/leaf{leafid}_{wid}_{step}_{attempt}.png",
                 )
@@ -424,7 +424,7 @@ def leafcomponents(leafid, wid, step, attempt):
     """Extracts key visual components from the leaf image"""
     # returns them as a np array - "black" has the greyscale value of 32 in this case
     leaf = cv2.imread(
-        wd + f"/bin{wid}/leaf_{leafid}_{wid}_{step}_{attempt}.png", cv2.IMREAD_GRAYSCALE
+        wd + f"/bin{wrkid}/leaf_{leafid}_{wid}_{step}_{attempt}.png", cv2.IMREAD_GRAYSCALE
     )  # Need greyscale so matrix is 2D
 
     silhouette = (leaf < 255).astype(np.uint8)
@@ -690,11 +690,17 @@ def veinsioutsidelaminachecker(lamina, veins, metrics):
 
 #################################### Process Management ####################################
 
+def worker_init():
+    """Sets a unique id for each worker"""
+    global wrkid # global variable for worker id
+    wrkid = multiprocessing.current_process()._identity[0] - 1
+    print(f"Worker initialized with ID: {wrkid}")
+
 
 def randomwalk(wid, leafid):
     """Runs the random walk on a given leafid until one of the 10 parallel walks generates a threshold amount"""
     # set random seed based on walk id to ensure the random numbers occur independently across walks
-    np.random.seed(wid)
+    np.random.seed(wrkid)
 
     leafid_index = leafids.index(leafid)
     plist = [ele[leafid_index] for ele in list(pdict.values())]
@@ -731,6 +737,7 @@ def randomwalk(wid, leafid):
 
 def report_out(report, leafid, wid):
     """Writes the details of each step of the random walk to csv"""
+    report_path = wd + f"/leaves_{run_id}/{leafid}/walk{wid}/report_{leafid}_{wid}.csv"
     header = ["walk_id", "step", "attempt", "status", "target"]
     header.extend(list(pdict.keys()))
     header.extend([
@@ -742,11 +749,12 @@ def report_out(report, leafid, wid):
         "veinswidth",
         "prop_veinsoutsidelamina",
         ])
-    with open(wd + f"/leaves_{run_id}/{leafid}/walk{wid}/report_{leafid}_{wid}.csv", "w") as csvfile:
+    with open(report_path, "w") as csvfile:
         csvfile.write(",".join(header) + "\n")
         for line in report:
             # csvfile.write(",".join(str(elem) for elem in line)[1:-1] + "\n")
             csvfile.write(",".join(str(elem) for elem in line) + "\n")
+    os.chmod(report_path, 0o666) # ensure correct permissions during long runs
 
 def start():
     """For each leafid, starts [ncores] random walks, moving onto the next when all processes are finished"""
@@ -778,16 +786,14 @@ def start_pool():
     # Start an Xcfb virtual screen on which the leaves can generate while remaining hidden
     display = Display(visible=0, size=(1366, 768))
     display.start()
-
     # Create a pool of worker processes
-    with multiprocessing.Pool(processes=ncores) as pool:
+    with multiprocessing.Pool(processes=ncores, 
+                              initializer=worker_init) as pool:
         tasks = []
         for leafid in leafids[startleaf:]:
             # Create a list of arguments for the worker processes
             args = [(wid, leafid) for wid in range(nwalks)]
             tasks.extend(args)
-            print(args)
-        exit()
         # Use pool.map to run the randomwalk function in parallel
         pool.map(randomwalk_wrapper, tasks)
 
