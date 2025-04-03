@@ -5,7 +5,7 @@ from pdict import leafids
 
 root = "../MUT5" # root directory containing separate leaffinder runs
 merged_dir = root + "_merged" # new directory to store merged leaf directories
-walk_len = 80 # expected walk_length for check_steps
+walk_len = None # expected walk_length for check_steps
 mode = 1 # specify whether to copy leaf directories with walk_len pngs or steps in each walk directory 0 - pngs, 1 - steps
 
 
@@ -119,6 +119,9 @@ def check_empty(dir):
     """Check which directories contain leaf images."""
 
     no_empty_walks = 0
+    grand_total_pngs = 0
+    n_walks = len(os.listdir(f"{dir}/{leafids[0]}")) # get no. walks in a leaf dir
+    exp_grand_total_pngs = walk_len * len(leafids) * n_walks
     incomplete_leafids = []
     complete_leafids = []
     for leaf_dir in os.listdir(dir):
@@ -129,19 +132,28 @@ def check_empty(dir):
                 walk_path = os.path.join(leaf_path, walk_dir)
                 if os.path.isdir(walk_path):
                     steps = set([int(file.split('_')[-2]) for file in os.listdir(walk_path) if file.endswith('.png')])
-                    if walk_len - 1 not in steps:
-                        # print(f"Incomplete directory: {walk_path}")
+                    total_pngs = len(steps)
+                    grand_total_pngs += total_pngs
+                    if not steps: # check if completely empty
+                        # print(f"{walk_path}")
                         complete = False
                         no_empty_walks += 1
+                    elif walk_len - 1 not in steps: # check if partially empty
+                        # print(f"Incomplete directory: {walk_path}")
+                        print(f"{walk_path} {total_pngs} #") # print partially full walk directories
+                        complete = False
+                    else:
+                        print(f"{walk_path} {total_pngs} ###") # print full walk directories
             if complete:
                 complete_leafids.append(leaf_dir)
             else:
                 incomplete_leafids.append(leaf_dir)
     
+    print(f"Total pngs found: {grand_total_pngs} of {exp_grand_total_pngs} expected ({grand_total_pngs/exp_grand_total_pngs*100:.2f}%)")
     print(f"Complete leaf directories found in {dir}: {complete_leafids}")
     print(f"Empty walks found in {dir}: {incomplete_leafids}")
-    print(f"Total incomplete leaf directories: {len(incomplete_leafids)}")
-    print(f"Total empty walks: {no_empty_walks}")
+    print(f"Total incomplete leaf directories: {len(incomplete_leafids)} of {len(leafids)} expected ({len(incomplete_leafids)/len(leafids)*100:.2f}%)")
+    print(f"Total empty walks: {no_empty_walks} of {len(leafids) * n_walks} expected ({no_empty_walks/(len(leafids) * n_walks)*100:.2f}%)")
     
 def print_help():
     help_message = """
