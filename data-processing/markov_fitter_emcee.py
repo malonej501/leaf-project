@@ -25,11 +25,12 @@ nshuffle = 1# 25 # no. times the leaf dataset is shuffled
 burnin = 2500 #15000 # these first iterations are discarded from the chain
 thin = 10 #100 # only every thin iteration is kept
 t = 1 # the value of time for each timstep in P=exp[Q*t]
-wd = "leaves_full_21-9-23_MUT2.2_CLEAN" # the simulation run to fit to
+wd = "leaves_full_13-03-25_MUT2_CLEAN" # the simulation run to fit to
 # wd = "leaves_full_15-9-23_MUT1_CLEAN"
 # wd = "leaves_full_10-02-25_MUT5_CLEAN"
-cuton = 39 # the simulation data is removed before this step number and everything above is used to fit the CTMC
-cutoff = 79 # the simulation data is cutoff at this step number before being used to fit the CTMC model
+cuton = 160 # the simulation data is removed before this step number and everything above is used to fit the CTMC
+cutoff = 999 # the simulation data is cutoff at this step number before being used to fit the CTMC model
+reset_first_cat = True # reset first_cat to the shape at step cuton
 eq_init = False # whether to plot timeseries from equal numbers of each initial shape by dropping all leafids in excl
 filt = ["u","l","d","c"] # only fit the ctmc to transitions from walks that started in these states
 run_id = "test" # the name of the run WARNING - test will be overwritten by default
@@ -74,22 +75,23 @@ def concatenator():
         if eq_init and leafdirectory in excl: # only fit to equal number of initial leaves
             continue
         leafdirectory_path = os.path.join(wd, leafdirectory)
-        for walkdirectory in os.listdir(leafdirectory_path):
-            walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
-            for file in os.listdir(walkdirectory_path):
-                if (
-                    file.endswith(".csv")
-                    and "shape_report" in file
-                    and "shape_report1" not in file
-                ):
-                    df = pd.read_csv(os.path.join(walkdirectory_path, file))
-                    if not df.empty: # only append non-empty shape reports
-                        df.insert(0, "leafid", leafdirectory)
-                        df.insert(1, "walkid", int(re.findall(r"\d+", walkdirectory)[0]))
-                        df = df.reset_index().rename(columns={"index": "step"}) # reset index and rename to step
-                        dfs.append(df)
-                    else:
-                        print(f"Found empty shape report: {os.path.join(walkdirectory_path, file)} ...excluding from dataset.")
+        if os.path.isdir(leafdirectory_path):
+            for walkdirectory in os.listdir(leafdirectory_path):
+                walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
+                for file in os.listdir(walkdirectory_path):
+                    if (
+                        file.endswith(".csv")
+                        and "shape_report" in file
+                        and "shape_report1" not in file
+                    ):
+                        df = pd.read_csv(os.path.join(walkdirectory_path, file))
+                        if not df.empty: # only append non-empty shape reports
+                            df.insert(0, "leafid", leafdirectory)
+                            df.insert(1, "walkid", int(re.findall(r"\d+", walkdirectory)[0]))
+                            df = df.reset_index().rename(columns={"index": "step"}) # reset index and rename to step
+                            dfs.append(df)
+                        else:
+                            print(f"Found empty shape report: {os.path.join(walkdirectory_path, file)} ...excluding from dataset.")
     return dfs
 
 
@@ -114,6 +116,13 @@ def get_transition_counts():
     walks = walks.loc[walks["step"] <= cutoff] # only fit to data from the first "cutoff" steps of each walk
     walks = walks.loc[walks["step"] >= cuton] # only fit to data after the first "cuton" steps of each walk
     walks = walks[walks["first_cat"].isin(filt)] # only fit to transitions from walks that started in these states
+    
+    # redefine first_cat to shape at step cuton
+    if reset_first_cat:
+        walks["first_cat"] = walks.groupby(["leafid", "walkid"])["shape"].transform("first")
+        step_cuton = walks[walks["step"] == cuton]
+        mis = step_cuton[step_cuton["first_cat"] != step_cuton["shape"]] # check for mismatches
+        assert len(mis) == 0, f"Mismatch in first_cat and shape at {cuton}"
     
     counts = walks["transition"].value_counts().reset_index() # count no. transitions of each type
 
@@ -292,6 +301,7 @@ def print_hyperparams():
     print(f"t = {t}")
     print(f"cuton = {cuton}")
     print(f"cutoff = {cutoff}")
+    print(f"reset_first_cat = {reset_first_cat}")
     print(f"eq_init = {eq_init}")
     print(f"filt = {filt}")
     print(f"wd = {wd}")
@@ -318,6 +328,7 @@ def save_hyperparams():
         file.write(f"t = {t}\n")
         file.write(f"cuton = {cuton}\n")
         file.write(f"cutoff = {cutoff}\n")
+        file.write(f"reset_first_cat = {reset_first_cat}\n")
         file.write(f"eq_init = {eq_init}\n")
         file.write(f"filt = {filt}\n")
         file.write(f"wd = {wd}\n")
