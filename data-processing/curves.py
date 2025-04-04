@@ -118,12 +118,7 @@ def get_phylo_rates():
     for col in p_rate.columns:
         data = p_rate[col].dropna()
         confidence_intervals[col] = (
-            # np.mean(data) - (1.96 * stats.sem(data)), # sterr for mean
-            # np.mean(data) + (1.96 * stats.sem(data)),
-            # np.mean(data) - np.std(data),
-            # np.mean(data) + np.std(data),
-            # calculate credible interval from posterior
-            np.percentile(data, LB),
+            np.percentile(data, LB),  # credible interval
             np.percentile(data, UB),
         )
 
@@ -146,20 +141,9 @@ def get_sim_rates():
                     f"markov_fitter_reports/emcee/{SIMRATES}/ML_{SIMRATES}"
                     ".csv")
     )
-    name_map = {
-        "0": "q01",
-        "1": "q02",
-        "2": "q03",
-        "3": "q10",
-        "4": "q12",
-        "5": "q13",
-        "6": "q20",
-        "7": "q21",
-        "8": "q23",
-        "9": "q30",
-        "10": "q31",
-        "11": "q32",
-    }
+    name_map = {"0": "q01", "1": "q02", "2": "q03", "3": "q10", "4": "q12",
+                "5": "q13", "6": "q20", "7": "q21", "8": "q23", "9": "q30",
+                "10": "q31", "11": "q32"}
 
     # for sim_rates in avg_list:
     sim_rates = sim_rates.rename(columns=name_map)
@@ -194,12 +178,6 @@ def get_sim_rates():
     for col in sim_rates.columns:
         data = sim_rates[col].dropna()
         confidence_intervals[col] = (
-            # np.mean(data) - (1.96 * stats.sem(data)),
-            # np.mean(data) + (1.96 * stats.sem(data)),
-            # np.mean(data) - np.std(data),
-            # np.mean(data) + np.std(data),
-            # np.mean(data) - (200 * np.var(data, ddof=1)),
-            # np.mean(data) + (200 * np.var(data, ddof=1)),
             np.percentile(data, LB),
             np.percentile(data, UB),
         )
@@ -245,47 +223,47 @@ def get_timeseries():
 
     if T_STAT == 0:
         # total of each shape per step for each leafid
-        timeseries = (
+        tseries = (
             concat.groupby(["leafid", "first_cat", "step", "shape"])
             .agg(shape_total=("shape", "size"))
             .reset_index()
         )
         # check for leafids with duplicate steps
-        dup = timeseries[timeseries.duplicated(
+        dup = tseries[tseries.duplicated(
             subset=["leafid", "step", "shape"])]
         assert len(dup) == 0, f"Duplicate leafid, step, shape rows: {dup}"
 
         # fill in transitions that didn't occur
         all_transitions = pd.MultiIndex.from_product(
-            [timeseries["leafid"].unique(), timeseries["step"].unique(),
+            [tseries["leafid"].unique(), tseries["step"].unique(),
              {"u", "l", "d", "c"}], names=["leafid", "step", "shape"]
         )  # all possible combinations of leafid, step and shape, then reindex
-        timeseries = timeseries.set_index(["leafid", "step", "shape"])
-        timeseries = timeseries.reindex(
+        tseries = tseries.set_index(["leafid", "step", "shape"])
+        tseries = tseries.reindex(
             all_transitions, fill_value=None).reset_index()
 
         # fill empty first-cat values with the first non nan first_cat value
-        timeseries["first_cat"] = timeseries.groupby(
+        tseries["first_cat"] = tseries.groupby(
             ["leafid"])["first_cat"].transform("first")
-        timeseries = timeseries.fillna(0)
+        tseries = tseries.fillna(0)
 
         # no. active walks per step for each leafid
-        timeseries_total = (
-            timeseries.groupby(["leafid", "first_cat", "step"])
+        tseries_total = (
+            tseries.groupby(["leafid", "first_cat", "step"])
             .agg(no_active_walks=("shape_total", "sum"))
             .reset_index()
         )
 
         # proportion of active walks in each shape category for each leafid
-        timeseries = timeseries.merge(
-            timeseries_total, on=["leafid", "first_cat", "step"])
-        timeseries["proportion"] = (
-            timeseries["shape_total"] / timeseries["no_active_walks"]
+        tseries = tseries.merge(
+            tseries_total, on=["leafid", "first_cat", "step"])
+        tseries["proportion"] = (
+            tseries["shape_total"] / tseries["no_active_walks"]
         )
 
         # mean prop active walks per shape for all leaves in each first_cat
-        timeseries = (
-            timeseries.groupby(["first_cat", "step", "shape"])
+        tseries = (
+            tseries.groupby(["first_cat", "step", "shape"])
             .agg(mean_prop=("proportion", "mean"),
                  sterr=("proportion", "sem"),
                  n=("proportion", "size"),
@@ -294,52 +272,38 @@ def get_timeseries():
         )
 
     elif T_STAT == 1:
-        timeseries = concat.groupby(
+        tseries = concat.groupby(
             ["first_cat", "step", "shape"]
         ).size().reset_index(name="shape_total")
         # no. active walks per step
-        timeseries_total = timeseries.groupby(["first_cat", "step"]).agg(
+        tseries_total = tseries.groupby(["first_cat", "step"]).agg(
             no_active_walks=("shape_total", "sum")).reset_index()
         # proportion of active walks in each shape category
-        timeseries = timeseries.merge(
-            timeseries_total, on=["first_cat", "step"])
-        timeseries["prop"] = timeseries["shape_total"] / \
-            timeseries["no_active_walks"]
-        timeseries["sterr"] = 0
+        tseries = tseries.merge(
+            tseries_total, on=["first_cat", "step"])
+        tseries["prop"] = tseries["shape_total"] / \
+            tseries["no_active_walks"]
+        tseries["sterr"] = 0
 
-    timeseries["lb"] = timeseries[VAR] - 1.96 * timeseries["sterr"]
-    timeseries["ub"] = timeseries[VAR] + 1.96 * timeseries["sterr"]
+    tseries["lb"] = tseries[VAR] - 1.96 * tseries["sterr"]
+    tseries["ub"] = tseries[VAR] + 1.96 * tseries["sterr"]
 
-    # add initial state to the timeseries
-    timeseries["step"] = timeseries["step"] + 1
+    # add initial state to the tseries
+    tseries["step"] = tseries["step"] + 1
     for i in ORDER:
         for j in ORDER:
             if i == j:
-                timeseries.loc[-1] = {
-                    "first_cat": i,
-                    "step": 0,
-                    "shape": i,
-                    VAR: 1,
-                    "sterr": 0,
-                    "lb": 1,
-                    "ub": 1,
-                }
+                tseries.loc[-1] = {"first_cat": i, "step": 0, "shape": i,
+                                   VAR: 1, "sterr": 0, "lb": 1, "ub": 1}
             else:
-                timeseries.loc[-1] = {
-                    "first_cat": i,
-                    "step": 0,
-                    "shape": j,
-                    VAR: 0,
-                    "sterr": 0,
-                    "lb": 0,
-                    "ub": 0,
-                }
-            timeseries.index = timeseries.index + 1
-            timeseries = timeseries.sort_index()
+                tseries.loc[-1] = {"first_cat": i, "step": 0, "shape": j,
+                                   VAR: 0, "sterr": 0, "lb": 0, "ub": 0}
+            tseries.index = tseries.index + 1
+            tseries = tseries.sort_index()
     if V:
-        print(f"Simulation data\n{timeseries}")
-    timeseries.to_csv("timeseries.csv")
-    return timeseries
+        print(f"Simulation data\n{tseries}")
+    tseries.to_csv("tseries.csv")
+    return tseries
 
 
 def plot_sim_and_phylogeny_curves():
@@ -350,7 +314,7 @@ def plot_sim_and_phylogeny_curves():
     #### Get sim-rates ####
     sim_summary = get_sim_rates()
     #### Get sim timeseries data ####
-    timeseries = get_timeseries()
+    tseries = get_timeseries()
 
     # produce phylo-curves
     t_vals = np.linspace(0, PHYLO_XLIM, 100)
@@ -385,14 +349,8 @@ def plot_sim_and_phylogeny_curves():
 
     # Create subplots
     plt.rcParams["font.family"] = "CMU Serif"
-    fig, axs = plt.subplots(
-        nrows=5,
-        ncols=5,
-        figsize=(9, 9),
-        # sharey=True,
-        gridspec_kw={"height_ratios": [3, 3, 3, 1, 3]},
-    )
-
+    fig, axs = plt.subplots(nrows=5, ncols=5, figsize=(9, 9),
+                            gridspec_kw={"height_ratios": [3, 3, 3, 1, 3]})
     lines = []
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
 
@@ -408,7 +366,7 @@ def plot_sim_and_phylogeny_curves():
             if idx != 0:
                 ax.set_yticklabels([])
             if i == 1:  # timeseries data on the left
-                cat_data = timeseries[timeseries["first_cat"] == cat]
+                cat_data = tseries[tseries["first_cat"] == cat]
                 cat_data = cat_data.rename(columns={VAR: "P", "step": "t"})
                 ax.set_title(order_full[idx])
                 ax.set_xlim(SIM_XON, SIM_XLIM+1)
@@ -439,28 +397,14 @@ def plot_sim_and_phylogeny_curves():
                     ax.set_ylabel("P")
             if i != 3:
                 for s, shape in enumerate(ORDER):
-                    shape_data = cat_data[cat_data["shape"] == shape]
-                    (line,) = ax.plot(
-                        shape_data["t"],
-                        shape_data["P"],
-                        label=shape,
-                        c=sns.color_palette("colorblind")[s],
-                        linestyle="-",
-                    )
-                    ax.fill_between(
-                        shape_data["t"],
-                        shape_data["lb"],
-                        shape_data["ub"],
-                        alpha=0.2,
-                    )
+                    sd = cat_data[cat_data["shape"] == shape]  # shape data
+                    (line,) = ax.plot(sd["t"], sd["P"], label=shape,
+                                      c=sns.color_palette("colorblind")[s],
+                                      linestyle="-")
+                    ax.fill_between(["t"], sd["lb"], sd["ub"], alpha=0.2)
                     lines.append(line)
 
-    icon_filenames = [
-        "u.png",
-        "l.png",
-        "d.png",
-        "c.png",
-    ]
+    icon_filenames = ["u.png", "l.png", "d.png", "c.png"]
     icons = [os.path.join("uldc_model_icons", path) for path in icon_filenames]
     icon_imgs = [Image.open(path) for path in icons]
     img_width, img_height = icon_imgs[1].size
@@ -474,27 +418,16 @@ def plot_sim_and_phylogeny_curves():
         ax.set_ylim(img_height, -(img_height / sf))
     for idx, i in enumerate([1, 2, 4]):
         ax = axs[i, 0]
-
-        labs = [
-            "Simulation Data\nMUT2",
-            "Simulation CTMC\nMUT2",
-            "Phylogeny CTMC\nZuntini et al. (2024)",
-        ]
-
-        ax.text(
-            0.2,
-            0.5,
-            labs[idx],
-            ha="center",
-            va="center",
-        )
+        labs = ["Simulation Data\nMUT2",
+                "Simulation CTMC\nMUT2",
+                "Phylogeny CTMC\nZuntini et al. (2024)"]
+        ax.text(0.2, 0.5, labs[idx], ha="center", va="center")
 
     legend = fig.legend(
         lines,
         order_full,
         loc="outside right",
         title="Final shape",
-        # fontsize=11,
         ncol=1,
     )
     title = legend.get_title()
@@ -516,7 +449,7 @@ def plot_sim_and_phylogeny_curves_nouncert():
     #### Get sim-rates ####
     sim_summary = get_sim_rates()
     #### Get sim timeseries data ####
-    timeseries = get_timeseries()
+    tseries = get_timeseries()
 
     # produce phylo-curves
     t_calc = np.linspace(0, PHYLO_XLIM, 100)
@@ -553,14 +486,8 @@ def plot_sim_and_phylogeny_curves_nouncert():
 
     # Create subplots
     # plt.rcParams["font.family"] = "CMU Serif"
-    fig, axs = plt.subplots(
-        nrows=4,
-        ncols=5,
-        figsize=(11, 7),
-        # sharey=True,
-        gridspec_kw={"height_ratios": [3, 3, 1, 3]},
-    )
-
+    fig, axs = plt.subplots(nrows=4, ncols=5, figsize=(11, 7),
+                            gridspec_kw={"height_ratios": [3, 3, 1, 3]})
     lines = []
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
 
@@ -575,7 +502,7 @@ def plot_sim_and_phylogeny_curves_nouncert():
             if idx != 0:
                 ax.set_yticklabels([])
             if i == 1:  # timeseries data on the left
-                cat_data = timeseries[timeseries["first_cat"] == cat]
+                cat_data = tseries[tseries["first_cat"] == cat]
                 cat_data = cat_data.rename(columns={VAR: "P", "step": "t"})
                 ax.set_title(order_full[idx])
                 ax.set_xlim(SIM_XON, SIM_XLIM)
@@ -598,30 +525,16 @@ def plot_sim_and_phylogeny_curves_nouncert():
                     ax.set_ylabel("P")
             if i != 2:
                 for s, shape in enumerate(ORDER):
-                    shape_data = cat_data[cat_data["shape"] == shape]
-                    (line,) = ax.plot(
-                        shape_data["t"],
-                        shape_data["P"],
-                        label=shape,
-                        c=sns.color_palette("colorblind")[s],
-                        linestyle="--" if i == 1 else "-",
-                    )
-                    ax.fill_between(
-                        shape_data["t"],
-                        shape_data["lb"],
-                        shape_data["ub"],
-                        alpha=0.2,
-                    )
+                    sd = cat_data[cat_data["shape"] == shape]  # shape data
+                    (line,) = ax.plot(sd["t"], sd["P"], label=shape,
+                                      c=sns.color_palette("colorblind")[s],
+                                      linestyle="--" if i == 1 else "-")
+                    ax.fill_between(sd["t"], sd["lb"], sd["ub"], alpha=0.2)
                     if not sim_cat_data.empty:
-                        shape_data = sim_cat_data[
-                            sim_cat_data["shape"] == shape]
-                        (line,) = ax.plot(
-                            shape_data["t"],
-                            shape_data["P"],
-                            label=shape,
-                            c=sns.color_palette("colorblind")[s],
-                            linestyle="-",
-                        )
+                        sd = sim_cat_data[sim_cat_data["shape"] == shape]
+                        (line,) = ax.plot(sd["t"], sd["P"], label=shape,
+                                          c=sns.color_palette("colorblind")[s],
+                                          linestyle="-")
                         lines.append(line)
             ax.set_ylim(0, 1)
 
@@ -631,12 +544,7 @@ def plot_sim_and_phylogeny_curves_nouncert():
                 if j > 1:  # y labs off for all but leftmost panels
                     ax.set_yticklabels([])
 
-    icon_filenames = [
-        "u.png",
-        "l.png",
-        "d.png",
-        "c.png",
-    ]
+    icon_filenames = ["u.png", "l.png", "d.png", "c.png"]
     icons = [os.path.join("uldc_model_icons", path) for path in icon_filenames]
     icon_imgs = [Image.open(path) for path in icons]
     img_width, img_height = icon_imgs[1].size
@@ -650,19 +558,9 @@ def plot_sim_and_phylogeny_curves_nouncert():
         ax.set_ylim(img_height, -(img_height / sf))
     for idx, i in enumerate([1, 3]):
         ax = axs[i, 0]
-
-        labs = [
-            "Simulation Data\nand CTMC (MUT2)",
-            "Phylogeny CTMC\nZuntini et al. (2024)",
-        ]
-
-        ax.text(
-            0.2,
-            0.5,
-            labs[idx],
-            ha="center",
-            va="center",
-        )
+        labs = ["Simulation Data\nand CTMC (MUT2)",
+                "Phylogeny CTMC\nZuntini et al. (2024)"]
+        ax.text(0.2, 0.5, labs[idx], ha="center", va="center")
     legend = fig.legend(
         lines,
         order_full,
@@ -690,14 +588,14 @@ def get_timeseries_alt():
             print(concat.drop_duplicates(subset=["leafid"]).sort_values(
                 by="first_cat"))
 
-    timeseries = concat.groupby(["step", "shape"]).size().reset_index(
+    tseries = concat.groupby(["step", "shape"]).size().reset_index(
         name="shape_total")  # no. each shape at each step
-    timeseries["total"] = timeseries.groupby("step")["shape_total"].transform(
+    tseries["total"] = tseries.groupby("step")["shape_total"].transform(
         "sum")  # total no. shapes at each step
-    timeseries["prop"] = timeseries["shape_total"] / \
-        timeseries["total"]  # proportion of each shape at each step
+    tseries["prop"] = tseries["shape_total"] / \
+        tseries["total"]  # proportion of each shape at each step
 
-    return timeseries
+    return tseries
 
 
 def plot_sim_and_phylogeny_curves_new():
@@ -711,12 +609,12 @@ def plot_sim_and_phylogeny_curves_new():
     #### Get sim-rates ####
     sim_summary = get_sim_rates()
     #### Get sim timeseries data ####
-    timeseries = get_timeseries_alt()
+    tseries = get_timeseries_alt()
     init_ratio = np.array([  # get proportion of each shape at step=0 in data
-        timeseries[timeseries["shape"] == "u"]["prop"].values[0],
-        timeseries[timeseries["shape"] == "l"]["prop"].values[0],
-        timeseries[timeseries["shape"] == "d"]["prop"].values[0],
-        timeseries[timeseries["shape"] == "c"]["prop"].values[0]
+        tseries[tseries["shape"] == "u"]["prop"].values[0],
+        tseries[tseries["shape"] == "l"]["prop"].values[0],
+        tseries[tseries["shape"] == "d"]["prop"].values[0],
+        tseries[tseries["shape"] == "c"]["prop"].values[0]
     ])
 
     # produce phylo-curves
@@ -779,11 +677,11 @@ def plot_sim_and_phylogeny_curves_new():
         return x * (SIM_XLIM / PHYLO_XLIM)
 
     for i, ax in enumerate(axs.flat):
-        timeseries_sub = timeseries[timeseries["shape"] == ORDER[i]]
+        tseries_sub = tseries[tseries["shape"] == ORDER[i]]
         sim_plot_sub = sim_plot[(sim_plot["shape"] == ORDER[i])]
         phylo_plot_sub = phylo_plot[(phylo_plot["shape"] == ORDER[i])]
-        l_data, = ax.plot(timeseries_sub["step"],
-                          timeseries_sub["prop"], c="C0")
+        l_data, = ax.plot(tseries_sub["step"],
+                          tseries_sub["prop"], c="C0")
         l_fit, = ax.plot(sim_plot_sub["t"], sim_plot_sub["P"], c="C1", ls="--")
         if SHOW_PHYLO:
             secax = ax.secondary_xaxis('top', functions=(forward, inverse))
