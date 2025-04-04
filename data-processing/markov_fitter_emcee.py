@@ -1,233 +1,277 @@
-from dataprocessing import first_cats
+import os
+import shutil
+import sys
+import warnings
+import multiprocessing
+import re
 import numpy as np
 import pandas as pd
 import scipy
 from scipy import optimize
 import emcee
-from matplotlib import pyplot as plt
-import multiprocessing
-import os
 import corner
-import re
-import sys
-import warnings
-import shutil
+from matplotlib import pyplot as plt
+from dataprocessing import first_cats
 from dataprocessing import first_cats
 
 # set default parameters
-func = 0 # default value is running the mcmc inference
-n_processes = 10 # for parallelisation
-unif_lb, unif_ub = 0, 0.1 # lb and ub of uniform distribution for prior and initial values
-ndim = 12 # no. rate parameters
-nwalkers = 24 #24 # no. markov chains run in parallel
-nsteps = 5000 #25000 # no. steps for each markov chain
-nshuffle = 1# 25 # no. times the leaf dataset is shuffled
-burnin = 2500 #15000 # these first iterations are discarded from the chain
-thin = 10 #100 # only every thin iteration is kept
-t = 1 # the value of time for each timstep in P=exp[Q*t]
-wd = "leaves_full_13-03-25_MUT2_CLEAN" # the simulation run to fit to
-# wd = "leaves_full_15-9-23_MUT1_CLEAN"
-# wd = "leaves_full_10-02-25_MUT5_CLEAN"
-cuton = 160 # the simulation data is removed before this step number and everything above is used to fit the CTMC
-cutoff = 999 # the simulation data is cutoff at this step number before being used to fit the CTMC model
-reset_first_cat = True # reset first_cat to the shape at step cuton
-eq_init = False # whether to plot timeseries from equal numbers of each initial shape by dropping all leafids in excl
-filt = ["u","l","d","c"] # only fit the ctmc to transitions from walks that started in these states
-run_id = "test" # the name of the run WARNING - test will be overwritten by default
+FUNC = 0  # default value is running the mcmc inference
+N_PROCESSES = 10  # for parallelisation
+# lb and ub of uniform distribution for prior and initial values
+UNIF_LB, UNIF_UB = 0, 0.1
+NDIM = 12  # no. rate parameters
+NWALKERS = 24  # 24 # no. markov chains run in parallel
+NSTEPS = 5000  # 25000 # no. steps for each markov chain
+NSHUFFLE = 1  # 25 # no. times the leaf dataset is shuffled
+BURNIN = 2500  # 15000 # these first iterations are discarded from the chain
+THIN = 10  # 100 # only every THIN iteration is kept
+T = 1  # the value of time for each timstep in P=exp[Q*t]
+WD = "leaves_full_13-03-25_MUT2_CLEAN"  # the simulation run to fit to
+# WD = "leaves_full_15-9-23_MUT1_CLEAN"
+# WD = "leaves_full_10-02-25_MUT5_CLEAN"
+CUTON = 80  # sim data is removed before this step before CTMC fitting
+CUTOFF = 999  # sim data is CUTOFF at this step before fitting the CTMC
+RESET_FIRST_CAT = True  # reset first_cat to the shape at step CUTON
+EQ_INIT = False  # plot timeseries from equal numbers of each initial shape
+# only fit the ctmc to transitions from walks that started in these states
+FILT = ["u", "l", "d", "c"]
+RUN_ID = "test"  # the name of the run - test will be overwritten by default
 
 transition_map_rates = {
-    "uu": (0, 0),"ul": (0, 1),"ud": (0, 2),"uc": (0, 3),
-    "lu": (1, 0),"ll": (1, 1),"ld": (1, 2),"lc": (1, 3),
-    "du": (2, 0),"dl": (2, 1),"dd": (2, 2),"dc": (2, 3),
-    "cu": (3, 0),"cl": (3, 1),"cd": (3, 2),"cc": (3, 3),
+    "uu": (0, 0), "ul": (0, 1), "ud": (0, 2), "uc": (0, 3),
+    "lu": (1, 0), "ll": (1, 1), "ld": (1, 2), "lc": (1, 3),
+    "du": (2, 0), "dl": (2, 1), "dd": (2, 2), "dc": (2, 3),
+    "cu": (3, 0), "cl": (3, 1), "cd": (3, 2), "cc": (3, 3),
 }
 
-labels = ["ul","ud","uc","lu","ld","lc","du","dl","dc","cu","cl","cd"]
+labels = ["ul", "ud", "uc", "lu", "ld",
+          "lc", "du", "dl", "dc", "cu", "cl", "cd"]
 
-# exclude these in concatenator if you want to infer from equal numbers of each initshape
-excl = ["p0_121","p1_82","p2_195","p9_129","p5_249","pu3","p2_78_alt","p3_60", #unlobed
-        "p8_1235","p1_35","p12b", # dissected
-        "pc4","p12de","p7_437","p2_346_alt","p6_1155"] # compound
+# exclude these in concatenator to infer from equal numbers of each initshape
+excl = ["p0_121", "p1_82", "p2_195", "p9_129", "p5_249", "pu3", "p2_78_alt",
+        "p3_60",  # unlobed
+        "p8_1235", "p1_35", "p12b",  # dissected
+        "pc4", "p12de", "p7_437", "p2_346_alt", "p6_1155"]  # compound
+
 
 def init_env():
-    """Create a run directory."""
-    if os.path.exists(run_id):
-        if not run_id == "test": # don't ask for confirmation if the run_id is "test"
-            confirm = input(f"The directory '{run_id}' already exists. Do you want to replace it? (y/n): ")
+    """Create a run directory. Overwrite if it already exists."""
+    if os.path.exists(RUN_ID):
+        if not RUN_ID == "test":  # ignore warning if RUN_ID="test"
+            confirm = input(
+                f"The directory '{RUN_ID}' already exists. Do you want "
+                "to replace it? (y/n): ")
             if confirm.lower() == 'y':
-                shutil.rmtree(run_id)  # remove the existing directory and its contents
-                os.mkdir(run_id)  # create a new directory
+                shutil.rmtree(RUN_ID)
+                os.mkdir(RUN_ID)
             else:
                 print("Operation cancelled.")
-                sys.exit() # terminate the program
-        shutil.rmtree(run_id)
-        os.mkdir(run_id)
+                sys.exit()
+        shutil.rmtree(RUN_ID)
+        os.mkdir(RUN_ID)
     else:
-        os.mkdir(run_id)  
-    shutil.copy("markov_fitter_emcee.py", f"{run_id}/markov_fitter_emcee_{run_id}.txt") # save copy of code to run dir for reference
+        os.mkdir(RUN_ID)
+    # save copy of code to run dir for reference
+    shutil.copy("markov_fitter_emcee.py",
+                f"{RUN_ID}/markov_fitter_emcee_{RUN_ID}.txt")
 
 
 def concatenator():
-    """Concatenate all the shape_report files from the random walks into a single dataframe."""
+    """Concatenate all the shape_report files from the random walks into a
+    single dataframe."""
     dfs = []
-    print(f"\nCurrent directory: {wd}\n")
-    for leafdirectory in os.listdir(wd):
-        if eq_init and leafdirectory in excl: # only fit to equal number of initial leaves
-            continue
-        leafdirectory_path = os.path.join(wd, leafdirectory)
+    print(f"\nCurrent directory: {WD}\n")
+    for leafdirectory in os.listdir(WD):
+        if EQ_INIT and leafdirectory in excl:
+            continue  # skip excluded leafids if EQ_INIT is True
+        leafdirectory_path = os.path.join(WD, leafdirectory)
         if os.path.isdir(leafdirectory_path):
             for walkdirectory in os.listdir(leafdirectory_path):
-                walkdirectory_path = os.path.join(leafdirectory_path, walkdirectory)
+                walkdirectory_path = os.path.join(
+                    leafdirectory_path, walkdirectory)
                 for file in os.listdir(walkdirectory_path):
                     if (
                         file.endswith(".csv")
                         and "shape_report" in file
                         and "shape_report1" not in file
                     ):
-                        df = pd.read_csv(os.path.join(walkdirectory_path, file))
-                        if not df.empty: # only append non-empty shape reports
+                        df = pd.read_csv(os.path.join(
+                            walkdirectory_path, file))
+                        if not df.empty:  # only append non-empty shape reports
                             df.insert(0, "leafid", leafdirectory)
-                            df.insert(1, "walkid", int(re.findall(r"\d+", walkdirectory)[0]))
-                            df = df.reset_index().rename(columns={"index": "step"}) # reset index and rename to step
+                            df.insert(1, "walkid", int(
+                                re.findall(r"\d+", walkdirectory)[0]))
+                            # reset index and rename to step
+                            df = df.reset_index().rename(
+                                columns={"index": "step"})
                             dfs.append(df)
                         else:
-                            print(f"Found empty shape report: {os.path.join(walkdirectory_path, file)} ...excluding from dataset.")
+                            print(
+                                "Found empty shape report: "
+                                f"{os.path.join(walkdirectory_path, file)}"
+                                " ...excluding from dataset.")
     return dfs
 
 
 def get_transition_counts():
-    """Get the total no. each transition type across the all walks in the dataset."""
+    """Get the total no. each transition type across the all walks in the 
+    dataset."""
 
     walks = concatenator()
     walks = pd.concat(walks)
     walks = pd.merge(walks, first_cats[["leafid", "first_cat"]], on="leafid")
 
-    walks_sub = walks[["leafid","walkid","shape","step","first_cat"]]
-    walks_sub.to_csv(f"{run_id}.csv", index=False)
+    walks_sub = walks[["leafid", "walkid", "shape", "step", "first_cat"]]
+    walks_sub.to_csv(f"{RUN_ID}.csv", index=False)
 
-    # Drop rows where leafid is "pc4" and walkid is 3
-    walks = walks[~((walks["leafid"] == "pc4") & (walks["walkid"] == 3))] # should only remove 1 row
+    # Drop rows where leafid is "pc4" and walkid is 3 should only remove 1 row
+    walks = walks[~((walks["leafid"] == "pc4") & (walks["walkid"] == 3))]
 
-    walks["prevshape"] = walks["shape"].shift(+1) # get transitions by shifting shape columns down by one and combining
+    # get transitions by shifting shape columns down by one and combining
+    walks["prevshape"] = walks["shape"].shift(+1)
     walks["transition"] = walks["prevshape"] + walks["shape"]
-    walks.loc[walks["step"] == 0, "transition"] = walks["first_cat"] + walks["shape"] # replace 0th step with first_cat + shape
-    # walks.loc[walks["step"] == 0, "transition"] = None # replace 0th step with None
-    
-    walks = walks.loc[walks["step"] <= cutoff] # only fit to data from the first "cutoff" steps of each walk
-    walks = walks.loc[walks["step"] >= cuton] # only fit to data after the first "cuton" steps of each walk
-    walks = walks[walks["first_cat"].isin(filt)] # only fit to transitions from walks that started in these states
-    
-    # redefine first_cat to shape at step cuton
-    if reset_first_cat:
-        walks["first_cat"] = walks.groupby(["leafid", "walkid"])["shape"].transform("first")
-        step_cuton = walks[walks["step"] == cuton]
-        mis = step_cuton[step_cuton["first_cat"] != step_cuton["shape"]] # check for mismatches
-        assert len(mis) == 0, f"Mismatch in first_cat and shape at {cuton}"
-    
-    counts = walks["transition"].value_counts().reset_index() # count no. transitions of each type
+    walks.loc[walks["step"] == 0, "transition"] = walks["first_cat"] + \
+        walks["shape"]  # replace 0th step with first_cat + shape
 
-    # make sure all transitions are included in the counts DataFrame even if they are 0
+    # only fit to data from the first "CUTOFF" steps of each walk
+    walks = walks.loc[walks["step"] <= CUTOFF]
+    # only fit to data after the first "CUTON" steps of each walk
+    walks = walks.loc[walks["step"] >= CUTON]
+    # only fit to transitions from walks that started in these states
+    walks = walks[walks["first_cat"].isin(FILT)]
+
+    # redefine first_cat to shape at step CUTON
+    if RESET_FIRST_CAT:
+        walks["first_cat"] = walks.groupby(["leafid", "walkid"])[
+            "shape"].transform("first")
+        step_cuton = walks[walks["step"] == CUTON]
+        mis = step_cuton[step_cuton["first_cat"] !=
+                         step_cuton["shape"]]  # check for mismatches
+        assert len(mis) == 0, f"Mismatch in first_cat and shape at {CUTON}"
+
+    # count no. transitions of each type
+    count = walks["transition"].value_counts().reset_index()
+
+    # ensure all transitions included in counts even if they are 0
     all_transitions = pd.DataFrame(
-        [(a + b) for a in "uldc" for b in "uldc"], columns=["transition"] # df of all possible transitions
+        # df of all possible transitions
+        [(a + b) for a in "uldc" for b in "uldc"], columns=["transition"]
     )
     all_transitions["count"] = 0
 
     # merge with the existing counts DataFrame
-    counts = all_transitions.merge(counts, on="transition", how="left").fillna(1) # fill missing counts with 1 for numerical stability
-    counts["count"] = (counts["count_x"] + counts["count_y"]).astype(int)
-    counts = counts[["transition", "count"]]
-    print(counts)
+    count = all_transitions.merge(count, on="transition", how="left").fillna(
+        1)  # fill missing counts with 1 for numerical stability
+    count["count"] = (count["count_x"] + count["count_y"]).astype(int)
+    count = count[["transition", "count"]]
+    print(count)
 
-    return counts
+    return count
 
 
-def log_prior(params):  # define a uniform prior from 0 to 0.1 for every transition rate
-    """Uniform prior between unif_lb and unif_ub. Return -np.inf if any parameter is outside the prior range."""
+def log_prior(params):
+    """Uniform prior between UNIF_LB and UNIF_UB for all transition rates. 
+    Return -np.inf if any parameter is outside the prior range."""
 
-    if all(unif_lb <= q <= unif_ub for q in params): # all q parameters must be within the prior range to return 0
+    # all q parameters must be within the prior range to return 0
+    if all(UNIF_LB <= q <= UNIF_UB for q in params):
         return 0
     return -np.inf
 
 
-def log_likelihood(params, counts):
-    """Calculate the log likelihood of the data given a set of transition rates Q."""
+def log_likelihood(params, count):
+    """Calculate the log likelihood of the data given a set of transition 
+    rates Q."""
 
-    Q = np.array(
+    q = np.array(
         [
-            [-(params[0] + params[1] + params[2]), params[0], params[1], params[2]],
-            [params[3], -(params[3] + params[4] + params[5]), params[4], params[5]],
-            [params[6], params[7], -(params[6] + params[7] + params[8]), params[8]],
-            [params[9], params[10], params[11], -(params[9] + params[10] + params[11])],
+            [-(params[0] + params[1] + params[2]),
+             params[0], params[1], params[2]],
+            [params[3], -(params[3] + params[4] + params[5]),
+             params[4], params[5]],
+            [params[6], params[7], -
+                (params[6] + params[7] + params[8]), params[8]],
+            [params[9], params[10], params[11], -
+                (params[9] + params[10] + params[11])],
         ]
     )
-    log_likelihood = 0
-    Pt = scipy.linalg.expm(Q * t)  # t is assumed to be the same for every transition
-    for i, transition in enumerate(counts["transition"]):
-        Pt_i = Pt[transition_map_rates[transition]] # get transition probabilty from Pt matrix
-        counts_i = counts["count"][i] # get the count of the transition
-        if Pt_i > 0:
-            log_likelihood +=  counts_i * np.log(Pt_i) # see Kalbfleisch 1985 eq 3.2
+    log_l = 0
+    # T is assumed to be the same for every transition
+    pt = scipy.linalg.expm(q * T)
+    for i, transition in enumerate(count["transition"]):
+        # get transition probabilty from Pt matrix
+        pt_i = pt[transition_map_rates[transition]]
+        count_i = count["count"][i]  # get the count of the transition
+        if pt_i > 0:
+            log_l += count_i * np.log(pt_i)  # see Kalbfleisch 1985 eq 3.2
         else:
-            # log_likelihood = -np.inf # if the probability is 0, the log likelihood is -inf
-            log_likelihood = -np.inf # if the probability is 0, the log likelihood is -inf
+            log_l = -np.inf  # if prob is 0, log likelihood is -inf
             break
 
-    # print(log_likelihood)
-    return log_likelihood
+    return log_l
 
 
-def log_probability(params, counts):
-    """Calculate the log posterior probability of Q given the data by adding log prior and log likelihood."""
-    
-    lp = log_prior(params)
-    if not np.isfinite(lp): # if any of the proposed parameters are outside the prior range, skip the likelihood calculation and return -np.inf
-        return -np.inf
-    
-    # posterior is proportional to likelihood * prior therefore log(posterior) is proportional to log(likelihood) + log(prior)
-    return lp + log_likelihood(params, counts)
+def log_probability(params, count):
+    """Calculate the log posterior probability of Q given the data by adding 
+    log prior and log likelihood."""
+
+    lp = log_prior(params)      # if any of the proposed parameters are outside
+    if not np.isfinite(lp):     # the prior range, skip likelihood calculation
+        return -np.inf          # and return -np.inf
+    # posterior is proportional to likelihood * prior therefore log(posterior)
+    # is proportional to log(likelihood) + log(prior)
+    return lp + log_likelihood(params, count)
 
 
 def get_maximum_likelihood():
-    """Get the maximum likelihood estimate of the transition rates Q given the data."""
+    """Get the maximum likelihood estimate of the transition rates Q given 
+    the data."""
 
-    counts = get_transition_counts()
+    count = get_transition_counts()
 
-    nll = lambda Q: -log_likelihood(Q, counts)
+    def nll(q):  # negative log likelhood wrapper
+        return -log_likelihood(q, count)
+
     np.random.seed()
-    init = np.random.uniform(unif_lb, unif_ub, ndim) # initialise 12 random numbers for Q matrix
+    # initialise 12 random numbers for q matrix
+    init = np.random.uniform(UNIF_LB, UNIF_UB, NDIM)
     soln = optimize.minimize(nll, init)
-    # soln = optimize.minimize(nll, init, method="trust-exact", tol=1e-5, options={"maxiter": 5000, "disp": True})
-    Q_ml = soln.x
-    Q_ml_df = pd.DataFrame(Q_ml).T
-    Q_ml_df.to_csv(f"{run_id}/ML_{run_id}.csv", index=False)
-    print(f"Maximum likelihood rates: {Q_ml_df}")
-    return Q_ml_df
+    q_ml = soln.x
+    q_ml_df = pd.DataFrame(q_ml).T
+    q_ml_df.to_csv(f"{RUN_ID}/ML_{RUN_ID}.csv", index=False)
+    print(f"Maximum likelihood rates: {q_ml_df}")
+    return q_ml_df
 
 
 def run_leaf_uncert_parallel_pool():
-    """Run parallelised MCMC inference to find the posterior distributions for all transition rate parameters given data."""
+    """Run parallelised MCMC inference to find the posterior distributions for 
+    all transition rate parameters given data."""
 
-    counts = get_transition_counts()
-    init_params = np.random.uniform(unif_lb, unif_ub, (nwalkers, ndim)) # generate initial values to fill Q matrix for each walker
-    # set up file to save the run
-    filename = f"{run_id}/{run_id}.h5"
+    count = get_transition_counts()
+    # generate initial values to fill Q matrix for each walker
+    init_params = np.random.uniform(UNIF_LB, UNIF_UB, (NWALKERS, NDIM))
+    filename = f"{RUN_ID}/{RUN_ID}.h5"     # set up file to save the chains
     backend = emcee.backends.HDFBackend(filename)
-    backend.reset(nwalkers, ndim)
+    backend.reset(NWALKERS, NDIM)
     with multiprocessing.Pool() as pool:
-        np.random.seed() # different seed for each chain?
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(counts,),pool=pool, backend=backend)
-        state = sampler.run_mcmc(
-            init_params, nsteps, skip_initial_state_check=True, progress=True
+        np.random.seed()  # different seed for each chain?
+        sampler = emcee.EnsembleSampler(
+            NWALKERS, NDIM, log_probability, args=(count,), pool=pool,
+            backend=backend)
+        _ = sampler.run_mcmc(
+            init_params, NSTEPS, skip_initial_state_check=True, progress=True
         )
-    Q_ml = get_maximum_likelihood()
-    plot_trace(sampler, Q_ml)
+    q_ml = get_maximum_likelihood()
+    plot_trace(sampler, q_ml)
     sample_chain(sampler)
     autocorrelation_analysis(sampler)
-    
+
 
 def corner_plot(sampler):
+    """Visualise correlations between posterior distributions for each
+    transition"""
     flat_samples = sampler.get_chain(flat=True)
-    corner_fig = corner.corner(flat_samples, labels=labels)
+    corner.corner(flat_samples, labels=labels)
     plt.tight_layout()
     plt.show()
 
@@ -235,7 +279,7 @@ def corner_plot(sampler):
 def plot_trace(sampler, ml_rates):
     """Plot the trace of the MCMC chains for each parameter."""
 
-    fig, axes = plt.subplots(4, 4, figsize=(10,7), sharex=True)
+    fig, axes = plt.subplots(4, 4, figsize=(10, 7), sharex=True)
     samples = sampler.get_chain()
     idx = 0
     for i, row in enumerate(axes):
@@ -243,100 +287,106 @@ def plot_trace(sampler, ml_rates):
             if i == j:
                 ax.axis("off")
                 continue
-            ax.plot(samples[:,:,idx], c="C0", alpha=0.3) # from the left to right the indicies represent: step, chain, parameter
-            ax.axhline(y= ml_rates.iloc[0,idx], c="C1", linestyle="--")
+            # from left to right the indicies represent: step, chain, parameter
+            ax.plot(samples[:, :, idx], c="C0", alpha=0.3)
+            ax.axhline(y=ml_rates.iloc[0, idx], c="C1", linestyle="--")
             ax.set_ylabel(labels[idx])
-            ax.set_ylim(unif_lb, unif_ub)
+            ax.set_ylim(UNIF_LB, UNIF_UB)
             idx += 1
     fig.supxlabel("Iteration")
     plt.tight_layout()
-    fig.savefig(f"{run_id}/trace_{run_id}.pdf", format="pdf")
+    fig.savefig(f"{RUN_ID}/trace_{RUN_ID}.pdf", format="pdf")
     plt.show()
 
 
 def sample_chain(sampler):
-    """Reduce the size of the saved chain by discarding the burnin and rounding each step and recording only every thin step."""
+    """Reduce the size of the saved chain by discarding the BURNIN and 
+    rounding each step and recording only every THIN step."""
 
-    flat_samples = sampler.get_chain(discard=burnin, thin=thin, flat=True)
-    flat_samples_df = pd.DataFrame(flat_samples, columns=list(range(flat_samples.shape[1])))
-    flat_samples_df.to_csv(f"{run_id}/posteriors_{run_id}.csv",index=False)
+    flat_samples = sampler.get_chain(discard=BURNIN, thin=THIN, flat=True)
+    flat_samples_df = pd.DataFrame(
+        flat_samples, columns=list(range(flat_samples.shape[1])))
+    flat_samples_df.to_csv(f"{RUN_ID}/posteriors_{RUN_ID}.csv", index=False)
 
 
 def sampler_from_file():
-    h_params_path = run_id + "/h_params_" + run_id + ".txt"
-    with open(h_params_path, "r") as file:
+    """Read MCMC chains from file and plot the trace and corner plot."""
+    h_params_path = RUN_ID + "/h_params_" + RUN_ID + ".txt"
+    with open(h_params_path, "r", encoding="utf-8") as file:
         h_params = file.readlines()
         print("\n")
         for line in h_params:
             print(line[:-1])
         print("\n")
-    reader_path = run_id + "/" + run_id + ".h5"
-    reader = emcee.backends.HDFBackend(reader_path) 
+    reader_path = RUN_ID + "/" + RUN_ID + ".h5"
+    reader = emcee.backends.HDFBackend(reader_path)
     # tau = reader.get_autocorr_time()
     # print(f"No. steps until autocorrelation: {tau}")
-    ml_rates = pd.read_csv(f"{run_id}/ML_{run_id}.csv")
+    ml_rates = pd.read_csv(f"{RUN_ID}/ML_{RUN_ID}.csv")
 
-    if func == 2:
+    if FUNC == 2:
         plot_trace(reader, ml_rates)
-    elif func == 3:
+    elif FUNC == 3:
         sample_chain(reader)
     # corner_plot(reader)
 
 
 def autocorrelation_analysis(sampler):
+    """Calculate the autocorrelation time of the MCMC chains."""
     tau = sampler.get_autocorr_time()
     print(f"No. steps until autocorrelation: {tau}")
 
 
 def print_hyperparams():
+    """Print hyperparameters to the console."""
     print("\nHyper Parameters:")
-    print(f"n_processes = {n_processes}")
-    print(f"unif_lb = {unif_lb}, unif_ub = {unif_ub}")
-    print(f"ndim = {ndim}")
-    print(f"nwalkers = {nwalkers}")
-    print(f"nsteps = {nsteps}")
-    print(f"nshuffle = {nshuffle}")
-    print(f"burnin = {burnin}")
-    print(f"thin = {thin}")
-    print(f"t = {t}")
-    print(f"cuton = {cuton}")
-    print(f"cutoff = {cutoff}")
-    print(f"reset_first_cat = {reset_first_cat}")
-    print(f"eq_init = {eq_init}")
-    print(f"filt = {filt}")
-    print(f"wd = {wd}")
-    print(f"run_id = {run_id}")
+    print(f"N_PROCESSES = {N_PROCESSES}")
+    print(f"UNIF_LB = {UNIF_LB}, UNIF_UB = {UNIF_UB}")
+    print(f"NDIM = {NDIM}")
+    print(f"NWALKERS = {NWALKERS}")
+    print(f"NSTEPS = {NSTEPS}")
+    print(f"NSHUFFLE = {NSHUFFLE}")
+    print(f"BURNIN = {BURNIN}")
+    print(f"THIN = {THIN}")
+    print(f"t = {T}")
+    print(f"CUTON = {CUTON}")
+    print(f"CUTOFF = {CUTOFF}")
+    print(f"RESET_FIRST_CAT = {RESET_FIRST_CAT}")
+    print(f"EQ_INIT = {EQ_INIT}")
+    print(f"FILT = {FILT}")
+    print(f"WD = {WD}")
+    print(f"RUN_ID = {RUN_ID}")
 
 
 def save_hyperparams():
-
     """Write hyperparameters to file in output directory."""
-    
-    print_hyperparams()
-    output_file = f'{run_id}/h_params_{run_id}.txt'
 
-    with open(output_file, 'w') as file:
-        file.write(f"Run {run_id} MCMC Hyper Parameters:\n")
-        file.write(f"n_processes = {n_processes}\n")
-        file.write(f"unif_lb = {unif_lb}, unif_ub = {unif_ub}\n")
-        file.write(f"ndim = {ndim}\n")
-        file.write(f"nwalkers = {nwalkers}\n")
-        file.write(f"nsteps = {nsteps}\n")
-        file.write(f"nshuffle = {nshuffle}\n")
-        file.write(f"burnin = {burnin}\n")
-        file.write(f"thin = {thin}\n")
-        file.write(f"t = {t}\n")
-        file.write(f"cuton = {cuton}\n")
-        file.write(f"cutoff = {cutoff}\n")
-        file.write(f"reset_first_cat = {reset_first_cat}\n")
-        file.write(f"eq_init = {eq_init}\n")
-        file.write(f"filt = {filt}\n")
-        file.write(f"wd = {wd}\n")
+    print_hyperparams()
+    output_file = f'{RUN_ID}/h_params_{RUN_ID}.txt'
+
+    with open(output_file, 'w', encoding="utf-8") as file:
+        file.write(f"Run {RUN_ID} MCMC Hyper Parameters:\n")
+        file.write(f"N_PROCESSES = {N_PROCESSES}\n")
+        file.write(f"UNIF_LB = {UNIF_LB}, UNIF_UB = {UNIF_UB}\n")
+        file.write(f"NDIM = {NDIM}\n")
+        file.write(f"NWALKERS = {NWALKERS}\n")
+        file.write(f"NSTEPS = {NSTEPS}\n")
+        file.write(f"NSHUFFLE = {NSHUFFLE}\n")
+        file.write(f"BURNIN = {BURNIN}\n")
+        file.write(f"THIN = {THIN}\n")
+        file.write(f"t = {T}\n")
+        file.write(f"CUTON = {CUTON}\n")
+        file.write(f"CUTOFF = {CUTOFF}\n")
+        file.write(f"RESET_FIRST_CAT = {RESET_FIRST_CAT}\n")
+        file.write(f"EQ_INIT = {EQ_INIT}\n")
+        file.write(f"FILT = {FILT}\n")
+        file.write(f"WD = {WD}\n")
 
     print(f"Hyper parameters have been saved to {output_file}")
 
 
 def print_help():
+    """Print help message for the programme."""
     help_message = """
     Usage: python3 markov_fitter_emcee_alt.py [options]
 
@@ -360,32 +410,31 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     if "-h" in args:
         print_help()
-    
+
     else:
         if "-id" in args:
-            run_id = str(args[args.index("-id") + 1])
+            RUN_ID = str(args[args.index("-id") + 1])
         else:
-            warnings.warn(f"No run_id specified, defaulting to {run_id}")
+            warnings.warn(f"No RUN_ID specified, defaulting to {RUN_ID}")
         if "-d" in args:
             data = int(args[args.index("-d") + 1])
             if data == 1:
-                wd = "leaves_full_15-9-23_MUT1_CLEAN"
+                WD = "leaves_full_15-9-23_MUT1_CLEAN"
             elif data == 2:
-                wd = "leaves_full_21-9-23_MUT2.2_CLEAN"
+                WD = "leaves_full_21-9-23_MUT2.2_CLEAN"
         if "-f" in args:
-            func = int(args[args.index("-f") + 1])
-            if func  == 0:
+            FUNC = int(args[args.index("-f") + 1])
+            if FUNC == 0:
                 init_env()
                 save_hyperparams()
                 run_leaf_uncert_parallel_pool()
-            if func == 1:
+            if FUNC == 1:
                 init_env()
                 save_hyperparams()
                 get_maximum_likelihood()
-            if func == 2 or func == 3:
+            if FUNC == 2 or FUNC == 3:
                 sampler_from_file()
-            if func == 4:
+            if FUNC == 4:
                 counts = get_transition_counts()
                 total = sum(counts["count"])
                 print(f"total transitions {total}")
-
