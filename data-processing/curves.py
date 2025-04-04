@@ -6,27 +6,39 @@ import os
 import pandas as pd
 import numpy as np
 
-plot = 2  # type of plot to produce, 0-three rows with error bars, 1-two rows with mean model, 2-proportion of shapes over simulation time against model predictions
+plot = 1  # type of plot to produce, 0-three rows with error bars, 1-two rows with mean model, 2-proportion of shapes over simulation time against model predictions
 phylorates = "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
 # simrates = "MUT2_mcmc_11-12-24"
-simrates = "MUT2_mcmc_05-02-25"  # best fit so far
+# simrates = "MUT2_mcmc_05-02-25"  # best fit so far
 # simrates = "MUT5_mcmc_10-02-25"
 # simrates = "MUT2_mle_11-02-25"
-simdata = "MUT2.2_trajectories_shape.csv"
+# simrates = "MUT2_mle_cuton39_19-02-25"
+# simrates = "MUT2_320_mle_20-03-25"
+# simrates = "q_p-ht_02-04-25"
+# simrates = "q_p-ht_contig_filt_u_03-04-25"
+# simrates = "MUT2_160-320_reinit_03-04-25"
+# simrates = "MUT2_80-320_reinit_04-04-25"
+simrates = "MUT2_240-320_reinit_04-04-25"
+# simdata = "MUT2.2_trajectories_shape.csv"
 # simdata = "MUT5_mcmc_10-02-25.csv"
-t_stat = 1  # 0=mean proportion, 1=proportion - the statistic used for plotting the timeseries data
+simdata = "MUT2_320_mle_20-03-25.csv"
+# simdata = "MUT2_mle_11-02-25.csv"
+t_stat = 0  # 0=mean proportion, 1=proportion - the statistic used for plotting the timeseries data
 # 0=mcmc, 1=mle - choose whether to use the mean of mcmc posterior or mle estimate to draw sim curves
 simrates_method = 1
 eq_init = False  # whether to plot timeseries from equal numbers of each initial shape dropping all leafids in excl
 lb = 0  # 5 #5
 ub = 0  # 95 #95
-phylo_xlim = 130
-sim_xlim = 80  # 60
+phylo_xlim = 160
+sim_xlim = 320  # 60
+sim_xon = 240  # begin x axis at this value
+reset_first_cat = True  # redefine first_cat to shape at step sim_xon
+yscale = "linear"  # log or linear
 # whether to show phylogeny CTMC fit ontop as well as simulation data and CTMC fit in plot 2
 show_phylo = True
-v = False  # verbose for debugging
+v = True  # verbose for debugging
 
-sns.set_palette("colorblind")
+# sns.set_palette("colorblind")
 order = ["u", "l", "d", "c"]
 var = "mean_prop" if t_stat == 0 else "prop"
 
@@ -36,19 +48,22 @@ excl = ["p0_121", "p1_82", "p2_195", "p9_129", "p5_249", "pu3", "p2_78_alt", "p3
         "pc4", "p12de", "p7_437", "p2_346_alt", "p6_1155"]  # compound
 
 
-def plot_data_from_probcurves(curves, t_vals):
-    """Takes a list of probability matrices and returns a dataframe with the transition 
-    probabilities in a format that can be plotted"""
+def plot_data_from_probcurves(curves, t_plot, t_calc):
+    """Takes a list of probability matrices and returns a dataframe with the 
+    transition probabilities in a format that can be plotted"""
 
-    plot_data = {"t": [], "first_cat": [],
+    # attach plot time to data, along with time used for calculation
+    plot_data = {"t": [], "t_calc": [], "first_cat": [],
                  "shape": [], "P": [], "lb": [], "ub": []}
 
-    for i, list in enumerate(curves):
-        for j, matrix in enumerate(list):
+    for i, li in enumerate(curves):
+        for j, matrix in enumerate(li):
             for row in range(matrix.shape[0]):
                 for column in range(matrix.shape[1]):
                     if j == 0:
-                        plot_data["t"].append(t_vals[i])
+                        if reset_first_cat:
+                            plot_data["t_calc"].append(t_calc[i])
+                        plot_data["t"].append(t_plot[i])
                         plot_data["first_cat"].append(row)
                         plot_data["shape"].append(column)
                         plot_data["P"].append(matrix[row, column])
@@ -61,14 +76,14 @@ def plot_data_from_probcurves(curves, t_vals):
     mapping = {0: "u", 1: "l", 2: "d", 3: "c"}
     plot_data["first_cat"] = plot_data["first_cat"].replace(mapping)
     plot_data["shape"] = plot_data["shape"].replace(mapping)
-    # replace any upper bound value greater than 1 with 1 (because they are probabilities)
+    # replace any upper bound value greater than 1 with 1 (because prob)
     plot_data["ub"] = plot_data["ub"].clip(upper=1)
     return plot_data
 
 
 def get_phylo_rates():
-    """Get the mean and confidence intervals for the posterior distributions of all transition 
-    rates from phylogenetic mcmc inference specified by phylorates"""
+    """Get the mean and confidence intervals for the posterior distributions of all 
+    transition rates from phylogenetic mcmc inference specified by phylorates"""
 
     phylo_dir = "../phylogeny/rates/uniform_1010000steps"
     phylo_rates_list = []
@@ -160,6 +175,15 @@ def get_sim_rates():
     # Calculate means
     sim_summary = sim_rates.mean().reset_index()
     sim_summary.columns = ["transition", "mean_rate"]
+
+    # Tweaks
+    # sim_summary.loc[1, "mean_rate"] -= 0.003  # decrease q01
+    # sim_summary.loc[0, "mean_rate"] += 0.003  # increase q00
+    # sim_summary.loc[3, "mean_rate"] -= 0.002  # decrease q01
+    # sim_summary.loc[0, "mean_rate"] += 0.002  # increase q00
+    # sim_summary.loc[12, "mean_rate"] -= 0.015  # decrease q30
+    # sim_summary.loc[15, "mean_rate"] += 0.015  # increase q33``
+
     # Calculate confidence intervals
     confidence_intervals = {}
     for col in sim_rates.columns:
@@ -191,6 +215,17 @@ def get_timeseries():
     """
     concat = pd.read_csv(simdata)
 
+    if reset_first_cat:
+        # reset first_cat to the shape at step sim_xon
+        concat["first_cat"] = concat.groupby(["leafid", "walkid"])[
+            "shape"].transform(lambda x: x.iloc[sim_xon])
+        # create new unique leafid by appending first_cat - ensure that
+        # there are no duplicate leafid, step, shape rows
+        concat["leafid"] = concat["leafid"] + "_" + concat["first_cat"]
+        step_sim_xon = concat[concat["step"] == sim_xon]
+        mis = step_sim_xon[step_sim_xon["first_cat"] != step_sim_xon["shape"]]
+        assert len(mis) == 0, f"Mismatch in first_cat and shape at {sim_xon}"
+
     if eq_init:
         concat = concat[~concat["leafid"].isin(excl)].reset_index(drop=True)
         if v:
@@ -207,15 +242,23 @@ def get_timeseries():
         # total of each shape per step for each leafid
         timeseries = (
             concat.groupby(["leafid", "first_cat", "step", "shape"])
-            .size()
-            .reset_index(name="shape_total")
+            .agg(shape_total=("shape", "size"))
+            .reset_index()
         )
+        # check for leafids with duplicate steps
+        dup = timeseries[timeseries.duplicated(
+            subset=["leafid", "step", "shape"])]
+        assert len(dup) == 0, f"Duplicate leafid, step, shape rows: {dup}"
 
         # fill in transitions that didn't occur
-        all_transitions = pd.MultiIndex.from_product([timeseries["leafid"].unique(
-        ), timeseries["step"].unique(), {"u", "l", "d", "c"}], names=["leafid", "step", "shape"])
-        timeseries = timeseries.set_index(["leafid", "step", "shape"]).reindex(
+        all_transitions = pd.MultiIndex.from_product(
+            [timeseries["leafid"].unique(), timeseries["step"].unique(),
+             {"u", "l", "d", "c"}], names=["leafid", "step", "shape"]
+        )  # all possible combinations of leafid, step and shape, then reindex
+        timeseries = timeseries.set_index(["leafid", "step", "shape"])
+        timeseries = timeseries.reindex(
             all_transitions, fill_value=None).reset_index()
+
         # fill empty first-cat values with the first non nan first_cat value for each leafid
         timeseries["first_cat"] = timeseries.groupby(
             ["leafid"])["first_cat"].transform("first")
@@ -235,7 +278,7 @@ def get_timeseries():
             timeseries["shape_total"] / timeseries["no_active_walks"]
         )
 
-        # mean proportion of active walks in each shape category for all leaves in each first_cat
+        # mean prop active walks per shape for all leaves in each first_cat
         timeseries = (
             timeseries.groupby(["first_cat", "step", "shape"])
             .agg(mean_prop=("proportion", "mean"),
@@ -466,37 +509,44 @@ def plot_sim_and_phylogeny_curves_nouncert():
     timeseries = get_timeseries()
 
     # produce phylo-curves
-    t_vals = np.linspace(0, phylo_xlim, 120)
+    t_calc = np.linspace(0, phylo_xlim, 100)
+    t_plot = t_calc
     phylo_curves = []
     Q = np.array(phylo_summary["mean_rate"].values).reshape(4, 4)
     QL = np.array(phylo_summary["lb"].values).reshape(4, 4)
     QU = np.array(phylo_summary["ub"].values).reshape(4, 4)
-    for t in t_vals:
+    for t in t_calc:
         Pt = linalg.expm(Q * t)
         PLt = linalg.expm(QL * t)
         PUt = linalg.expm(QU * t)
         phylo_curves.append([Pt, PLt, PUt])
-    phylo_plot = pd.DataFrame(plot_data_from_probcurves(phylo_curves, t_vals))
+    phylo_plot = pd.DataFrame(
+        plot_data_from_probcurves(phylo_curves, t_plot, t_calc))
 
     # produce sim-curves
-    t_vals = np.linspace(0, 120, 120)
+    t_calc = np.linspace(sim_xon, sim_xlim, 100)
+    t_plot = t_calc
+    if reset_first_cat:
+        t_calc = np.linspace(0, sim_xlim-sim_xon, 100)
+        t_plot = np.linspace(sim_xon, sim_xlim, 100)
     sim_curves = []
     Q = np.array(sim_summary["mean_rate"].values).reshape(4, 4)
     QL = np.array(sim_summary["lb"].values).reshape(4, 4)
     QU = np.array(sim_summary["ub"].values).reshape(4, 4)
-    for t in t_vals:
+    for t in t_calc:
         Pt = linalg.expm(Q * t)
         PLt = linalg.expm(QL * t)
         PUt = linalg.expm(QU * t)
         sim_curves.append([Pt, PLt, PUt])
-    sim_plot = pd.DataFrame(plot_data_from_probcurves(sim_curves, t_vals))
+    sim_plot = pd.DataFrame(
+        plot_data_from_probcurves(sim_curves, t_plot, t_calc))
 
     # Create subplots
-    plt.rcParams["font.family"] = "CMU Serif"
+    # plt.rcParams["font.family"] = "CMU Serif"
     fig, axs = plt.subplots(
         nrows=4,
         ncols=5,
-        figsize=(9, 6),
+        figsize=(11, 7),
         # sharey=True,
         gridspec_kw={"height_ratios": [3, 3, 1, 3]},
     )
@@ -513,15 +563,15 @@ def plot_sim_and_phylogeny_curves_nouncert():
                 continue
             else:
                 cat = order[idx]
-                ax.set_ylim(0, 1)
                 if idx != 0:
                     ax.set_yticklabels([])
                 if i == 1:  # timeseries data on the left
                     cat_data = timeseries[timeseries["first_cat"] == cat]
                     cat_data = cat_data.rename(columns={var: "P", "step": "t"})
                     ax.set_title(order_full[idx])
-                    ax.set_xlim(0, sim_xlim)
-                    ax.set_xticks(np.arange(0, sim_xlim + 1, 20))
+                    ax.set_xlim(sim_xon, sim_xlim)
+                    ax.set_xticks(
+                        np.arange(sim_xon, sim_xlim + 1, (sim_xlim-sim_xon)/4))
                     ax.set_xlabel("Step")
                     if idx == 0:
                         ax.set_ylabel("P")
@@ -534,6 +584,7 @@ def plot_sim_and_phylogeny_curves_nouncert():
                     cat_data = phylo_plot[phylo_plot["first_cat"] == cat]
                     ax.set_xlim(0, phylo_xlim)
                     ax.set_xlabel("Branch length (Myr)")
+                    ax.set_xticks(np.arange(0, phylo_xlim+1, phylo_xlim/4))
                     if idx == 0:
                         ax.set_ylabel("P")
                 if i != 2:
@@ -562,6 +613,14 @@ def plot_sim_and_phylogeny_curves_nouncert():
                                 linestyle="-",
                             )
                             lines.append(line)
+            ax.set_ylim(0, 1)
+            # ax.tick_params(axis='both', labelsize=8)
+            if yscale == "log":
+                ax.set_ylim(1e-2, 1)
+                ax.set_yscale(yscale)
+                if j > 1:  # y labs off for all but leftmost panels
+                    ax.set_yticklabels([])
+
     icon_filenames = [
         "u.png",
         "l.png",
@@ -729,7 +788,7 @@ def plot_sim_and_phylogeny_curves_new():
         ax.set_xlim(0, sim_xlim)
         ax.set_ylim(0, 1)
 
-    if show_phylo:
+    if not show_phylo:
         fig.supxlabel("Simulation step")
     fig.supylabel("Proportion")
     if show_phylo:
@@ -756,6 +815,9 @@ if __name__ == "__main__":
     print(f"Upper bound: {ub}")
     print(f"Phylogeny xlim: {phylo_xlim}")
     print(f"Simulation xlim: {sim_xlim}")
+    print(f"Simulation xon: {sim_xon}")
+    print(f"reset first cat: {reset_first_cat}")
+    print(f"Y scale: {yscale}")
     print(f"Show phylogeny: {show_phylo}")
     print(f"Verbose: {v}")
     print(f"Plot type: {plot}\n")
