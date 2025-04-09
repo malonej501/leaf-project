@@ -29,12 +29,15 @@ T = 1  # the value of time for each timstep in P=exp[Q*t]
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # the simulation run to fit to
 # WD = "leaves_full_15-9-23_MUT1_CLEAN"
 # WD = "leaves_full_10-02-25_MUT5_CLEAN"
-CUTON = 80  # sim data is removed before this step before CTMC fitting
+CUTON = 0  # sim data is removed before this step before CTMC fitting
 CUTOFF = 999  # sim data is CUTOFF at this step before fitting the CTMC
-RESET_FIRST_CAT = True  # reset first_cat to the shape at step CUTON
+RESET_FIRST_CAT = False  # reset first_cat to the shape at step CUTON
 EQ_INIT = False  # plot timeseries from equal numbers of each initial shape
 # only fit the ctmc to transitions from walks that started in these states
 FILT = ["u", "l", "d", "c"]
+USE_PWALKS = True  # use pseudo walks instead of real walks to fit model
+P_WALK_LEN = 160  # length of pseudo walks
+N_PWS = 10  # number of pseudo walks to generate per walk
 RUN_ID = "test"  # the name of the run - test will be overwritten by default
 
 transition_map_rates = {
@@ -113,19 +116,59 @@ def concatenator():
     return dfs
 
 
+def gen_pseudo_walks():
+    """Generate extra pseudo walks by taking multiple different contiguous
+    frames from each walk, with different start and end steps. Saves to
+    .csv file."""
+
+    dfs = concatenator()
+    concat = pd.concat(dfs, ignore_index=True)
+    concat = concat[["leafid", "walkid", "shape", "step"]]
+
+    pws = []
+    for _, leaf in concat.groupby("leafid"):
+        for _, walk in leaf.groupby("walkid"):
+            start = 0
+            max_start = len(walk) - P_WALK_LEN
+            step = max_start // N_PWS  # equal intervals start and max start
+            for i in range(N_PWS):
+                pw = walk.iloc[start:start + P_WALK_LEN].copy()
+                pw["first_cat"] = pw["shape"].values[0]  # reset first cat
+                pw["leafid"] = f"{pw['leafid'].values[0]}_" + \
+                    f"{pw['walkid'].values[0]}_{i}"
+                pw["walkid_real"] = pw["walkid"].values[0]
+                pw["walkid"] = f"{pw['walkid'].values[0]}_{i}"  # pwalkid
+                # pw["leafid"] = f"{pw['leafid'].values[0]}_{i}"  # pwleafid
+                pw["step_real"] = pw["step"]
+                pw["step"] = pw["step"] - pw["step"].min()  # start steps at 0
+                pws.append(pw)
+                start += step  # next pwalk start
+
+    pws = pd.concat(pws, ignore_index=True)
+    pws.to_csv(f"{WD}_pseudo_walks.csv", index=False)
+    print(f"Pseudo walks saved to {WD}_pseudo_walks.csv")
+
+    return pws
+
+
 def get_transition_counts():
     """Get the total no. each transition type across the all walks in the 
     dataset."""
 
-    walks = concatenator()
-    walks = pd.concat(walks)
-    walks = pd.merge(walks, first_cats[["leafid", "first_cat"]], on="leafid")
+    if USE_PWALKS:
+        # if using pseudo walks, read in the pseudo walks
+        walks = pd.read_csv(f"{WD}_pseudo_walks.csv")
+    else:
+        walks = concatenator()
+        walks = pd.concat(walks)
+        walks = pd.merge(
+            walks, first_cats[["leafid", "first_cat"]], on="leafid")
 
-    walks_sub = walks[["leafid", "walkid", "shape", "step", "first_cat"]]
-    walks_sub.to_csv(f"{RUN_ID}.csv", index=False)
+        walks_sub = walks[["leafid", "walkid", "shape", "step", "first_cat"]]
+        walks_sub.to_csv(f"{RUN_ID}.csv", index=False)
 
-    # Drop rows where leafid is "pc4" and walkid is 3 should only remove 1 row
-    walks = walks[~((walks["leafid"] == "pc4") & (walks["walkid"] == 3))]
+        # Drop rows where leafid is "pc4" and walkid is 3 should only remove 1 row
+        walks = walks[~((walks["leafid"] == "pc4") & (walks["walkid"] == 3))]
 
     # get transitions by shifting shape columns down by one and combining
     walks["prevshape"] = walks["shape"].shift(+1)
@@ -133,9 +176,9 @@ def get_transition_counts():
     walks.loc[walks["step"] == 0, "transition"] = walks["first_cat"] + \
         walks["shape"]  # replace 0th step with first_cat + shape
 
-    # only fit to data from the first "CUTOFF" steps of each walk
+    # only fit to data from and including the first "CUTOFF" steps of each walk
     walks = walks.loc[walks["step"] <= CUTOFF]
-    # only fit to data after the first "CUTON" steps of each walk
+    # only fit to data after and including the first "CUTON" steps of each walk
     walks = walks.loc[walks["step"] >= CUTON]
     # only fit to transitions from walks that started in these states
     walks = walks[walks["first_cat"].isin(FILT)]
@@ -354,6 +397,9 @@ def print_hyperparams():
     print(f"RESET_FIRST_CAT = {RESET_FIRST_CAT}")
     print(f"EQ_INIT = {EQ_INIT}")
     print(f"FILT = {FILT}")
+    print(f"USE_PWALKS = {USE_PWALKS}")
+    print(f"P_WALK_LEN = {P_WALK_LEN}")
+    print(f"N_PWS = {N_PWS}")
     print(f"WD = {WD}")
     print(f"RUN_ID = {RUN_ID}")
 
@@ -380,6 +426,9 @@ def save_hyperparams():
         file.write(f"RESET_FIRST_CAT = {RESET_FIRST_CAT}\n")
         file.write(f"EQ_INIT = {EQ_INIT}\n")
         file.write(f"FILT = {FILT}\n")
+        file.write(f"USE_PWALKS = {USE_PWALKS}\n")
+        file.write(f"P_WALK_LEN = {P_WALK_LEN}\n")
+        file.write(f"N_PWS = {N_PWS}\n")
         file.write(f"WD = {WD}\n")
 
     print(f"Hyper parameters have been saved to {output_file}")
@@ -402,6 +451,7 @@ def print_help():
                         2   ...plot mcmc trace from file
                         3   ...export mcmc posteriors from file
                         4   ...get transition counts from simulation data
+                        5   ...generate pseudo walks from simulation data
     """
     print(help_message)
 
@@ -438,3 +488,6 @@ if __name__ == "__main__":
                 counts = get_transition_counts()
                 total = sum(counts["count"])
                 print(f"total transitions {total}")
+            if FUNC == 5:
+                print_hyperparams()
+                gen_pseudo_walks()
