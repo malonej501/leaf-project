@@ -3,20 +3,28 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy import linalg
+from scipy.stats import chisquare, chi2
 from PIL import Image
 import seaborn as sns
 
-PLOT = 1  # type of plot to produce
+PLOT = 2  # type of plot to produce
 # 0-three rows with error bars,
 # 1-two rows with mean model,
 # 2-proportion of shapes over simulation time against model predictions
+# 3-chi-squared goodness of fit for CTMC proportions to sim proportions
 PHYLORATES = "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
 # SIMRATES = "MUT2_mcmc_11-12-24"
 # SIMRATES = "MUT2_mcmc_05-02-25"  # best fit so far
 # SIMRATES = "MUT5_mcmc_10-02-25"
 # SIMRATES = "MUT2_mle_11-02-25"
 # SIMRATES = "MUT2_mle_cuton39_19-02-25"
+# SIMRATES = "test"
 SIMRATES = "MUT2_320_mle_20-03-25"
+# SIMRATES = "test_MUT2_init_t0_09-04-25"
+# SIMRATES = "MUT2_mle_from0shape_11-04-25"
+# SIMRATES = "MUT2_mle_from0_4_11-04-25"
+# SIMRATES = "MUT2_pwalks_160_10_07-04-25"
+# SIMRATES = "MUT2_mle_pwalks_from0_2_11-04-25"
 # SIMRATES = "q_p-ht_02-04-25"
 # SIMRATES = "q_p-ht_contig_filt_u_03-04-25"
 # SIMRATES = "MUT2_160-320_reinit_03-04-25"
@@ -25,6 +33,7 @@ SIMRATES = "MUT2_320_mle_20-03-25"
 # simdata = "MUT2.2_trajectories_shape.csv"
 # simdata = "MUT5_mcmc_10-02-25.csv"
 SIMDATA = "MUT2_320_mle_20-03-25.csv"
+# SIMDATA = "pwalks_10_160_leaves_full_13-03-25_MUT2_CLEAN.csv"
 # SIMDATA = "MUT2_mle_11-02-25.csv"
 T_STAT = 0  # 0=mean prop, 1=prop - stat used for the timeseries plot
 # 0=mcmc, 1=mle - use the mean of mcmc posterior or mle estimate for sim curves
@@ -53,7 +62,7 @@ EXCL = ["p0_121", "p1_82", "p2_195", "p9_129", "p5_249", "pu3", "p2_78_alt",
 
 
 def plot_data_from_probcurves(curves, t_plot, t_calc):
-    """Takes a list of probability matrices and returns a dataframe with the 
+    """Takes a list of probability matrices and returns a dataframe with the
     transition probabilities in a format that can be plotted"""
 
     # attach plot time to data, along with time used for calculation
@@ -85,8 +94,8 @@ def plot_data_from_probcurves(curves, t_plot, t_calc):
 
 
 def get_phylo_rates():
-    """Get the mean and confidence intervals for the posterior distributions 
-    of all transition rates from phylogenetic mcmc inference specified by 
+    """Get the mean and confidence intervals for the posterior distributions
+    of all transition rates from phylogenetic mcmc inference specified by
     PHYLORATES"""
 
     phylo_dir = "../phylogeny/rates/uniform_1010000steps"
@@ -131,8 +140,8 @@ def get_phylo_rates():
 
 
 def get_sim_rates():
-    """Get the mean and confidence intervals for the posterior distributions 
-    of all transition rates from simulation mcmc inference specified by 
+    """Get the mean and confidence intervals for the posterior distributions
+    of all transition rates from simulation mcmc inference specified by
     SIMRATES"""
 
     sim_rates = (
@@ -190,11 +199,11 @@ def get_sim_rates():
 
 def get_timeseries():
     """
-    Get the mean proportion of each shape category at each step of the walk 
+    Get the mean proportion of each shape category at each step of the walk
     from the simulation data.
     T_STAT      statistic that is used to summaries the timeseries
                 0   ...mean across leafids of the proportion within leafids
-                1   ...proportion across all leafids 
+                1   ...proportion across all leafids
     """
     concat = pd.read_csv(SIMDATA)
 
@@ -252,14 +261,14 @@ def get_timeseries():
             tseries.groupby(["leafid", "first_cat", "step"])
             .agg(no_active_walks=("shape_total", "sum"))
             .reset_index()
-        )
+        )  # if using pseudo walks, will always be 1
 
         # proportion of active walks in each shape category for each leafid
         tseries = tseries.merge(
             tseries_total, on=["leafid", "first_cat", "step"])
         tseries["proportion"] = (
             tseries["shape_total"] / tseries["no_active_walks"]
-        )
+        )  # for pseudo walks, will always be either 1 or 0
 
         # mean prop active walks per shape for all leaves in each first_cat
         tseries = (
@@ -439,9 +448,9 @@ def plot_sim_and_phylogeny_curves():
 
 
 def plot_sim_and_phylogeny_curves_nouncert():
-    """Plot the MEAN proportion of each shape category at each step of the walk 
-    from the simulation data against the predicted proportions from the 
-    simulation and phylogeny CTMCs. The scale for the phylogeny is different 
+    """Plot the MEAN proportion of each shape category at each step of the walk
+    from the simulation data against the predicted proportions from the
+    simulation and phylogeny CTMCs. The scale for the phylogeny is different
     to the simulation scale."""
 
     #### Get phylo-rates ####
@@ -577,7 +586,7 @@ def plot_sim_and_phylogeny_curves_nouncert():
 
 
 def get_timeseries_alt():
-    """Return the proportion of each shape category at each step of the walk 
+    """Return the proportion of each shape category at each step of the walk
     from the simulation data"""
 
     concat = pd.read_csv(SIMDATA)
@@ -592,16 +601,16 @@ def get_timeseries_alt():
         name="shape_total")  # no. each shape at each step
     tseries["total"] = tseries.groupby("step")["shape_total"].transform(
         "sum")  # total no. shapes at each step
-    tseries["prop"] = tseries["shape_total"] / \
-        tseries["total"]  # proportion of each shape at each step
+    tseries["prop"] = tseries["shape_total"] / tseries["total"]
+    # proportion of each shape at each step
 
     return tseries
 
 
 def plot_sim_and_phylogeny_curves_new():
-    """Plot the proportion of each shape category at each step of the 
-    walk from the simulation data against the predicted proportions from the 
-    simulation and phylogeny CTMCs. The scale for the phylogeny is different 
+    """Plot the proportion of each shape category at each step of the
+    walk from the simulation data against the predicted proportions from the
+    simulation and phylogeny CTMCs. The scale for the phylogeny is different
     to the simulation scale."""
 
     #### Get phylo-rates ####
@@ -644,7 +653,7 @@ def plot_sim_and_phylogeny_curves_new():
     phylo_plot["t_actual"] = [i for i in pt_vals for _ in range(4)]
 
     # produce sim-curves
-    st_vals = np.linspace(0, SIM_XLIM, SIM_XLIM)
+    st_vals = np.linspace(0, SIM_XLIM, SIM_XLIM+1)
     sim_curves = []
     q = np.array(sim_summary["mean_rate"].values).reshape(4, 4)
     ql = np.array(sim_summary["lb"].values).reshape(4, 4)
@@ -711,6 +720,167 @@ def plot_sim_and_phylogeny_curves_new():
     plt.show()
 
 
+def goodness_of_fit_prev():
+    """Calculate goodness of fit of expected proportions from CTMC to observed
+    proportions in random walk data."""
+
+    #### Get sim timeseries data ####
+    tseries = get_timeseries_alt()
+    init_ratio = np.array([  # get proportion of each shape at step=0 in data
+        tseries[tseries["shape"] == "u"]["prop"].values[0],
+        tseries[tseries["shape"] == "l"]["prop"].values[0],
+        tseries[tseries["shape"] == "d"]["prop"].values[0],
+        tseries[tseries["shape"] == "c"]["prop"].values[0]
+    ])
+    print(tseries)
+
+    # produce CTMC expected probabilities
+    sim_summary = get_sim_rates()
+    st_vals = np.linspace(0, SIM_XLIM-1, SIM_XLIM)
+    sim_curves = []
+    q = np.array(sim_summary["mean_rate"].values).reshape(4, 4)
+    ql = np.array(sim_summary["lb"].values).reshape(4, 4)
+    qu = np.array(sim_summary["ub"].values).reshape(4, 4)
+    # multiply predicted transition probability by initial proportion of shapes
+    # to get the predicted proportion of each shape at each step
+    for t in st_vals:
+        pt = linalg.expm(q * t) * init_ratio[:, None]
+        pllt = linalg.expm(ql * t) * init_ratio[:, None]
+        puut = linalg.expm(qu * t) * init_ratio[:, None]
+        sim_curves.append([pt, pllt, puut])
+    sim_plot = pd.DataFrame(
+        plot_data_from_probcurves(sim_curves, st_vals, st_vals))
+    # sum predicted proportions from different initial shapes
+    sim_plot = sim_plot.groupby(["t", "shape"]).agg(
+        P=("P", "sum")).reset_index()
+
+    # merge observed and expected data
+    obs_exp = pd.merge(sim_plot, tseries, left_on=["t", "shape"],
+                       right_on=["step", "shape"], how="left")
+    obs_exp = obs_exp.rename(columns={"P": "p_exp", "prop": "p_obs"})
+    obs_exp = obs_exp.drop(columns=["step", "shape_total", "total"])
+    obs_exp["(o-e)^2/e"] = (obs_exp["p_obs"] -
+                            obs_exp["p_exp"])**2 / obs_exp["p_exp"]
+    gdness_fit = obs_exp["(o-e)^2/e"].sum()
+    print(obs_exp)
+    print(f"Goodness of fit: {gdness_fit}")
+    # if p > 0.05, can't reject null hypothesis that obs and exp are from the
+    # same distribution, thus CTMC is consistent with data
+    xi = chisquare(obs_exp["p_obs"], obs_exp["p_exp"])
+    print(xi)
+
+    df = len(obs_exp) - 12  # no. independent cells in table - no. params
+    # df = 12
+
+    # Generate x values for the chi-squared distribution
+    x = np.linspace(0, chi2.ppf(0.999, df), 1000)  # 99.9% of the distribution
+    y = chi2.pdf(x, df)  # Calculate the chi-squared PDF
+    crit = chi2.ppf(0.95, df)  # Critical value for alpha=0.05
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(x, y, label=f"Chi-squared Distribution (df={df})")
+    # Highlight the critical region where H0 is rejected
+    plt.fill_between(x, 0, y, where=(x >= crit), color="C1", alpha=0.5,
+                     label=f"Critical Region (alpha=0.05, chi^2 > {crit:.2f})")
+    # Add a vertical line for the observed chi-squared statistic
+    plt.axvline(xi.statistic, color="C2", linestyle="--", lw=2,
+                label=f"Observed chi^2 = {xi.statistic:.2f}"
+                f", p-value = {xi.pvalue:.2f}")
+    plt.xlabel("Chi-squared Statistic")
+    plt.ylabel("Probability Density")
+    plt.title("Chi-squared Distribution with Observed Statistic")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+def goodness_of_fit_trans():
+    """Test goodness of CTMC expected transitions frequencies to observed
+    frequencies of transitions in different time intervals."""
+
+    walks = pd.read_csv(SIMDATA)
+    walks["prevshape"] = walks["shape"].shift(+1)
+    walks.loc[walks["step"] == 0, "prevshape"] = walks["first_cat"]
+    walks["transition"] = walks["prevshape"] + walks["shape"]
+
+    n_wind = 4  # no. time windows for counting/estimating transtions
+    wind_size = SIM_XLIM / n_wind
+    walks["t_window"] = (walks["step"] // wind_size).astype(int)
+    walks["w_start"] = walks["t_window"] * wind_size
+    walks["w_end"] = (walks["t_window"] + 1) * wind_size
+    # walks["is_last"] = (walks[["leafid", "walkid"]] != walks[[
+    #     "leafid", "walkid"]].shift(-1)).any(axis=1)
+    counts = walks.groupby(
+        ["t_window", "w_start", "w_end", "transition"]
+    ).size().unstack(fill_value=0).stack().reset_index(name="count_obs")
+    counts["from"] = counts["transition"].str[0]
+    counts["to"] = counts["transition"].str[1]
+    # no. transitions from each state per window
+    counts["n_from_w"] = counts.groupby(
+        ["t_window", "from"])["count_obs"].transform("sum")
+
+    print(counts.to_string()[0:10000])
+    # get time per state to calculate expected no. transitions
+    # steps_valid = walks[~walks["is_last"]].copy()
+    # t_ht = steps_valid.groupby("t_window")["shape"].value_counts()
+    # wind_states = t_ht.index.tolist()
+    sim_summary = get_sim_rates()
+    print(sim_summary)
+    # print(t_ht)
+    # st_vals = np.linspace(0, SIM_XLIM-1, SIM_XLIM)
+    # sim_curves = []
+    # print(sim_summary)
+    q = np.array(sim_summary["mean_rate"].values).reshape(4, 4)
+    print(q)
+    pt = linalg.expm(q * wind_size)
+    print(pt)
+    pt = pd.DataFrame(pt, index=ORDER, columns=ORDER).stack().reset_index()
+    pt.columns = ["from", "to", "p_w"]
+    print(pt)
+
+    obs_exp = pd.merge(counts, pt, on=["from", "to"], how="left")
+    # see Kalbfleisch and Lawless (1985) page 868
+    obs_exp["count_exp"] = obs_exp["p_w"] * obs_exp["n_from_w"]
+
+    obs_exp["(o-e)^2/e"] = (obs_exp["count_obs"] -
+                            obs_exp["count_exp"])**2 / obs_exp["count_exp"]
+    print(obs_exp.to_string()[0:10000])
+
+    # for i in ORDER:
+    #     for j in ORDER:
+    #         # get expected trans prob for window duration
+    #         counts["p_w"] = counts[counts["from"] == i]
+    tee = 1.90-1.10
+    pt = linalg.expm(np.array([
+        [-0.136, 0.136, 0],
+        [0, -2.28, 2.28],
+        [0, 0.47, -0.47],
+    ]) * tee)
+    print(pt)
+    # q = pd.DataFrame(np.array(sim_summary["mean_rate"].values).reshape(4, 4),
+    #                  index=ORDER, columns=ORDER)
+    xi = chisquare(obs_exp["count_obs"], obs_exp["count_exp"])
+    print(xi)
+
+    # exp_counts = pd.DataFrame([
+    #     {
+    #         "t_window": w,
+    #         "from": i,
+    #         "to": j,
+    #         "exp_trans": q.loc[i, j] * t_ht[w][i]
+    #     }
+    #     for w in t_ht.index.get_level_values(
+    #         "t_window") for i in ORDER for j in ORDER if i != j
+    # ])
+    # print(exp_counts)
+
+    # merge observed and expected data
+    # obs_exp = pd.merge(sim_plot, tseries, left_on=["t", "shape"],
+    #                    right_on=["step", "shape"], how="left")
+    # print(obs_exp)
+
+
 if __name__ == "__main__":
     print("Parameters")
     print(f"Phylogeny rates: {PHYLORATES}")
@@ -738,3 +908,6 @@ if __name__ == "__main__":
         plot_sim_and_phylogeny_curves_nouncert()
     if PLOT == 2:
         plot_sim_and_phylogeny_curves_new()
+    if PLOT == 3:
+        goodness_of_fit_trans()
+        # goodness_of_fit_prev()
