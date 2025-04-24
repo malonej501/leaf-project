@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
+import sympy as sp
 from matplotlib import pyplot as plt
 from scipy import linalg
 from scipy.stats import chisquare, chi2
@@ -14,31 +15,18 @@ PLOT = 2  # type of plot to produce
 # 3-chi-squared goodness of fit for CTMC proportions to sim proportions
 PHYLORATES = "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
 PHYLORATES2 = "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
-# SIMRATES = "MUT2_mcmc_11-12-24"
 # SIMRATES = "MUT2_mcmc_05-02-25"  # best fit so far
-# SIMRATES = "MUT5_mcmc_10-02-25"
-# SIMRATES = "MUT2_mle_11-02-25"
-# SIMRATES = "MUT2_mle_cuton39_19-02-25"
 # SIMRATES = "test"
-SIMRATES = "MUT2_320_mle_20-03-25"
-# SIMRATES = "test_MUT2_init_t0_09-04-25"
-# SIMRATES = "MUT2_mle_from0shape_11-04-25"
-# SIMRATES = "MUT2_mle_from0_4_11-04-25"
-# SIMRATES = "MUT2_pwalks_160_10_07-04-25"
-# SIMRATES = "MUT2_mle_pwalks_from0_2_11-04-25"
-# SIMRATES = "q_p-ht_02-04-25"
-# SIMRATES = "q_p-ht_contig_filt_u_03-04-25"
-# SIMRATES = "MUT2_160-320_reinit_03-04-25"
-# SIMRATES = "MUT2_80-320_reinit_04-04-25"
-# SIMRATES = "MUT2_240-320_reinit_04-04-25"
+# SIMRATES = "MUT2_320_mle_20-03-25" # best fit so far 24-04-25
+SIMRATES = "MUT2_320_mcmc_2_24-04-25"
 # simdata = "MUT2.2_trajectories_shape.csv"
 # simdata = "MUT5_mcmc_10-02-25.csv"
 SIMDATA = "MUT2_320_mle_23-04-25.csv"
 # SIMDATA = "pwalks_10_160_leaves_full_13-03-25_MUT2_CLEAN.csv"
 # SIMDATA = "MUT2_mle_11-02-25.csv"
+MC_ERR_SAMP = 500  # no. monte carlo samples for mcmc error propagation
 T_STAT = 0  # 0=mean prop, 1=prop - stat used for the timeseries plot
-# 0=mcmc, 1=mle - use the mean of mcmc posterior or mle estimate for sim curves
-SIMRATES_METHOD = 1
+SIMRATES_METHOD = 0  # 0=mcmc, 1=mle
 EQ_INIT = False  # plot timeseries from equal numbers of each initial shape
 LB = 0  # 5 #5 # credible interval for phylo and sim mcmc rates
 UB = 0  # 95 #95
@@ -137,7 +125,7 @@ def get_phylo_rates(phylo=PHYLORATES):
 
     if V:
         print(f"Phylogeny rates\n{phylo_summary}")
-    return phylo_summary
+    return phylo_summary, p_rate
 
 
 def get_sim_rates():
@@ -195,7 +183,7 @@ def get_sim_rates():
     sim_summary["ub"] = [i[1] for i in confidence_intervals.values()]
     if V:
         print(f"Simulation rates\n{sim_summary}")
-    return sim_summary
+    return sim_summary, sim_rates
 
 
 def get_timeseries():
@@ -325,9 +313,9 @@ def plot_sim_and_phylogeny_curves():
     """Plot data and phylogeny and sim predictions each in separate rows"""
 
     #### Get phylo-rates ####
-    phylo_summary = get_phylo_rates()
+    phylo_summary, _ = get_phylo_rates()
     #### Get sim-rates ####
-    sim_summary = get_sim_rates()
+    sim_summary, _ = get_sim_rates()
     #### Get sim timeseries data ####
     tseries = get_timeseries()
 
@@ -460,9 +448,9 @@ def plot_sim_and_phylogeny_curves_nouncert():
     to the simulation scale."""
 
     #### Get phylo-rates ####
-    phylo_summary = get_phylo_rates()
+    phylo_summary, _ = get_phylo_rates()
     #### Get sim-rates ####
-    sim_summary = get_sim_rates()
+    sim_summary, _ = get_sim_rates()
     #### Get sim timeseries data ####
     tseries = get_timeseries()
 
@@ -617,9 +605,9 @@ def get_plot_vals(rates, init_ratio, dtype):
     """Get the predicted proportion of each shape at each step of the walk
     from the simulation or phylogeny rates"""
 
-    t_vals = None
     # no. time points must match no. steps in sim data, phylo time scale is
     # different
+    t_vals = None
     if dtype == "phylo":
         t_vals = np.linspace(0, PHYLO_XLIM, SIM_XLIM)
     elif dtype == "sim":
@@ -657,6 +645,55 @@ def get_plot_vals(rates, init_ratio, dtype):
     return plot_dat
 
 
+def get_plot_vals_alt(rates, init_ratio, dtype):
+    """Get the predicted proportion of each shape at each step of the walk
+    from the simulation or phylogeny rates"""
+
+    # no. time points must match no. steps in sim data, phylo time scale is
+    # different
+    t_vals = None
+    if dtype == "phylo":
+        t_vals = np.linspace(0, PHYLO_XLIM, SIM_XLIM)
+    elif dtype == "sim":
+        t_vals = np.linspace(0, SIM_XLIM, SIM_XLIM+1)
+
+    print(rates)
+    # multiply predicted transition probability by initial proportion of shapes
+    # to get the predicted proportion of each shape at each step
+    curves = []  # store p for each t in t_vals
+    for i in range(MC_ERR_SAMP):
+        print(f"monte carlo {i}/{MC_ERR_SAMP}", end="\r")
+        samp = rates.apply(  # choose random rate from each column
+            lambda col: col.sample(1).values[0], axis=0)
+        # recalculate diagonals
+        samp["q00"] = -samp["q01"] - samp["q02"] - samp["q03"]
+        samp["q11"] = -samp["q10"] - samp["q12"] - samp["q13"]
+        samp["q22"] = -samp["q20"] - samp["q21"] - samp["q23"]
+        samp["q33"] = -samp["q30"] - samp["q31"] - samp["q32"]
+        q = np.array(samp.values).reshape(4, 4)
+        curve_dat = []
+        for t in t_vals:
+            pt = linalg.expm(q * t) * init_ratio[:, None]
+            pllt = np.zeros((4, 4))
+            puut = np.zeros((4, 4))
+            curve_dat.append([pt, pllt, puut])
+        if dtype == "phylo":  # pseudo time scale for phylo
+            plot_dat = pd.DataFrame(plot_data_from_probcurves(
+                curve_dat, np.arange(SIM_XLIM), t_vals))
+        elif dtype == "sim":  # sim time scale the same for plot and calc
+            plot_dat = pd.DataFrame(
+                plot_data_from_probcurves(curve_dat, t_vals, t_vals))
+        # sum predicted proportions from different initial shapes
+        plot_dat = plot_dat.groupby(["t", "shape"]).agg(
+            P=("P", "sum"), lb=("lb", "sum"), ub=("ub", "sum")).reset_index()
+        if dtype == "phylo":
+            # add actual phylo time scale to phylo plot data for reference
+            plot_dat["t_actual"] = [i for i in t_vals for _ in range(4)]
+        curves.append(plot_dat)
+
+    return curves
+
+
 def plot_sim_and_phylogeny_curves_new():
     """Plot the proportion of each shape category at each step of the
     walk from the simulation data against the predicted proportions from the
@@ -664,15 +701,14 @@ def plot_sim_and_phylogeny_curves_new():
     to the simulation scale."""
 
     #### Get phylo-rates ####
-    phylo_summary_zun = get_phylo_rates(phylo=PHYLORATES)
-    phylo_summary_jan = get_phylo_rates(phylo=PHYLORATES2)
-
+    phylo_summary_zun, raw_zun = get_phylo_rates(phylo=PHYLORATES)
+    phylo_summary_jan, raw_jan = get_phylo_rates(phylo=PHYLORATES2)
     #### Get sim-rates ####
-    sim_summary = get_sim_rates()
+    sim_summary, raw_sim = get_sim_rates()
     #### Get sim timeseries data ####
-    tseries = get_timeseries_alt()
-    # tseries = get_timeseries() # for error bar on timeseries
-    # tseries = tseries.rename(columns={"mean_prop": "prop"})
+    # tseries = get_timeseries_alt()
+    tseries = get_timeseries()  # for error bar on timeseries
+    tseries = tseries.rename(columns={"mean_prop": "prop"})
     init_ratio = np.array([  # get proportion of each shape at step=0 in data
         tseries[tseries["shape"] == "u"]["prop"].values[0],
         tseries[tseries["shape"] == "l"]["prop"].values[0],
@@ -681,9 +717,11 @@ def plot_sim_and_phylogeny_curves_new():
     ])
 
     # get predicted proportions from phylo and sim rate matrices
-    phylo_plot_z = get_plot_vals(phylo_summary_zun, init_ratio, "phylo")
-    phylo_plot_j = get_plot_vals(phylo_summary_jan, init_ratio, "phylo")
-    sim_plot = get_plot_vals(sim_summary, init_ratio, "sim")
+    # sim_plot = get_plot_vals(sim_summary, init_ratio, "sim")
+    sim_plot = get_plot_vals_alt(raw_sim, init_ratio, "sim")
+    if SHOW_PHYLO:
+        phylo_plot_z = get_plot_vals_alt(raw_zun, init_ratio, "phylo")
+        phylo_plot_j = get_plot_vals_alt(raw_jan, init_ratio, "phylo")
 
     # Create subplots
     # plt.rcParams["font.family"] = "CMU Serif"
@@ -701,21 +739,24 @@ def plot_sim_and_phylogeny_curves_new():
 
     for i, ax in enumerate(axs.flat):
         tseries_sub = tseries[tseries["shape"] == ORDER[i]]
-        sim_plot_sub = sim_plot[(sim_plot["shape"] == ORDER[i])]
-        l_data, = ax.plot(tseries_sub["step"],
+        l_data, = ax.plot(tseries_sub["step"],  # plot timeseries
                           tseries_sub["prop"], c="C0")
         if {"lb", "ub"}.issubset(tseries_sub.columns):  # show error
             ax.fill_between(tseries_sub["step"], tseries_sub["lb"],
                             tseries_sub["ub"], alpha=0.2, color="C0")
-        l_fit, = ax.plot(sim_plot_sub["t"], sim_plot_sub["P"], c="C1", ls="--")
+        for sip in sim_plot:  # plot sim ctmc
+            sip_sub = sip[sip["shape"] == ORDER[i]]
+            l_fit, = ax.plot(sip_sub["t"], sip_sub["P"], c="C1", alpha=0.01)
         if SHOW_PHYLO:
-            phy_plot_sub_z = phylo_plot_z[(phylo_plot_z["shape"] == ORDER[i])]
-            phy_plot_sub_j = phylo_plot_j[(phylo_plot_j["shape"] == ORDER[i])]
             secax = ax.secondary_xaxis('top', functions=(forward, inverse))
-            l_phy_z, = ax.plot(
-                phy_plot_sub_z["t"], phy_plot_sub_z["P"], c="C2", ls="--")
-            l_phy_j, = ax.plot(
-                phy_plot_sub_j["t"], phy_plot_sub_j["P"], c="C3", ls="--")
+            for ppz in phylo_plot_z:
+                ppz_sub = ppz[(ppz["shape"] == ORDER[i])]
+                l_phy_z, = ax.plot(
+                    ppz_sub["t"], ppz_sub["P"], c="C2", alpha=0.01)
+            for ppj in phylo_plot_j:
+                ppj_sub = ppj[(ppj["shape"] == ORDER[i])]
+                l_phy_j, = ax.plot(
+                    ppj_sub["t"], ppj_sub["P"], c="C3", alpha=0.01)
             # ax.fill_between(phy_plot_sub_z["t"], phy_plot_sub_z["lb"],
             #                 phy_plot_sub_z["ub"], alpha=0.3, color="C2")
             secax.set_xlabel("Branch length (Myr)")
@@ -730,15 +771,18 @@ def plot_sim_and_phylogeny_curves_new():
         fig.supxlabel("Simulation step")
     fig.supylabel("Proportion")
     if SHOW_PHYLO:
-        fig.legend([l_data, l_fit, l_phy_z, l_phy_j],
-                   ["Simulation Data", "Simulation CTMC",
-                    "Phylogeny CTMC\nZuntini et al. (2024)",
-                    "Phylogeny CTMC\nJanssens et al. (2021)"],
-                   # ["Simulation Data", "Simulation CTMC", "Phylogeny CTMC"],
-                   loc="center left", bbox_to_anchor=(0.75, 0.5))
+        leg = fig.legend([l_data, l_fit, l_phy_z, l_phy_j],
+                         ["Simulation Data", "Simulation CTMC",
+                          "Phylogeny CTMC\nZuntini et al. (2024)",
+                          "Phylogeny CTMC\nJanssens et al. (2021)"],
+                         # ["Simulation Data", "Simulation CTMC", "Phylogeny CTMC"],
+                         loc="center left", bbox_to_anchor=(0.75, 0.5))
     else:
-        fig.legend([l_data, l_fit], ["Simulation Data", "Simulation CTMC"],
-                   loc="center left", bbox_to_anchor=(0.75, 0.5))
+        leg = fig.legend([l_data, l_fit],
+                         ["Simulation Data", "Simulation CTMC"],
+                         loc="center left", bbox_to_anchor=(0.75, 0.5))
+    for lh in leg.legend_handles:
+        lh.set_alpha(1)
     plt.tight_layout()
     fig.subplots_adjust(right=0.75)  # make room for legend
     plt.savefig("sim_ctmc_fit.pdf", format="pdf", dpi=1200)
@@ -760,7 +804,7 @@ def goodness_of_fit_prev():
     print(tseries)
 
     # produce CTMC expected probabilities
-    sim_summary = get_sim_rates()
+    sim_summary, _ = get_sim_rates()
     st_vals = np.linspace(0, SIM_XLIM-1, SIM_XLIM)
     sim_curves = []
     q = np.array(sim_summary["mean_rate"].values).reshape(4, 4)
@@ -911,6 +955,7 @@ if __name__ == "__main__":
     print(f"Phylogeny rates: {PHYLORATES}")
     print(f"Simulation rates: {SIMRATES}")
     print(f"Simulation data: {SIMDATA}")
+    print(f"Monte Carlo error sample size: {MC_ERR_SAMP}")
     print(f"T_STAT: {T_STAT}")
     print(f"Simulation rates method: {SIMRATES_METHOD}")
     print(f"Equal initial shapes: {EQ_INIT}")
