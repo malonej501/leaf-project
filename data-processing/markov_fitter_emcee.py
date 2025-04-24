@@ -11,6 +11,7 @@ from scipy import optimize
 import emcee
 import corner
 from matplotlib import pyplot as plt
+import scipy.linalg
 from dataprocessing import first_cats
 from dataprocessing import first_cats
 
@@ -35,7 +36,9 @@ RESET_FIRST_CAT = False  # reset first_cat to the shape at step CUTON
 EQ_INIT = False  # plot timeseries from equal numbers of each initial shape
 # only fit the ctmc to transitions from walks that started in these states
 FILT = ["u", "l", "d", "c"]
-USE_PWALKS = True  # use pseudo walks instead of real walks to fit model
+L_VER = 0  # version of likelihood function 0 - transition = prev + curr,
+# 1 - transition = first_cat + curr (aka from0)
+USE_PWALKS = False  # use pseudo walks instead of real walks to fit model
 P_WALK_LEN = 160  # length of pseudo walks
 N_PWS = 10  # number of pseudo walks to generate per walk
 RUN_ID = "test"  # the name of the run - test will be overwritten by default
@@ -145,19 +148,19 @@ def gen_pseudo_walks():
                 start += step  # next pwalk start
 
     pws = pd.concat(pws, ignore_index=True)
-    pws.to_csv(f"{WD}_pseudo_walks.csv", index=False)
-    print(f"Pseudo walks saved to {WD}_pseudo_walks.csv")
+    pws.to_csv(f"pwalks_{N_PWS}_{P_WALK_LEN}_{WD}.csv", index=False)
+    print(f"Pseudo walks saved to pwalks_{N_PWS}_{P_WALK_LEN}_{WD}.csv")
 
     return pws
 
 
 def get_transition_counts():
-    """Get the total no. each transition type across the all walks in the 
+    """Get the total no. each transition type across the all walks in the
     dataset."""
 
     if USE_PWALKS:
         # if using pseudo walks, read in the pseudo walks
-        walks = pd.read_csv(f"{WD}_pseudo_walks.csv")
+        walks = pd.read_csv(f"pwalks_{N_PWS}_{P_WALK_LEN}_{WD}.csv")
     else:
         walks = concatenator()
         walks = pd.concat(walks)
@@ -167,8 +170,8 @@ def get_transition_counts():
         walks_sub = walks[["leafid", "walkid", "shape", "step", "first_cat"]]
         walks_sub.to_csv(f"{RUN_ID}.csv", index=False)
 
-        # Drop rows where leafid is "pc4" and walkid is 3 should only remove 1 row
-        walks = walks[~((walks["leafid"] == "pc4") & (walks["walkid"] == 3))]
+        # Drop rows where leafid "pc4" and walkid 3 should only remove 1 row
+        # walks = walks[~((walks["leafid"] == "pc4") & (walks["walkid"] == 3))]
 
     # get transitions by shifting shape columns down by one and combining
     walks["prevshape"] = walks["shape"].shift(+1)
@@ -212,8 +215,82 @@ def get_transition_counts():
     return count
 
 
+def get_transition_counts_alt():
+    """Get total no. each transition with initial state always being first_cat 
+    and end state is for each time step. Returns no. each transition type for
+    each time interval."""
+
+    if USE_PWALKS:
+        # if using pseudo walks, read in the pseudo walks
+        walks = pd.read_csv(f"pwalks_{N_PWS}_{P_WALK_LEN}_{WD}.csv")
+    else:
+        walks = concatenator()
+        walks = pd.concat(walks)
+        walks = pd.merge(
+            walks, first_cats[["leafid", "first_cat"]], on="leafid")
+
+    walks_sub = walks[["leafid", "walkid", "shape", "step", "first_cat"]]
+
+    def get_trans_group(gp):
+        tr = []
+        init_state = gp.iloc[0]["first_cat"]  # prev shape always first_cat
+        for i in range(0, len(gp)):
+            state_i = gp.iloc[i]["shape"]  # next shape is current
+            # append transitions and time interval
+            tr.append({"transition": init_state + state_i, "t": i + 1})
+        return pd.DataFrame(tr)
+
+    trans = walks_sub.groupby(  # count transitions in each walk
+        ["leafid", "walkid", "first_cat"])[
+            ["leafid", "walkid", "shape", "step", "first_cat"]
+    ].apply(get_trans_group)
+    trans = trans.reset_index(level=["leafid", "walkid", "first_cat"])
+    # check for missing transitions
+    assert len(trans) == len(walks_sub), "Mismatch in transition counts"
+    # check first_cat always eqals from shape
+    assert trans["first_cat"].equals(trans["transition"].str[0]), \
+        "Mismatch in first_cat and prev state in transition"
+    count = trans[["transition", "t"]].value_counts().reset_index()
+
+    return count
+
+
+def log_likelihood_alt(params, count):
+    """Calculate log likelihood using transitions where intitial state is
+    always at first_cat and end state is for each time step."""
+
+    q = np.array(
+        [
+            [-(params[0] + params[1] + params[2]),
+             params[0], params[1], params[2]],
+            [params[3], -(params[3] + params[4] + params[5]),
+             params[4], params[5]],
+            [params[6], params[7], -
+                (params[6] + params[7] + params[8]), params[8]],
+            [params[9], params[10], params[11], -
+                (params[9] + params[10] + params[11])],
+        ]
+    )
+    log_l = 0
+
+    for t in sorted(count["t"].unique()):  # calc pt for each unique t
+        counts_sub = count[count["t"] == t].reset_index(drop=True)
+        pt = scipy.linalg.expm(q * t)
+        for j, transition in enumerate(counts_sub["transition"]):
+            pt_j = pt[transition_map_rates[transition]]
+            # get freq of each transition for this time length t
+            count_j = counts_sub["count"][j]
+            if pt_j > 0:
+                log_l += count_j * np.log(pt_j)
+            else:
+                log_l = -np.inf
+                break
+
+    return log_l
+
+
 def log_prior(params):
-    """Uniform prior between UNIF_LB and UNIF_UB for all transition rates. 
+    """Uniform prior between UNIF_LB and UNIF_UB for all transition rates.
     Return -np.inf if any parameter is outside the prior range."""
 
     # all q parameters must be within the prior range to return 0
@@ -223,7 +300,7 @@ def log_prior(params):
 
 
 def log_likelihood(params, count):
-    """Calculate the log likelihood of the data given a set of transition 
+    """Calculate the log likelihood of the data given a set of transition
     rates Q."""
 
     q = np.array(
@@ -255,7 +332,7 @@ def log_likelihood(params, count):
 
 
 def log_probability(params, count):
-    """Calculate the log posterior probability of Q given the data by adding 
+    """Calculate the log posterior probability of Q given the data by adding
     log prior and log likelihood."""
 
     lp = log_prior(params)      # if any of the proposed parameters are outside
@@ -267,13 +344,18 @@ def log_probability(params, count):
 
 
 def get_maximum_likelihood():
-    """Get the maximum likelihood estimate of the transition rates Q given 
+    """Get the maximum likelihood estimate of the transition rates Q given
     the data."""
 
     count = get_transition_counts()
+    if L_VER == 1:
+        count = get_transition_counts_alt()
 
     def nll(q):  # negative log likelhood wrapper
-        return -log_likelihood(q, count)
+        if L_VER == 0:
+            return -log_likelihood(q, count)
+        elif L_VER == 1:
+            return -log_likelihood_alt(q, count)
 
     np.random.seed()
     # initialise 12 random numbers for q matrix
@@ -287,7 +369,7 @@ def get_maximum_likelihood():
 
 
 def run_leaf_uncert_parallel_pool():
-    """Run parallelised MCMC inference to find the posterior distributions for 
+    """Run parallelised MCMC inference to find the posterior distributions for
     all transition rate parameters given data."""
 
     count = get_transition_counts()
@@ -343,7 +425,7 @@ def plot_trace(sampler, ml_rates):
 
 
 def sample_chain(sampler):
-    """Reduce the size of the saved chain by discarding the BURNIN and 
+    """Reduce the size of the saved chain by discarding the BURNIN and
     rounding each step and recording only every THIN step."""
 
     flat_samples = sampler.get_chain(discard=BURNIN, thin=THIN, flat=True)
@@ -397,6 +479,7 @@ def print_hyperparams():
     print(f"RESET_FIRST_CAT = {RESET_FIRST_CAT}")
     print(f"EQ_INIT = {EQ_INIT}")
     print(f"FILT = {FILT}")
+    print(f"L_VER = {L_VER}")
     print(f"USE_PWALKS = {USE_PWALKS}")
     print(f"P_WALK_LEN = {P_WALK_LEN}")
     print(f"N_PWS = {N_PWS}")
@@ -426,6 +509,7 @@ def save_hyperparams():
         file.write(f"RESET_FIRST_CAT = {RESET_FIRST_CAT}\n")
         file.write(f"EQ_INIT = {EQ_INIT}\n")
         file.write(f"FILT = {FILT}\n")
+        file.write(f"L_VER = {L_VER}\n")
         file.write(f"USE_PWALKS = {USE_PWALKS}\n")
         file.write(f"P_WALK_LEN = {P_WALK_LEN}\n")
         file.write(f"N_PWS = {N_PWS}\n")
