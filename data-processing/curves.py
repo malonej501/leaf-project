@@ -613,6 +613,50 @@ def get_timeseries_alt():
     return tseries
 
 
+def get_plot_vals(rates, init_ratio, dtype):
+    """Get the predicted proportion of each shape at each step of the walk
+    from the simulation or phylogeny rates"""
+
+    t_vals = None
+    # no. time points must match no. steps in sim data, phylo time scale is
+    # different
+    if dtype == "phylo":
+        t_vals = np.linspace(0, PHYLO_XLIM, SIM_XLIM)
+    elif dtype == "sim":
+        t_vals = np.linspace(0, SIM_XLIM, SIM_XLIM+1)
+
+    q = np.array(rates["mean_rate"].values).reshape(4, 4)
+    ql = np.array(rates["lb"].values).reshape(4, 4)
+    qu = np.array(rates["ub"].values).reshape(4, 4)
+    # multiply predicted transition probability by initial proportion of shapes
+    # to get the predicted proportion of each shape at each step
+    curve_dat = []  # store p for each t in t_vals
+    for t in t_vals:
+        pt = linalg.expm(q * t) * init_ratio[:, None]
+        pllt = linalg.expm(ql * t) * init_ratio[:, None]
+        puut = linalg.expm(qu * t) * init_ratio[:, None]
+        curve_dat.append([pt, pllt, puut])
+    # N.B. the phylo time scale is different to the sim time scale, but we
+    # replace the phylo time scale with the sim time scale when plotting.
+    # make pseudo time scale for phylo, so it can be plotted with sim data
+    plot_dat = None
+    if dtype == "phylo":
+        plot_dat = pd.DataFrame(plot_data_from_probcurves(
+            curve_dat, np.arange(SIM_XLIM), t_vals))
+    elif dtype == "sim":  # sim time scale the same for plot and calc
+        plot_dat = pd.DataFrame(plot_data_from_probcurves(
+            curve_dat, t_vals, t_vals))
+
+    # sum predicted proportions from different initial shapes
+    plot_dat = plot_dat.groupby(["t", "shape"]).agg(
+        P=("P", "sum"), lb=("lb", "sum"), ub=("ub", "sum")).reset_index()
+    if dtype == "phylo":
+        # add actual phylo time scale to phylo plot data for reference
+        plot_dat["t_actual"] = [i for i in t_vals for _ in range(4)]
+
+    return plot_dat
+
+
 def plot_sim_and_phylogeny_curves_new():
     """Plot the proportion of each shape category at each step of the
     walk from the simulation data against the predicted proportions from the
@@ -636,55 +680,10 @@ def plot_sim_and_phylogeny_curves_new():
         tseries[tseries["shape"] == "c"]["prop"].values[0]
     ])
 
-    def get_phylo_plot(phylo_summary, init_ratio):
-        # produce phylo-curves
-        # no. time points must match no. steps in sim data,
-        # phylo time scale is different
-        pt_vals = np.linspace(0, PHYLO_XLIM, SIM_XLIM)
-        phylo_curves = []
-        q = np.array(phylo_summary["mean_rate"].values).reshape(4, 4)
-        ql = np.array(phylo_summary["lb"].values).reshape(4, 4)
-        qu = np.array(phylo_summary["ub"].values).reshape(4, 4)
-        # to get estimated proportion shape at each step multiply predicted
-        # transition probability by initial proportion of shapes
-        for t in pt_vals:
-            pt = linalg.expm(q * t) * init_ratio[:, None]
-            pllt = linalg.expm(ql * t) * init_ratio[:, None]
-            puut = linalg.expm(qu * t) * init_ratio[:, None]
-            phylo_curves.append([pt, pllt, puut])
-        # N.B. the phylo time scale is different to the sim time scale, but we
-        # replace the phylo time scale with the sim time scale when plotting.
-        # make pseudo time scale for phylo, so it can be plotted with sim data
-        phylo_plot = pd.DataFrame(plot_data_from_probcurves(
-            phylo_curves, np.arange(SIM_XLIM), pt_vals))
-        # sum predicted proportions from different initial shapes
-        phylo_plot = phylo_plot.groupby(["t", "shape"]).agg(
-            P=("P", "sum"), lb=("lb", "sum"), ub=("ub", "sum")).reset_index()
-        # add actual phylo time scale to phylo plot data for reference
-        phylo_plot["t_actual"] = [i for i in pt_vals for _ in range(4)]
-        return phylo_plot
-
-    phylo_plot_z = get_phylo_plot(phylo_summary_zun, init_ratio)
-    phylo_plot_j = get_phylo_plot(phylo_summary_jan, init_ratio)
-
-    # produce sim-curves
-    st_vals = np.linspace(0, SIM_XLIM, SIM_XLIM+1)
-    sim_curves = []
-    q = np.array(sim_summary["mean_rate"].values).reshape(4, 4)
-    ql = np.array(sim_summary["lb"].values).reshape(4, 4)
-    qu = np.array(sim_summary["ub"].values).reshape(4, 4)
-    # multiply predicted transition probability by initial proportion of shapes
-    # to get the predicted proportion of each shape at each step
-    for t in st_vals:
-        pt = linalg.expm(q * t) * init_ratio[:, None]
-        pllt = linalg.expm(ql * t) * init_ratio[:, None]
-        puut = linalg.expm(qu * t) * init_ratio[:, None]
-        sim_curves.append([pt, pllt, puut])
-    sim_plot = pd.DataFrame(
-        plot_data_from_probcurves(sim_curves, st_vals, st_vals))
-    # sum predicted proportions from different initial shapes
-    sim_plot = sim_plot.groupby(["t", "shape"]).agg(
-        P=("P", "sum"), lb=("lb", "sum"), ub=("ub", "sum")).reset_index()
+    # get predicted proportions from phylo and sim rate matrices
+    phylo_plot_z = get_plot_vals(phylo_summary_zun, init_ratio, "phylo")
+    phylo_plot_j = get_plot_vals(phylo_summary_jan, init_ratio, "phylo")
+    sim_plot = get_plot_vals(sim_summary, init_ratio, "sim")
 
     # Create subplots
     # plt.rcParams["font.family"] = "CMU Serif"
