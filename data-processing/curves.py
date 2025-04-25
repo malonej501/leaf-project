@@ -28,8 +28,8 @@ MC_ERR_SAMP = 500  # no. monte carlo samples for mcmc error propagation
 T_STAT = 0  # 0=mean prop, 1=prop - stat used for the timeseries plot
 SIMRATES_METHOD = 0  # 0=mcmc, 1=mle
 EQ_INIT = False  # plot timeseries from equal numbers of each initial shape
-LB = 0  # 5 #5 # credible interval for phylo and sim mcmc rates
-UB = 0  # 95 #95
+LB = 2.5  # 5 #5 # credible interval for phylo and sim mcmc rates
+UB = 97.5  # 95 #95
 PHYLO_XLIM = 160
 SIM_XLIM = 320  # 60
 SIM_XON = 0  # begin x axis at this value
@@ -685,13 +685,18 @@ def get_plot_vals_alt(rates, init_ratio, dtype):
                 plot_data_from_probcurves(curve_dat, t_vals, t_vals))
         # sum predicted proportions from different initial shapes
         plot_dat = plot_dat.groupby(["t", "shape"]).agg(
-            P=("P", "sum"), lb=("lb", "sum"), ub=("ub", "sum")).reset_index()
+            P=("P", "sum")).reset_index()
         if dtype == "phylo":
             # add actual phylo time scale to phylo plot data for reference
             plot_dat["t_actual"] = [i for i in t_vals for _ in range(4)]
+        plot_dat.insert(0, "mc_err_samp", i)
         curves.append(plot_dat)
-
-    return curves
+    curves = pd.concat(curves, ignore_index=True)  # combine mc samples
+    curves_sum = curves.groupby(["t", "shape"]).agg(  # median and CI
+        P=("P", "median"), lb=("P", lambda x: np.percentile(x, LB)),
+        ub=("P", lambda x: np.percentile(x, UB))).reset_index()
+    print(curves_sum)
+    return curves, curves_sum
 
 
 def plot_sim_and_phylogeny_curves_new():
@@ -699,6 +704,9 @@ def plot_sim_and_phylogeny_curves_new():
     walk from the simulation data against the predicted proportions from the
     simulation and phylogeny CTMCs. The scale for the phylogeny is different
     to the simulation scale."""
+
+    al = 0.8  # alpha for lines
+    af = 0.25  # alpha for fill
 
     #### Get phylo-rates ####
     phylo_summary_zun, raw_zun = get_phylo_rates(phylo=PHYLORATES)
@@ -718,14 +726,13 @@ def plot_sim_and_phylogeny_curves_new():
 
     # get predicted proportions from phylo and sim rate matrices
     # sim_plot = get_plot_vals(sim_summary, init_ratio, "sim")
-    sim_plot = get_plot_vals_alt(raw_sim, init_ratio, "sim")
+    sim_plot, sim_sum = get_plot_vals_alt(raw_sim, init_ratio, "sim")
     if SHOW_PHYLO:
-        phylo_plot_z = get_plot_vals_alt(raw_zun, init_ratio, "phylo")
-        phylo_plot_j = get_plot_vals_alt(raw_jan, init_ratio, "phylo")
+        phylo_plot_z, ppz_sum = get_plot_vals_alt(raw_zun, init_ratio, "phylo")
+        phylo_plot_j, ppj_sum = get_plot_vals_alt(raw_jan, init_ratio, "phylo")
 
     # Create subplots
     # plt.rcParams["font.family"] = "CMU Serif"
-    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
     fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(
         9, 6), sharex=not SHOW_PHYLO, sharey=False)
 
@@ -740,28 +747,30 @@ def plot_sim_and_phylogeny_curves_new():
     for i, ax in enumerate(axs.flat):
         tseries_sub = tseries[tseries["shape"] == ORDER[i]]
         l_data, = ax.plot(tseries_sub["step"],  # plot timeseries
-                          tseries_sub["prop"], c="C0")
+                          tseries_sub["prop"], c="C0", zorder=0)
         if {"lb", "ub"}.issubset(tseries_sub.columns):  # show error
             ax.fill_between(tseries_sub["step"], tseries_sub["lb"],
-                            tseries_sub["ub"], alpha=0.2, color="C0")
-        for sip in sim_plot:  # plot sim ctmc
-            sip_sub = sip[sip["shape"] == ORDER[i]]
-            l_fit, = ax.plot(sip_sub["t"], sip_sub["P"], c="C1", alpha=0.01)
+                            tseries_sub["ub"], alpha=af, color="C0", ec=None)
+        sim_sub = sim_sum[sim_sum["shape"] == ORDER[i]]
+        l_fit, = ax.plot(sim_sub["t"], sim_sub["P"],
+                         c="C1", ls="--", alpha=0.5)
+        ax.fill_between(sim_sub["t"], sim_sub["lb"], sim_sub["ub"],
+                        alpha=af, color="C1", ec=None)
         if SHOW_PHYLO:
             secax = ax.secondary_xaxis('top', functions=(forward, inverse))
-            for ppz in phylo_plot_z:
-                ppz_sub = ppz[(ppz["shape"] == ORDER[i])]
-                l_phy_z, = ax.plot(
-                    ppz_sub["t"], ppz_sub["P"], c="C2", alpha=0.01)
-            for ppj in phylo_plot_j:
-                ppj_sub = ppj[(ppj["shape"] == ORDER[i])]
-                l_phy_j, = ax.plot(
-                    ppj_sub["t"], ppj_sub["P"], c="C3", alpha=0.01)
-            # ax.fill_between(phy_plot_sub_z["t"], phy_plot_sub_z["lb"],
-            #                 phy_plot_sub_z["ub"], alpha=0.3, color="C2")
+            ppz_sub = ppz_sum[ppz_sum["shape"] == ORDER[i]]
+            l_phy_z, = ax.plot(
+                ppz_sub["t"], ppz_sub["P"], c="C2", ls="--", alpha=al)
+            ax.fill_between(ppz_sub["t"], ppz_sub["lb"], ppz_sub["ub"],
+                            alpha=af, color="C2", ec=None)
+            ppj_sub = ppj_sum[ppj_sum["shape"] == ORDER[i]]
+            l_phy_j, = ax.plot(
+                ppj_sub["t"], ppj_sub["P"], c="C3", ls="--", alpha=al)
+            ax.fill_between(ppj_sub["t"], ppj_sub["lb"], ppj_sub["ub"],
+                            alpha=af, color="C3", ec=None)
             secax.set_xlabel("Branch length (Myr)")
             ax.set_xlabel("Simulation step")
-        ax.set_title(order_full[i])
+        ax.set_title(["Unlobed", "Lobed", "Dissected", "Compound"][i])
         ax.set_xlim(0, SIM_XLIM)
         ax.grid(alpha=0.3)
         # ax.set_ylim(0, 1)
