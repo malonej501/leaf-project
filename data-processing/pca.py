@@ -1,8 +1,8 @@
+import os
 import pandas as pd
 import numpy as np
-from pdict import pdict
-from dataprocessing import first_cats
-from scipy import stats, linalg, spatial
+from pdict import pdict, leafids
+from scipy import stats, spatial
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
@@ -21,45 +21,108 @@ SHOW_HULLS = False  # whether to show convex hulls in PCA plot
 ORDER = ["u", "l", "d", "c"]
 SUB_SAMPLE = False  # whether to sub-sample the data
 SAMP_SIZE = 1000  # no. leaves to sample at random from each shape
-P_TYPE = 3  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn
+P_TYPE = 0  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
-# def get_pdata():
-#     dfs = []
+WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
+DATA = 1  # 0-len 80, 1-len 320
 
-#     for leafdirectory in os.listdir(wd):
-#         print(f"Current = {leafdirectory}")
-#         leafdirectory_path = os.path.join(wd, leafdirectory)
-#         for walkdirectory in os.listdir(leafdirectory_path):
-#             walkdirectory_path = os.path.join(
-#                 leafdirectory_path, walkdirectory)
-#             for file in os.listdir(walkdirectory_path):
-#                 if file.endswith(".csv") and "report" in file and "shape" not in file:
-#                     df = pd.read_csv(
-#                         os.path.join(walkdirectory_path, file), header=None
-#                     )
-#                     df.insert(0, "leafid", leafdirectory)
-#                     dfs.append(df)
 
-#     # result = pd.concat(dfs, ignore_index=True)
-#     # result.to_csv("/home/m/malone/leaf_storage/random_walks/result.csv", index=False)
+def get_p_and_s_data():
+    """Get parameter and shape data of all leaves in a directory."""
+    pdfs, sdfs = [], []
 
-#     return dfs
+    for l_dir in os.listdir(WD):
+        l_dir_path = os.path.join(WD, l_dir)
+        if not os.path.isdir(l_dir_path):
+            continue
+        print(l_dir_path)
+        for w_dir in os.listdir(l_dir_path):
+            w_dir_path = os.path.join(l_dir_path, w_dir)
+            for file in os.listdir(w_dir_path):
+                if file.endswith(".csv") and \
+                        "report" in file and "shape" not in file:
+                    pdf = pd.read_csv(os.path.join(w_dir_path, file))
+                    # no header if original MUT2
+                    pdf.insert(0, "leafid", l_dir)
+                    pdfs.append(pdf)
+                elif file == "shape_report.csv":
+                    sdf = pd.read_csv(os.path.join(w_dir_path, file))
+                    sdf.insert(0, "leafid", l_dir)  # add leafid
+                    w_num = int(w_dir.replace("walk", ""))
+                    sdf.insert(1, "walkid", w_num)  # insert walkid to df
+                    steps = sdf["leaf"].apply(lambda s: int(s.split("_")[-2]))
+                    sdf.insert(2, "step", steps)  # insert step number to df
+                    sdfs.append(sdf)
+
+    pdata = pd.concat(pdfs, ignore_index=True)
+    pdata.to_csv(f"{WD}/params.csv", index=False)
+    sdata = pd.concat(sdfs, ignore_index=True)
+    sdata.to_csv(f"{WD}/shapes.csv", index=False)
+
+    return pdata, sdata
+
+
+def sort_walk_shape_data(pdata, sdata):
+    """Sort walk shape data to match parameter data according to leafid, 
+    walkid and step."""
+    idxs = ["leafid", "walkid", "step"]  # index columns for data sorting
+    sdata_sort = sdata.set_index(idxs).reindex(pdata.set_index(idxs).index)
+    sdata = sdata_sort.reset_index()
+    match = (pdata[idxs] == sdata[idxs]).all().all()  # check idx columns match
+    assert match, f"pdata and sdata {idxs} do not match"
+
+    return sdata
 
 
 def do_pca():
     """
-    Perform PCA on the walk parameter data and initial leaves parameter data. 
+    Perform PCA on the walk parameter data and initial leaves parameter data.
     Returns the PCA results for walks and inits, and explained variance ratio.
     """
+    from dataprocessing import first_cats
 
-    # need to update to 320
-    pdata = pd.read_csv("MUT2.2_trajectories_param.csv")
-    sdata = pd.read_csv("MUT2.2_trajectories_shape.csv")
-    pinit = pd.DataFrame(pdict.values()).transpose()  # format pdit params
+    if DATA == 0:
+        pdata = pd.read_csv("MUT2.2_trajectories_param.csv")
+        pdata = pdata[pdata.iloc[:, 3].str.contains(
+            "passed")].reset_index(drop=True)  # remove failed
+        pdata = pdata.rename(columns={"0": "walkid", "1": "step"})
+        sdata = pd.read_csv("MUT2.2_trajectories_shape.csv")
+        sdata = sort_walk_shape_data(pdata, sdata)
+        pdata = pdata.iloc[:, 5:-6]  # remove meta data and shape info
+
+    else:
+        if os.path.isfile(f"{WD}/params.csv") and \
+                os.path.isfile(f"{WD}/shapes.csv"):
+            pdata = pd.read_csv(f"{WD}/params.csv")
+            pdata = pdata[pdata["status"] ==
+                          "leaf_check_passed"].reset_index(drop=True)
+            pdata = pdata.rename(columns={"walk_id": "walkid"})
+            sdata = pd.read_csv(f"{WD}/shapes.csv")
+            sdata = sort_walk_shape_data(pdata, sdata)
+        else:
+            print("Parameter and shape data not found. Generating...")
+            pdata, sdata = get_p_and_s_data()
+            print("Parameter and shape data generated.")
+            pdata = pdata[pdata["status"] ==
+                          "leaf_check_passed"].reset_index(drop=True)
+            pdata = pdata.rename(columns={"walk_id": "walkid"})
+            sdata = sort_walk_shape_data(pdata, sdata)
+        # remove meta data and shape info
+        pdata = pdata.drop(["leafid", "walkid", "step", "attempt", "status",
+                            "target", "prop_weightdifference", "middle",
+                            "leafwidth", "prop_overlappingmargin",
+                            "prop_veinarea", "veinswidth",
+                            "prop_veinsoutsidelamina"], axis=1)
+
+    pinit = pd.DataFrame(pdict.values()).transpose()  # format pdict params
+    # sort first_cats to match pdict order, to ensure correct labelling
+    first_cats = first_cats.set_index("leafid").reindex(leafids).reset_index()
+    assert list(first_cats["leafid"]) == leafids, (
+        "first_cats and pdict leafid orders do not match"
+    )
+
     # pinit.to_csv("pinit.csv", index=False)
 
-    pdata = pdata[pdata.iloc[:, 3].str.contains("passed")]  # remove failed
-    pdata = pdata.iloc[:, 5:-6]  # remove meta data and shape info
     pdata.columns = range(pdata.shape[1])  # rename cols
 
     # combine init and random walk leaves into 1 df for pca, separate later
@@ -154,6 +217,7 @@ def paramspace():
                 ),
                 edgecolor="white",
                 linewidth=0.8,
+                alpha=1,
             )
 
         if SHOW_HULLS:  # plot convex hulls for walk data
@@ -186,3 +250,4 @@ def paramspace():
 
 if __name__ == "__main__":
     paramspace()
+    # get_p_and_s_data()
