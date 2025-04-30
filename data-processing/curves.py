@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import sympy as sp
 from matplotlib import pyplot as plt
-from scipy import linalg
+from scipy import linalg, integrate
 from scipy.stats import chisquare, chi2
 from PIL import Image
 import seaborn as sns
@@ -15,6 +15,7 @@ PLOT = 2  # type of plot to produce
 # 3-chi-squared goodness of fit for CTMC proportions to sim proportions
 PHYLORATES = "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
 PHYLORATES2 = "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
+# PHYLORATES_ML = "ML6_genus_mean_rates_all.csv"
 # SIMRATES = "MUT2_mcmc_05-02-25"  # best fit so far
 # SIMRATES = "test"
 # SIMRATES = "MUT2_320_mle_20-03-25" # best fit so far 24-04-25
@@ -24,20 +25,23 @@ SIMRATES = "MUT2_320_mcmc_2_24-04-25"
 SIMDATA = "MUT2_320_mle_23-04-25.csv"
 # SIMDATA = "pwalks_10_160_leaves_full_13-03-25_MUT2_CLEAN.csv"
 # SIMDATA = "MUT2_mle_11-02-25.csv"
-MC_ERR_SAMP = 500  # no. monte carlo samples for mcmc error propagation
+MC_ERR_SAMP = 50  # no. monte carlo samples for mcmc error propagation
 T_STAT = 0  # 0=mean prop, 1=prop - stat used for the timeseries plot
 SIMRATES_METHOD = 0  # 0=mcmc, 1=mle
 EQ_INIT = False  # plot timeseries from equal numbers of each initial shape
 LB = 2.5  # 5 #5 # credible interval for phylo and sim mcmc rates
 UB = 97.5  # 95 #95
-PHYLO_XLIM = 160
+PHYLO_XLIM = 200
 SIM_XLIM = 320  # 60
+AUTO_XLIM = False  # set xlim to where phylo and sim reach a fraction of pi
+XLIM_FRAC = 0.95  # prop at xlim = init_ratio + ((pi - init_ratio) * XLIM_FRAC)
+FIT_SIM_TO_PHY = True  # set sim xlim to where the proportions = phylo at phyloxlim
 SIM_XON = 0  # begin x axis at this value
 RESET_FIRST_CAT = False  # redefine first_cat to shape at step SIM_XON
 YSCALE = "linear"  # log or linear
 # show phylogeny CTMC fit ontop as well as sim data and CTMC fit in plot 2
 SHOW_PHYLO = True
-V = True  # verbose for debugging
+V = False  # verbose for debugging
 
 # sns.set_palette("colorblind")
 ORDER = ["u", "l", "d", "c"]
@@ -699,6 +703,35 @@ def get_plot_vals_alt(rates, init_ratio, dtype):
     return curves, curves_sum
 
 
+def stat_dist(*args):
+    """Approximate the stationary distribution of the transition rates from a 
+    rate summary table, by taking a large value of t for P=exp(q*t)."""
+    for rates in args:
+        q = np.array(rates["mean_rate"].values).reshape(4, 4)
+
+        rowsums = np.sum(q, axis=1)  # check q is valid
+        assert np.allclose(rowsums, 0), "q rowsums are not zero"
+
+        # numerical approximation with large t
+        pi = linalg.expm(q * 1e10)
+        assert np.allclose(pi, pi[0]), "stationary distribution not found"
+
+        pi = pi[0]  # take first row as stationary distribution
+        yield pi
+
+
+def calc_xlims(init_ratio, pi, pdata, i):
+    """Approximate xlims for phylogeny and simulation plot such that a fair 
+    comparison can be drawn."""
+
+    targets = init_ratio + ((pi - init_ratio) * XLIM_FRAC)
+
+    closest_idx = (pdata["P"] - targets[i]).abs().idxmin()
+    xlim = pdata["t"][closest_idx]
+
+    return xlim
+
+
 def plot_sim_and_phylogeny_curves_new():
     """Plot the proportion of each shape category at each step of the
     walk from the simulation data against the predicted proportions from the
@@ -716,13 +749,16 @@ def plot_sim_and_phylogeny_curves_new():
     #### Get sim timeseries data ####
     # tseries = get_timeseries_alt()
     tseries = get_timeseries()  # for error bar on timeseries
-    tseries = tseries.rename(columns={"mean_prop": "prop"})
+    tseries = tseries.rename(columns={"mean_prop": "prop"})  # line is mean
     init_ratio = np.array([  # get proportion of each shape at step=0 in data
         tseries[tseries["shape"] == "u"]["prop"].values[0],
         tseries[tseries["shape"] == "l"]["prop"].values[0],
         tseries[tseries["shape"] == "d"]["prop"].values[0],
         tseries[tseries["shape"] == "c"]["prop"].values[0]
     ])
+
+    piz, pij, pis = stat_dist(  # get approx stationary distribution
+        phylo_summary_zun, phylo_summary_jan, sim_summary)
 
     # get predicted proportions from phylo and sim rate matrices
     # sim_plot = get_plot_vals(sim_summary, init_ratio, "sim")
@@ -735,14 +771,16 @@ def plot_sim_and_phylogeny_curves_new():
     # plt.rcParams["font.family"] = "CMU Serif"
     fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(
         9, 6), sharex=not SHOW_PHYLO, sharey=False)
+    p_xlim_loc = PHYLO_XLIM
+    s_xlim_loc = SIM_XLIM
 
     def forward(x):  # map from simulation timescale to phylogeny timescale
         # x is the value on sim timescale, so multiply by ratio of phylo to
         # sim timescale
-        return x * (PHYLO_XLIM / SIM_XLIM)
+        return x * (p_xlim_loc / s_xlim_loc)
 
     def inverse(x):  # map from phylogeny time scale to simulation time scale
-        return x * (SIM_XLIM / PHYLO_XLIM)
+        return x * (s_xlim_loc / p_xlim_loc)
 
     for i, ax in enumerate(axs.flat):
         tseries_sub = tseries[tseries["shape"] == ORDER[i]]
@@ -752,27 +790,37 @@ def plot_sim_and_phylogeny_curves_new():
             ax.fill_between(tseries_sub["step"], tseries_sub["lb"],
                             tseries_sub["ub"], alpha=af, color="C0", ec=None)
         sim_sub = sim_sum[sim_sum["shape"] == ORDER[i]]
-        l_fit, = ax.plot(sim_sub["t"], sim_sub["P"],
+        l_fit, = ax.plot(sim_sub["t"], sim_sub["P"],  # plot sim ctmc
                          c="C1", ls="--", alpha=0.5)
         ax.fill_between(sim_sub["t"], sim_sub["lb"], sim_sub["ub"],
                         alpha=af, color="C1", ec=None)
         if SHOW_PHYLO:
             secax = ax.secondary_xaxis('top', functions=(forward, inverse))
             ppz_sub = ppz_sum[ppz_sum["shape"] == ORDER[i]]
-            l_phy_z, = ax.plot(
+            l_phy_z, = ax.plot(  # plot phylo zun ctmc
                 ppz_sub["t"], ppz_sub["P"], c="C2", ls="--", alpha=al)
             ax.fill_between(ppz_sub["t"], ppz_sub["lb"], ppz_sub["ub"],
                             alpha=af, color="C2", ec=None)
             ppj_sub = ppj_sum[ppj_sum["shape"] == ORDER[i]]
-            l_phy_j, = ax.plot(
+            l_phy_j, = ax.plot(  # plot phylo jan ctmc
                 ppj_sub["t"], ppj_sub["P"], c="C3", ls="--", alpha=al)
             ax.fill_between(ppj_sub["t"], ppj_sub["lb"], ppj_sub["ub"],
                             alpha=af, color="C3", ec=None)
             secax.set_xlabel("Branch length (Myr)")
             ax.set_xlabel("Simulation step")
+            # set xlim to where phylo and sim reach a fraction of stationary
+            zxlim = calc_xlims(init_ratio, piz, ppz_sub, i)
+            jxlim = calc_xlims(init_ratio, pij, ppj_sub, i)
+            p_xlim_loc = max(zxlim, jxlim) if AUTO_XLIM else PHYLO_XLIM
         ax.set_title(["Unlobed", "Lobed", "Dissected", "Compound"][i])
-        ax.set_xlim(0, SIM_XLIM)
+        s_xlim_loc = calc_xlims(init_ratio, pis, sim_sub,
+                                i) if AUTO_XLIM else SIM_XLIM
+        ax.set_xlim(0, s_xlim_loc)
+        # ax.set_xlim(0, SIM_XLIM)
         ax.grid(alpha=0.3)
+        # ax.axhline(y=pis[i], color="C1", ls="--", alpha=0.5)
+        # ax.axhline(y=piz[i], color="C2", ls="--", alpha=0.5)
+        # ax.axhline(y=pij[i], color="C3", ls="--", alpha=0.5)
         # ax.set_ylim(0, 1)
         if YSCALE == "log":
             ax.set_yscale("log")
@@ -903,7 +951,7 @@ def goodness_of_fit_trans():
     # steps_valid = walks[~walks["is_last"]].copy()
     # t_ht = steps_valid.groupby("t_window")["shape"].value_counts()
     # wind_states = t_ht.index.tolist()
-    sim_summary = get_sim_rates()
+    sim_summary, _ = get_sim_rates()
     print(sim_summary)
     # print(t_ht)
     # st_vals = np.linspace(0, SIM_XLIM-1, SIM_XLIM)
