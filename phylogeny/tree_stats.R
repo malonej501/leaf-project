@@ -50,8 +50,9 @@ import_labels <- function() {
 map_higher_order_labels <- function(labels) {
   # add higher order taxon classification to the tree labels using data from
   # Naturalis
-  tax_map <- read.csv("shape_data/Naturalis/Naturalis_unique_genera_11-02-25
-  .csv") # get taxon data for all unique genera in Naturalis
+  tax_map <- read.csv( # get taxon data for all unique genera in Naturalis
+    "shape_data/Naturalis/Naturalis_unique_genera_11-02-25.csv"
+  )
   tax_map <- tax_map[!duplicated(tax_map$genus), ] # remove duplicate genera
   labels <- left_join(labels, tax_map, by = "genus")
   return(labels)
@@ -69,6 +70,7 @@ get_treeness <- function(s) {
       s[s$dataset == d, "avg_leaf_depth"] <- average_leaf_depth(tree)
       s[s$dataset == d, "var_leaf_depth"] <- var_leaf_depth(tree)
       s[s$dataset == d, "pigot_rho"] <- pigot_rho(tree)
+      s[s$dataset == d, "max_depth"] <- max(node.depth.edgelength(tree))
     } else if (class(tree) == "multiPhylo") {
       tness_subtree_list <- c()
       mbl_list <- c()
@@ -76,6 +78,7 @@ get_treeness <- function(s) {
       ald_list <- c()
       vld_list <- c()
       pr_list <- c()
+      md_list <- c()
       for (i in seq_along(tree)) { # Append subtree treeness
         tness_subtree_list <- c(tness_subtree_list, treeness(tree[[i]]))
         mbl_list <- c(mbl_list, mean_branch_length(tree[[i]]))
@@ -83,6 +86,7 @@ get_treeness <- function(s) {
         ald_list <- c(ald_list, average_leaf_depth(tree[[i]]))
         vld_list <- c(vld_list, var_leaf_depth(tree[[i]]))
         pr_list <- c(pr_list, pigot_rho(tree[[i]]))
+        md_list <- c(md_list, max(node.depth.edgelength(tree[[i]])))
       } # Calculate the mean treeness, ignoring NAs
       s[s$dataset == d, "treeness"] <- mean(tness_subtree_list)
       s[s$dataset == d, "mean_branch_length"] <- mean(mbl_list)
@@ -90,6 +94,7 @@ get_treeness <- function(s) {
       s[s$dataset == d, "avg_leaf_depth"] <- mean(ald_list)
       s[s$dataset == d, "var_leaf_depth"] <- mean(vld_list)
       s[s$dataset == d, "pigot_rho"] <- mean(pr_list)
+      s[s$dataset == d, "max_depth"] <- mean(md_list)
     }
   }
   return(s)
@@ -227,7 +232,5 @@ summary <- import_trees()
 summary <- get_treeness(summary)
 summary <- get_shape_counts(summary)
 
-
 write.csv(summary, "tree_statistics.csv", row.names = FALSE)
 plot_ggtrees(summary)
-# ggsave("my_ggtree_plot.svg", plot = fig, width = 8, height = 6)
