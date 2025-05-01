@@ -33,9 +33,8 @@ LB = 2.5  # 5 #5 # credible interval for phylo and sim mcmc rates
 UB = 97.5  # 95 #95
 PHYLO_XLIM = 200
 SIM_XLIM = 320  # 60
-AUTO_XLIM = False  # set xlim to where phylo and sim reach a fraction of pi
-XLIM_FRAC = 0.95  # prop at xlim = init_ratio + ((pi - init_ratio) * XLIM_FRAC)
-FIT_SIM_TO_PHY = True  # set sim xlim to where the proportions = phylo at phyloxlim
+AUTO_SIM_XLIM = True  # set sim xlim to where prop ~= phy prop at phy xlim
+VARIABLE_SIM_XLIM = False  # False = fix sim xlim to mean auto_sim_xlim
 SIM_XON = 0  # begin x axis at this value
 RESET_FIRST_CAT = False  # redefine first_cat to shape at step SIM_XON
 YSCALE = "linear"  # log or linear
@@ -657,7 +656,7 @@ def get_plot_vals_alt(rates, init_ratio, dtype):
     # different
     t_vals = None
     if dtype == "phylo":
-        t_vals = np.linspace(0, PHYLO_XLIM, SIM_XLIM)
+        t_vals = np.linspace(0, PHYLO_XLIM, PHYLO_XLIM+1)
     elif dtype == "sim":
         t_vals = np.linspace(0, SIM_XLIM, SIM_XLIM+1)
 
@@ -681,18 +680,21 @@ def get_plot_vals_alt(rates, init_ratio, dtype):
             pllt = np.zeros((4, 4))
             puut = np.zeros((4, 4))
             curve_dat.append([pt, pllt, puut])
-        if dtype == "phylo":  # pseudo time scale for phylo
-            plot_dat = pd.DataFrame(plot_data_from_probcurves(
-                curve_dat, np.arange(SIM_XLIM), t_vals))
-        elif dtype == "sim":  # sim time scale the same for plot and calc
-            plot_dat = pd.DataFrame(
-                plot_data_from_probcurves(curve_dat, t_vals, t_vals))
+        plot_dat = pd.DataFrame(
+            plot_data_from_probcurves(curve_dat, t_vals, t_vals))
+        # if dtype == "phylo":  # pseudo time scale for phylo
+        #     plot_dat = pd.DataFrame(plot_data_from_probcurves(
+        #         curve_dat, t_vals, t_vals))
+        # elif dtype == "sim":  # sim time scale the same for plot and calc
+        #     plot_dat = pd.DataFrame(
+        #         plot_data_from_probcurves(curve_dat, t_vals, t_vals))
         # sum predicted proportions from different initial shapes
         plot_dat = plot_dat.groupby(["t", "shape"]).agg(
             P=("P", "sum")).reset_index()
-        if dtype == "phylo":
-            # add actual phylo time scale to phylo plot data for reference
-            plot_dat["t_actual"] = [i for i in t_vals for _ in range(4)]
+        # if dtype == "phylo":
+        #     # add actual phylo time scale to phylo plot data for reference
+        #     plot_dat["t_actual"] = [i for i in t_vals for _ in range(4)]
+        #     exit()
         plot_dat.insert(0, "mc_err_samp", i)
         curves.append(plot_dat)
     curves = pd.concat(curves, ignore_index=True)  # combine mc samples
@@ -704,7 +706,7 @@ def get_plot_vals_alt(rates, init_ratio, dtype):
 
 
 def stat_dist(*args):
-    """Approximate the stationary distribution of the transition rates from a 
+    """Approximate the stationary distribution of the transition rates from a
     rate summary table, by taking a large value of t for P=exp(q*t)."""
     for rates in args:
         q = np.array(rates["mean_rate"].values).reshape(4, 4)
@@ -720,16 +722,57 @@ def stat_dist(*args):
         yield pi
 
 
-def calc_xlims(init_ratio, pi, pdata, i):
-    """Approximate xlims for phylogeny and simulation plot such that a fair 
-    comparison can be drawn."""
+def calc_xlims(init_ratio, ppz_sum, ppj_sum, sim_sum, piz, pij, pis):
+    """Approximate xlims for simulation plot such that a fair comparison can
+    be drawn with phylogeny."""
 
-    targets = init_ratio + ((pi - init_ratio) * XLIM_FRAC)
+    # get the difference between p at stationary distribution and phylo xlim
+    # for each phylogeny and shape category as a fraction of the difference
+    # between p at stationary distribution and initial distribution
+    difs = []
+    for i, dat in enumerate([ppz_sum, ppj_sum]):
+        pi = [piz, pij, pis][i]  # stationary distribution for dataset
+        for s, shape in enumerate(ORDER):
+            init_s = init_ratio[s]  # prop of shape at t=0
+            dat_s = dat[dat["shape"] == shape]
+            pi_s = pi[s]  # stationary dist for shape
+            p_pxl = dat_s[dat_s["t"] ==
+                          PHYLO_XLIM]["P"].values[0]  # p phylo_xlim
+            dif_pi_pxl = pi_s - p_pxl  # p static - p phylo_xlim
+            dif_pi_init = pi_s - init_s  # p stat - p init
+            dif_ratio = dif_pi_pxl / dif_pi_init  # fraction of p_stat - p_init
+            difs.append({"dataset": ["zun", "jan"][i], "shape": shape,
+                         "pi": pi_s, "init_ratio": init_s,
+                        "p_phylo_xlim": dat_s["P"].iloc[-1],
+                         "dif_ratio": dif_ratio})
 
-    closest_idx = (pdata["P"] - targets[i]).abs().idxmin()
-    xlim = pdata["t"][closest_idx]
+    difs = pd.DataFrame(difs)  # average the dif ratios for all phylos
+    mean_phylo_dif_ratios = difs.groupby("shape")["dif_ratio"].mean()
 
-    return xlim
+    # find the closest p in sim timeseries to where the difference between
+    # this value and the stationary distribution is equal to the difference
+    # between the phylo xlim and the stationary distribution as a fraction of
+    # the difference between the phylo xlim and the initial distribution
+    # for each shape category
+    xlims = []
+    for s, shape in enumerate(ORDER):  # calc expected p_sim_xlim
+        dat_s = sim_sum[sim_sum["shape"] == shape].reset_index(drop=True)
+        mpdr = mean_phylo_dif_ratios[s]  # mean within shape
+        init_s = init_ratio[s]  # init dist for sim
+        pi_s = pis[s]  # stat sim dist
+        dif_pi_init = pi_s - init_s  # diff between init and stationary dist
+        dif_pi_pxl = dif_pi_init * mpdr  # diff at pxl scaled for sim
+        target = pi_s - dif_pi_pxl
+        closest_idx = (dat_s["P"] - target).abs().idxmin()
+        xlim = dat_s["t"].iloc[closest_idx]
+
+        xlims.append({"shape": shape, "mean_phylo_dif_ratio": mpdr,
+                      "init_ratio": init_s, "pi": pi_s,
+                      "dif_pi_init": dif_pi_init,  "dif_pi_pxl": dif_pi_pxl,
+                      "target": target, "closest_idx": closest_idx,
+                      "xlim": xlim})
+    xlims = pd.DataFrame(xlims)
+    return xlims
 
 
 def plot_sim_and_phylogeny_curves_new():
@@ -766,23 +809,30 @@ def plot_sim_and_phylogeny_curves_new():
     if SHOW_PHYLO:
         phylo_plot_z, ppz_sum = get_plot_vals_alt(raw_zun, init_ratio, "phylo")
         phylo_plot_j, ppj_sum = get_plot_vals_alt(raw_jan, init_ratio, "phylo")
+        sim_xlims = calc_xlims(init_ratio, ppz_sum, ppj_sum,
+                               sim_sum, piz, pij, pis)
 
     # Create subplots
     # plt.rcParams["font.family"] = "CMU Serif"
     fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(
         9, 6), sharex=not SHOW_PHYLO, sharey=False)
-    p_xlim_loc = PHYLO_XLIM
+    p_xlim_loc = PHYLO_XLIM  # default xlims
     s_xlim_loc = SIM_XLIM
 
-    def forward(x):  # map from simulation timescale to phylogeny timescale
-        # x is the value on sim timescale, so multiply by ratio of phylo to
-        # sim timescale
-        return x * (p_xlim_loc / s_xlim_loc)
-
-    def inverse(x):  # map from phylogeny time scale to simulation time scale
-        return x * (s_xlim_loc / p_xlim_loc)
-
     for i, ax in enumerate(axs.flat):
+        if SHOW_PHYLO and AUTO_SIM_XLIM:
+            s_xlim_loc = sim_xlims["xlim"][i] if VARIABLE_SIM_XLIM \
+                else sim_xlims["xlim"].mean()
+            print(f"s_xlim_loc: {s_xlim_loc}")
+
+        def fwd(x, s=s_xlim_loc):  # map from sim to phylo timescale
+            # x is the value on sim timescale, so multiply by ratio of phylo to
+            # sim timescale
+            return x * (p_xlim_loc / s)
+
+        def inv(x, s=s_xlim_loc):  # map from phylo to sim time scale
+            return x * (s / p_xlim_loc)
+
         tseries_sub = tseries[tseries["shape"] == ORDER[i]]
         l_data, = ax.plot(tseries_sub["step"],  # plot timeseries
                           tseries_sub["prop"], c="C0", zorder=0)
@@ -794,33 +844,29 @@ def plot_sim_and_phylogeny_curves_new():
                          c="C1", ls="--", alpha=0.5)
         ax.fill_between(sim_sub["t"], sim_sub["lb"], sim_sub["ub"],
                         alpha=af, color="C1", ec=None)
+        ax.set_xlim(0, s_xlim_loc)
         if SHOW_PHYLO:
-            secax = ax.secondary_xaxis('top', functions=(forward, inverse))
+            secax = ax.secondary_xaxis('top', functions=(fwd, inv))
             ppz_sub = ppz_sum[ppz_sum["shape"] == ORDER[i]]
             l_phy_z, = ax.plot(  # plot phylo zun ctmc
-                ppz_sub["t"], ppz_sub["P"], c="C2", ls="--", alpha=al)
-            ax.fill_between(ppz_sub["t"], ppz_sub["lb"], ppz_sub["ub"],
+                inv(ppz_sub["t"]), ppz_sub["P"], c="C2", ls="--", alpha=al)
+            ax.fill_between(inv(ppz_sub["t"]), ppz_sub["lb"], ppz_sub["ub"],
                             alpha=af, color="C2", ec=None)
             ppj_sub = ppj_sum[ppj_sum["shape"] == ORDER[i]]
             l_phy_j, = ax.plot(  # plot phylo jan ctmc
-                ppj_sub["t"], ppj_sub["P"], c="C3", ls="--", alpha=al)
-            ax.fill_between(ppj_sub["t"], ppj_sub["lb"], ppj_sub["ub"],
+                inv(ppj_sub["t"]), ppj_sub["P"], c="C3", ls="--", alpha=al)
+            ax.fill_between(inv(ppj_sub["t"]), ppj_sub["lb"], ppj_sub["ub"],
                             alpha=af, color="C3", ec=None)
             secax.set_xlabel("Branch length (Myr)")
             ax.set_xlabel("Simulation step")
-            # set xlim to where phylo and sim reach a fraction of stationary
-            zxlim = calc_xlims(init_ratio, piz, ppz_sub, i)
-            jxlim = calc_xlims(init_ratio, pij, ppj_sub, i)
-            p_xlim_loc = max(zxlim, jxlim) if AUTO_XLIM else PHYLO_XLIM
         ax.set_title(["Unlobed", "Lobed", "Dissected", "Compound"][i])
-        s_xlim_loc = calc_xlims(init_ratio, pis, sim_sub,
-                                i) if AUTO_XLIM else SIM_XLIM
-        ax.set_xlim(0, s_xlim_loc)
+
+        print(f"p_xlim_loc: {p_xlim_loc}")
         # ax.set_xlim(0, SIM_XLIM)
         ax.grid(alpha=0.3)
-        # ax.axhline(y=pis[i], color="C1", ls="--", alpha=0.5)
-        # ax.axhline(y=piz[i], color="C2", ls="--", alpha=0.5)
-        # ax.axhline(y=pij[i], color="C3", ls="--", alpha=0.5)
+        ax.axhline(y=pis[i], color="C1", ls="--", alpha=0.5)
+        ax.axhline(y=piz[i], color="C2", ls="--", alpha=0.5)
+        ax.axhline(y=pij[i], color="C3", ls="--", alpha=0.5)
         # ax.set_ylim(0, 1)
         if YSCALE == "log":
             ax.set_yscale("log")
