@@ -7,6 +7,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import seaborn as sns
+from PIL import Image
 
 
 LEAFIDS = ["p6af", "p6i", "p7a", "p7g", "p8ae", "p8i", "p9b", "p10c7", "p12b",
@@ -21,8 +22,9 @@ SHOW_HULLS = False  # whether to show convex hulls in PCA plot
 ORDER = ["u", "l", "d", "c"]
 SUB_SAMPLE = False  # whether to sub-sample the data
 SAMP_SIZE = 1000  # no. leaves to sample at random from each shape
-P_TYPE = 0  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn
+P_TYPE = 4  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
+N_BINS = 30  # number of bins for hist2d
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
 DATA = 1  # 0-len 80, 1-len 320
 
@@ -170,17 +172,40 @@ def paramspace():
 
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
 
-    fig, axs = plt.subplots(2, 2, figsize=(6, 6), sharex=True, sharey=True)
     if P_TYPE == 2:  # initialise grid for matplotlib kdeplot
         nbins = 100
-        x = pdf_walk["pc1"]
-        y = pdf_walk["pc2"]
-        k = stats.gaussian_kde([x, y])
-        xi, yi = np.mgrid[x.min():x.max():nbins*1j,
-                          y.min():y.max():nbins*1j]
-        zi = k(np.vstack([xi.flatten(), yi.flatten()]))
-        vmin, vmax = zi.min(), zi.max()  # global density range
+        density = []
+        for s in pdf_walk["shape"].unique():
+            sub = pdf_walk[pdf_walk["shape"] == s]
+            x = sub["pc1"]
+            y = sub["pc2"]
+            k = stats.gaussian_kde([x, y])
+            xi, yi = np.mgrid[x.min():x.max():nbins*1j,
+                              y.min():y.max():nbins*1j]
+            zi = k(np.vstack([xi.flatten(), yi.flatten()]))
+            density.append(zi)
+            print(f"{s} density: {zi.min()} - {zi.max()}")
+        global_density = np.concatenate(density)
+        vmin = global_density.min()
+        vmax = global_density.max()
+        print(f"vmin: {vmin}, vmax: {vmax}")
 
+    if P_TYPE == 4:
+        all_counts = []
+        fig_tmp, ax_tmp = plt.subplots()
+        for s in pdf_walk['shape'].unique():
+            subset = pdf_walk[pdf_walk['shape'] == s]
+            hb = ax_tmp.hexbin(x=subset['pc1'], y=subset['pc2'], gridsize=50)
+            all_counts.append(hb.get_array())
+        plt.close(fig_tmp)  # Close the temporary figure
+
+        global_counts = np.concatenate(all_counts)
+        vmin = global_counts.min()
+        vmax = global_counts.max()
+        print(f"vmin: {vmin}, vmax: {vmax}")
+
+    fig, axs = plt.subplots(2, 2, figsize=(6, 5), sharex=True, sharey=True,
+                            layout="constrained")
     for i, ax in enumerate(axs.flat):
         shape = ORDER[i]
         pld = pdf_walk[  # get walk data
@@ -188,20 +213,29 @@ def paramspace():
         ].reset_index(drop=True)
 
         if P_TYPE == 0:  # plot walks
-            ax.scatter(x=pld["pc1"], y=pld["pc2"], s=10, alpha=ALPHA, ec=None)
+            p = ax.scatter(x=pld["pc1"], y=pld["pc2"],
+                           s=10, alpha=ALPHA, ec=None)
         elif P_TYPE == 1:
-            ax.hist2d(x=pld["pc1"], y=pld["pc2"], bins=50, cmap="Blues")
+            p = ax.hist2d(x=pld["pc1"], y=pld["pc2"],
+                          bins=N_BINS, cmap="viridis", cmin=1)
         elif P_TYPE == 2:
             x = pld["pc1"]
             y = pld["pc2"]
+            xi, yi = np.mgrid[x.min():x.max():nbins*1j,
+                              y.min():y.max():nbins*1j]
             k = stats.gaussian_kde([x, y])
             zi = k(np.vstack([xi.flatten(), yi.flatten()]))
-            ax.contour(xi, yi, zi.reshape(xi.shape), alpha=0.5, vmin=vmin,
-                       vmax=vmax)
+            zi[np.isclose(zi, 0, atol=1e-10)] = 0
+            p = ax.contourf(xi, yi, zi.reshape(xi.shape), alpha=0.5, vmin=vmin,
+                            vmax=vmax, antialiased=True)
         elif P_TYPE == 3:
             # https://seaborn.pydata.org/generated/seaborn.kdeplot.html
-            sns.kdeplot(x=pld["pc1"], y=pld["pc2"], ax=ax, levels=5,
-                        fill=True)
+            p = sns.kdeplot(x=pld["pc1"], y=pld["pc2"], ax=ax, levels=5,
+                            fill=True)
+            ax.set(xlabel=None, ylabel=None)
+        elif P_TYPE == 4:  # hexbin
+            p = ax.hexbin(x=pld["pc1"], y=pld["pc2"], gridsize=N_BINS, cmap="viridis",
+                          vmin=vmin, vmax=vmax, mincnt=1, lw=0.2)
             ax.set(xlabel=None, ylabel=None)
 
         ax.set_title(fr"{order_full[i]}, $n={len(pld)}$")
@@ -241,10 +275,12 @@ def paramspace():
                 )
             ax.set_title(f"{order_full[i]} h-vol:{round(hull.volume, 2)}")
 
-        fig.supxlabel(fr"PC1 (${(evr[0] * 100):.2f}\%$)")
-        fig.supylabel(fr"PC2 (${(evr[1] * 100):.2f}\%$)")
+    if P_TYPE == 4:
+        fig.colorbar(p, ax=axs, shrink=0.6, label="Frequency")
+    fig.supylabel(fr"PC2 (${(evr[1] * 100):.2f}\%$)")
 
-    plt.tight_layout()
+    # plt.tight_layout()
+    plt.savefig(f"pca_param_ptype{P_TYPE}.pdf", dpi=1200)
     plt.show()
 
 
