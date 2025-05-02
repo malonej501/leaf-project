@@ -1,5 +1,6 @@
 import shutil
 import os
+import sys
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
@@ -12,15 +13,21 @@ from matplotlib import pyplot as plt
 # MLE_Q_DATA = "MUT2.2_MLE_rates.csv"  # CSV containing MLE rates
 # Path to the CSV file containing walk data
 WALK_DATA = "MUT2_320_mle_20-03-25.csv"
+# WALK_DATA = "pwalks_10_160_leaves_full_13-03-25_MUT2_CLEAN.csv"
 MLE_Q_DATA = "markov_fitter_reports/emcee/MUT2_320_mle_20-03-25/" \
     "ML_MUT2_320_mle_20-03-25.csv"
+# MLE_Q_DATA = "markov_fitter_reports/emcee/MUT2_pwalks_160_10_07-04-25/" \
+#     "ML_MUT2_pwalks_160_10_07-04-25.csv"
 EXPORT_Q = False   # export the Q matrix to file
 # Q_ID = "q_p-ht_02-04-25"  # ID for exporting the p/ht Q matrix
-Q_ID = "q_p-ht_contig_filt_u_03-04-25"
+# Q_ID = "q_p-ht_contig_filt_u_03-04-25"
+Q_ID = "test"
 # keep only walks with first_cat in contig_filt for holding time calculation
 CONTIG_FILT = ["u", "l", "d", "c"]
-PLOT = 3  # 0 - None, 1 - trans probs and hold times, 2 - q matrix comparison,
+RM_NO_TRANS = False  # remove walks that never transition
+PLOT = 99  # 0 - None, 1 - trans probs and hold times, 2 - q matrix comparison,
 # 3 - hold time distribution, 4 - hold time distribution by first_cat
+# 99 - plot all
 INCL_DIAG = False  # include diagonal transitions e.g. uu in prop calculation
 V = False  # verbose
 
@@ -34,6 +41,10 @@ def get_walks():
     # replace 0th step with first_cat
     walks.loc[walks["step"] == 0, "prevshape"] = walks["first_cat"]
     walks["transition"] = walks["shape"] + walks["prevshape"]
+    if RM_NO_TRANS:
+        # remove groups that never transition
+        walks = walks[walks.groupby(["leafid", "walkid"])[
+            "transition"].transform("nunique") > 1].reset_index(drop=True)
 
     return walks
 
@@ -236,6 +247,7 @@ def export_q(res):
         shutil.rmtree(q_dir)  # remove existing directory
     os.mkdir(q_dir)
     q_curves.to_csv(f"{q_dir}/ML_{Q_ID}.csv", index=False, header=True)
+    print(f"Q matrix exported to {q_dir}/ML_{Q_ID}.csv")
 
 ### TESTS ###
 
@@ -280,6 +292,11 @@ def test_trans_prob():
 
 
 if __name__ == "__main__":
+    args = sys.argv[1:]
+
+    if "-e" in args:
+        EXPORT_Q = True
+
     test_holding_time()
     test_trans_prob()
     q = calc_q()
@@ -293,4 +310,9 @@ if __name__ == "__main__":
     elif PLOT == 3:
         plot_contig_distr()
     elif PLOT == 4:
+        plot_contig_distr_by_first_cat()
+    elif PLOT == 99:
+        plot_prop_ht(q)
+        plot_q(q)
+        plot_contig_distr()
         plot_contig_distr_by_first_cat()
