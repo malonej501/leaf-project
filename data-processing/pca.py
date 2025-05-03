@@ -6,6 +6,7 @@ from scipy import stats, spatial
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import seaborn as sns
 from PIL import Image
 
@@ -24,7 +25,7 @@ SUB_SAMPLE = False  # whether to sub-sample the data
 SAMP_SIZE = 1000  # no. leaves to sample at random from each shape
 P_TYPE = 4  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
-N_BINS = 30  # number of bins for hist2d
+N_BINS = 30  # number of bins for hist2d/hexbin/kdeplot
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
 DATA = 1  # 0-len 80, 1-len 320
 
@@ -160,18 +161,9 @@ def do_pca():
     return pdf_walk, pdf_init, evr, hulls
 
 
-def paramspace():
-    """Visualise walk leaves in PCA of parameter space."""
-
-    pdf_walk, pdf_init, evr, hulls = do_pca()
-
-    if SUB_SAMPLE:  # sub-sample the data
-        pdf_walk = pdf_walk.groupby("shape").apply(
-            lambda x: x.sample(SAMP_SIZE, random_state=1)
-        ).reset_index(drop=True)
-
-    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
-
+def get_vmax_vmin(pdf_walk):
+    """Get global min and max for 2d histogram, hexbin and kde plots."""
+    glob = None
     if P_TYPE == 2:  # initialise grid for matplotlib kdeplot
         nbins = 100
         density = []
@@ -184,25 +176,51 @@ def paramspace():
                               y.min():y.max():nbins*1j]
             zi = k(np.vstack([xi.flatten(), yi.flatten()]))
             density.append(zi)
-            print(f"{s} density: {zi.min()} - {zi.max()}")
-        global_density = np.concatenate(density)
-        vmin = global_density.min()
-        vmax = global_density.max()
-        print(f"vmin: {vmin}, vmax: {vmax}")
-
-    if P_TYPE == 4:
+        glob = np.concatenate(density)
+    if P_TYPE == 4:  # calculate vim and vmax for hexbin
         all_counts = []
         fig_tmp, ax_tmp = plt.subplots()
         for s in pdf_walk['shape'].unique():
-            subset = pdf_walk[pdf_walk['shape'] == s]
-            hb = ax_tmp.hexbin(x=subset['pc1'], y=subset['pc2'], gridsize=50)
+            sub = pdf_walk[pdf_walk['shape'] == s]
+            hb = ax_tmp.hexbin(x=sub['pc1'], y=sub['pc2'], gridsize=N_BINS)
             all_counts.append(hb.get_array())
         plt.close(fig_tmp)  # Close the temporary figure
+        glob = np.concatenate(all_counts)
 
-        global_counts = np.concatenate(all_counts)
-        vmin = global_counts.min()
-        vmax = global_counts.max()
-        print(f"vmin: {vmin}, vmax: {vmax}")
+    vmin = glob.min()
+    vmax = glob.max()
+    print(f"vmin: {vmin}, vmax: {vmax}")
+
+    return vmin, vmax
+
+
+def load_leaf_imgs():
+    """Get leaf images for plotting"""
+    icon_filenames = [
+        "leaf_p7a_0_0.png",
+        "leaf_p8ae_0_0.png",
+        "leaf_pd1_0_0.png",
+        "leaf_pc1_alt_0_0.png",
+    ]
+    icons = [os.path.join("uldc_model_icons", path) for path in icon_filenames]
+    icon_imgs = [plt.imread(path) for path in icons]
+
+    return icon_imgs
+
+
+def paramspace():
+    """Visualise walk leaves in PCA of parameter space."""
+
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+
+    if SUB_SAMPLE:  # sub-sample the data
+        pdf_walk = pdf_walk.groupby("shape").apply(
+            lambda x: x.sample(SAMP_SIZE, random_state=1)
+        ).reset_index(drop=True)
+
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    vmin, vmax = get_vmax_vmin(pdf_walk)
+    icon_imgs = load_leaf_imgs()
 
     fig, axs = plt.subplots(2, 2, figsize=(6, 5), sharex=True, sharey=True,
                             layout="constrained")
@@ -221,8 +239,8 @@ def paramspace():
         elif P_TYPE == 2:
             x = pld["pc1"]
             y = pld["pc2"]
-            xi, yi = np.mgrid[x.min():x.max():nbins*1j,
-                              y.min():y.max():nbins*1j]
+            xi, yi = np.mgrid[x.min():x.max():N_BINS*1j,
+                              y.min():y.max():N_BINS*1j]
             k = stats.gaussian_kde([x, y])
             zi = k(np.vstack([xi.flatten(), yi.flatten()]))
             zi[np.isclose(zi, 0, atol=1e-10)] = 0
@@ -234,11 +252,23 @@ def paramspace():
                             fill=True)
             ax.set(xlabel=None, ylabel=None)
         elif P_TYPE == 4:  # hexbin
-            p = ax.hexbin(x=pld["pc1"], y=pld["pc2"], gridsize=N_BINS, cmap="viridis",
-                          vmin=vmin, vmax=vmax, mincnt=1, lw=0.2)
+            p = ax.hexbin(x=pld["pc1"], y=pld["pc2"], gridsize=N_BINS,
+                          cmap="viridis", vmin=vmin, vmax=vmax, mincnt=1,
+                          lw=0.2)
             ax.set(xlabel=None, ylabel=None)
 
-        ax.set_title(fr"{order_full[i]}, $n={len(pld)}$")
+        imbg_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
+        ab = AnnotationBbox(
+            imbg_box,
+            (1, 1),
+            xycoords="axes fraction",
+            box_alignment=(1, 1),  # upper right corner alignment
+            frameon=False,
+            pad=0.2,
+        )
+        ax.add_artist(ab)
+        ax.grid(alpha=0.3)
+        ax.set_title(fr"{order_full[i]}, $N={len(pld)}$")
         if SUB_SAMPLE:
             ax.set_title(f"{order_full[i]}")
 
@@ -276,11 +306,12 @@ def paramspace():
             ax.set_title(f"{order_full[i]} h-vol:{round(hull.volume, 2)}")
 
     if P_TYPE == 4:
-        fig.colorbar(p, ax=axs, shrink=0.6, label="Frequency")
+        fig.colorbar(p, ax=axs, shrink=0.5, label="Frequency")
+    fig.supxlabel(fr"PC1 (${(evr[0] * 100):.2f}\%$)")
     fig.supylabel(fr"PC2 (${(evr[1] * 100):.2f}\%$)")
 
     # plt.tight_layout()
-    plt.savefig(f"pca_param_ptype{P_TYPE}.pdf", dpi=1200)
+    plt.savefig(f"pca_param_ptype{P_TYPE}_{WD}.pdf", dpi=1200)
     plt.show()
 
 
