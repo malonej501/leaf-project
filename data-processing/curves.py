@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import sympy as sp
 from matplotlib import pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from scipy import linalg, integrate
 from scipy.stats import chisquare, chi2
 from PIL import Image
@@ -41,6 +42,7 @@ YSCALE = "linear"  # log or linear
 # show phylogeny CTMC fit ontop as well as sim data and CTMC fit in plot 2
 SHOW_PHYLO = True
 SHOW_STAT_DIST = False  # show stationary values for phylo and sim CTMC
+LEAF_ICONS = True  # show leaf icons in plot
 V = False  # verbose for debugging
 
 # sns.set_palette("colorblind")
@@ -696,7 +698,12 @@ def get_plot_vals_alt(rates, init_ratio, dtype, q_mthd):
         curves.append(plot_dat)
         if q_mthd == "mle":  # if using MLE q data, no mc error sampling
             break
-
+    if q_mthd == "mcmc":
+        print(f"Done {dtype} Monte Carlo error sampling")
+        assert len(curves) == MC_ERR_SAMP, "Incorrect no. MC samples"
+    elif q_mthd == "mle":
+        print(f"Collected {dtype} MLE rates")
+        assert len(curves) == 1, "Incorrect MLE rate length"
     curves = pd.concat(curves, ignore_index=True)  # combine mc samples
     curves = curves.groupby(["t", "shape"]).agg(  # median and CI
         P=("P", "median"), lb=("P", lambda x: np.percentile(x, LB)),
@@ -775,14 +782,29 @@ def calc_xlims(init_ratio, ppz, ppj, psim, piz, pij, pis):
     return xlims
 
 
+def load_leaf_imgs():
+    """Get leaf images for plotting"""
+    icon_filenames = [
+        "leaf_p7a_0_0.png",
+        "leaf_p8ae_0_0.png",
+        "leaf_pd1_0_0.png",
+        "leaf_pc1_alt_0_0.png",
+    ]
+    icons = [os.path.join("uldc_model_icons", path) for path in icon_filenames]
+    icon_imgs = [plt.imread(path) for path in icons]
+
+    return icon_imgs
+
+
 def plot_sim_and_phylogeny_curves_new():
     """Plot the proportion of each shape category at each step of the
     walk from the simulation data against the predicted proportions from the
     simulation and phylogeny CTMCs. The scale for the phylogeny is different
     to the simulation scale."""
 
-    al = 0.8  # alpha for lines
-    af = 0.25  # alpha for fill
+    al = 1  # alpha for lines
+    af = 0.2  # alpha for fill
+    icon_imgs = load_leaf_imgs()  # get leaf icons
 
     #### Get phylo-rates ####
     _, raw_zun = get_phylo_rates(PHYLORATES1, "mcmc")
@@ -848,7 +870,7 @@ def plot_sim_and_phylogeny_curves_new():
         sim_sub = psim[psim["shape"] == ORDER[i]]
         sim_sub_mle = psim_mle[psim_mle["shape"] == ORDER[i]]
         l_fit, = ax.plot(sim_sub_mle["t"], sim_sub_mle["P"],  # plot sim ctmc
-                         c="C1", ls="--", alpha=0.5)
+                         c="C1", ls="--", alpha=al)
         ax.fill_between(sim_sub["t"], sim_sub["lb"], sim_sub["ub"],
                         alpha=af, color="C1", ec=None)
         ax.set_xlim(0, s_xlim_loc)
@@ -868,20 +890,34 @@ def plot_sim_and_phylogeny_curves_new():
                                ls="--", alpha=al)
             ax.fill_between(inv(ppj_sub["t"]), ppj_sub["lb"], ppj_sub["ub"],
                             alpha=af, color="C3", ec=None)
-            secax.set_xlabel("Branch length (Myr)")
-            ax.set_xlabel("Simulation step")
+            if i in [0, 1]:  # avoid repeating labels
+                secax.set_xlabel("Branch length (Myr)")
+            else:
+                secax.set_xticklabels([])
+
         ax.set_title(["Unlobed", "Lobed", "Dissected", "Compound"][i])
 
         print(f"p_xlim_loc: {p_xlim_loc}")
         ax.grid(alpha=0.3)
+        if LEAF_ICONS:
+            imbg_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
+            aln = (0, 1)  # image corner alignment
+            ab = AnnotationBbox(
+                imbg_box,
+                aln,
+                xycoords="axes fraction",
+                box_alignment=aln,
+                frameon=False,
+                pad=0.2,
+            )
+            ax.add_artist(ab)
+
         if SHOW_STAT_DIST:
             ax.axhline(y=pis[i], color="C1", ls="--", alpha=0.5)
             ax.axhline(y=piz[i], color="C2", ls="--", alpha=0.5)
             ax.axhline(y=pij[i], color="C3", ls="--", alpha=0.5)
         if YSCALE == "log":
             ax.set_yscale("log")
-    if not SHOW_PHYLO:
-        fig.supxlabel("Simulation step")
     fig.supylabel("Proportion")
     if SHOW_PHYLO:
         leg = fig.legend([l_data, l_fit, l_phy_z, l_phy_j],
@@ -896,9 +932,14 @@ def plot_sim_and_phylogeny_curves_new():
                          loc="center left", bbox_to_anchor=(0.75, 0.5))
     for lh in leg.legend_handles:
         lh.set_alpha(1)
+    fig.subplots_adjust(right=0.73)  # make room for legend
+    left = min(ax.get_position().x0 for ax in axs.flat)
+    right = max(ax.get_position().x1 for ax in axs.flat)
+    center = (left + right) / 2  # center of 2x2 plot grid for x lab
+    fig.supxlabel("Simulation step", x=center)
     plt.tight_layout()
     fig.subplots_adjust(right=0.73)  # make room for legend
-    plt.savefig("sim_ctmc_fit.pdf", format="pdf", dpi=1200)
+    plt.savefig(f"sim_ctmc_fit_mcerr{MC_ERR_SAMP}.pdf", format="pdf", dpi=1200)
     plt.show()
 
 
