@@ -3,17 +3,20 @@ import pandas as pd
 import numpy as np
 import sympy as sp
 from matplotlib import pyplot as plt
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from matplotlib.offsetbox import (
+    OffsetImage, AnnotationBbox, TextArea, VPacker)
+from matplotlib.gridspec import GridSpec
 from scipy import linalg, integrate
 from scipy.stats import chisquare, chi2
 from PIL import Image
 import seaborn as sns
 
-PLOT = 2  # type of plot to produce
+PLOT = 4  # type of plot to produce
 # 0-three rows with error bars,
 # 1-two rows with mean model,
 # 2-proportion of shapes over simulation time against model predictions
 # 3-chi-squared goodness of fit for CTMC proportions to sim proportions
+# 4-same as 3 but with sim and phylo data on separate rows
 PHYLORATES1 = "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
 PHYLORATES2 = "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1"
 PHYLORATES_ML1 = "zun_genus_phylo_nat_26-09-24_class"
@@ -273,16 +276,17 @@ def get_timeseries():
         )  # for pseudo walks, will always be either 1 or 0
 
         # mean prop active walks per shape for all leaves in each first_cat
-        tseries = (  # don't group by first cat if PLOT == 2
-            tseries.groupby(["first_cat", "step", "shape"] if PLOT != 2 else
-                            ["step", "shape"])
+        tseries = (  # don't group by first cat if PLOT == 2 or 4
+            tseries.groupby(
+                ["first_cat", "step", "shape"] if PLOT not in [2, 4] else
+                ["step", "shape"])
             .agg(mean_prop=("proportion", "mean"),
                  sterr=("proportion", "sem"),
                  n=("proportion", "size"),
                  total=("proportion", "sum"))
             .reset_index()
         )
-        if PLOT == 2:  # PLOT 2 means calculated across all first_cats
+        if PLOT in [2, 4]:  # PLOT 2 or 4 mean calculated across all first_cats
             assert tseries[tseries["n"] !=
                            48].empty, "n is not 48 for all steps."
 
@@ -296,14 +300,13 @@ def get_timeseries():
         # proportion of active walks in each shape category
         tseries = tseries.merge(
             tseries_total, on=["first_cat", "step"])
-        tseries["prop"] = tseries["shape_total"] / \
-            tseries["no_active_walks"]
+        tseries["prop"] = tseries["shape_total"] / tseries["no_active_walks"]
         tseries["sterr"] = 0
 
     tseries["lb"] = tseries[VAR] - 1.96 * tseries["sterr"]
     tseries["ub"] = tseries[VAR] + 1.96 * tseries["sterr"]
 
-    if PLOT != 2:
+    if PLOT not in [2, 4]:
         # add initial state to the tseries
         tseries["step"] = tseries["step"] + 1
         for i in ORDER:
@@ -924,7 +927,6 @@ def plot_sim_and_phylogeny_curves_new():
                          ["Simulation Data", "Simulation CTMC",
                           "Phylogeny CTMC\nZuntini et al. (2024)",
                           "Phylogeny CTMC\nJanssens et al. (2021)"],
-                         # ["Simulation Data", "Simulation CTMC", "Phylogeny CTMC"],
                          loc="center left", bbox_to_anchor=(0.75, 0.5))
     else:
         leg = fig.legend([l_data, l_fit],
@@ -939,6 +941,146 @@ def plot_sim_and_phylogeny_curves_new():
     fig.supxlabel("Simulation step", x=center)
     plt.tight_layout()
     fig.subplots_adjust(right=0.73)  # make room for legend
+    plt.savefig(f"sim_ctmc_fit_mcerr{MC_ERR_SAMP}.pdf", format="pdf", dpi=1200)
+    plt.show()
+
+
+def plot_sim_and_phylogeny_curves_new_alt():
+    """Plot the proportion of each shape category at each step of the
+    walk from the simulation data against the predicted proportions from the
+    simulation and phylogeny CTMCs. The scale for the phylogeny is different
+    to the simulation scale."""
+
+    al = 1  # alpha for lines
+    af = 0.2  # alpha for fill
+    icon_imgs = load_leaf_imgs()  # get leaf icons
+
+    #### Get phylo-rates ####
+    _, raw_zun = get_phylo_rates(PHYLORATES1, "mcmc")
+    _, raw_jan = get_phylo_rates(PHYLORATES2, "mcmc")
+    _, raw_zun_mle = get_phylo_rates(PHYLORATES_ML1, "mle")
+    _, raw_jan_mle = get_phylo_rates(PHYLORATES_ML2, "mle")
+    #### Get sim-rates ####
+    _, raw_sim = get_sim_rates("mcmc")
+    _, raw_sim_mle = get_sim_rates("mle")
+    #### Get sim timeseries data ####
+    # tseries = get_timeseries_alt()
+    tseries = get_timeseries()  # for error bar on timeseries
+    tseries = tseries.rename(columns={"mean_prop": "prop"})  # line is mean
+    init_ratio = np.array([  # get proportion of each shape at step=0 in data
+        tseries[tseries["shape"] == "u"]["prop"].values[0],
+        tseries[tseries["shape"] == "l"]["prop"].values[0],
+        tseries[tseries["shape"] == "d"]["prop"].values[0],
+        tseries[tseries["shape"] == "c"]["prop"].values[0]
+    ])
+
+    piz, pij, pis = stat_dist(  # get approx stationary distribution from mle
+        raw_zun_mle, raw_jan_mle, raw_sim_mle)
+
+    # get predicted proportions from phylo and sim rate matrices
+    psim = get_plot_vals_alt(raw_sim, init_ratio, "sim", "mcmc")
+    psim_mle = get_plot_vals_alt(raw_sim_mle, init_ratio, "sim", "mle")
+    ppz = get_plot_vals_alt(raw_zun, init_ratio, "phylo", "mcmc")
+    ppj = get_plot_vals_alt(raw_jan, init_ratio, "phylo", "mcmc")
+    ppz_mle = get_plot_vals_alt(raw_zun_mle, init_ratio, "phylo", "mle")
+    ppj_mle = get_plot_vals_alt(raw_jan_mle, init_ratio, "phylo", "mle")
+    # use mle prop curves to estimate simxlims
+    sim_xlims = calc_xlims(init_ratio, ppz_mle, ppj_mle,
+                           psim, piz, pij, pis)
+
+    # Create subplots
+    # plt.rcParams["font.family"] = "CMU Serif"
+    fig, axs = plt.subplots(
+        nrows=4, ncols=3, figsize=(6.5, 6), layout="constrained",
+        sharey="row", gridspec_kw={"width_ratios": [0.01, 1, 1]})
+    axs_g1 = [axs[0, 0], axs[1, 0], axs[2, 0], axs[3, 0]]  # for leaf icons
+    axs_g2 = [axs[0, 1], axs[1, 1], axs[2, 1], axs[3, 1]]
+    axs_g3 = [axs[0, 2], axs[1, 2], axs[2, 2], axs[3, 2]]
+    p_xlim_loc = PHYLO_XLIM  # default xlims
+    s_xlim_loc = SIM_XLIM
+
+    for i, ax in enumerate(axs_g2):  # simulation
+        if AUTO_SIM_XLIM:
+            s_xlim_loc = sim_xlims["xlim"][i] if VARIABLE_SIM_XLIM \
+                else sim_xlims["xlim"].mean()
+            print(f"s_xlim_loc: {s_xlim_loc}")
+
+        tseries_sub = tseries[tseries["shape"] == ORDER[i]]
+        print(tseries_sub)
+        l_data, = ax.plot(tseries_sub["step"],  # plot timeseries
+                          tseries_sub["prop"], c="C0", zorder=0)
+        if {"lb", "ub"}.issubset(tseries_sub.columns):  # show error
+            ax.fill_between(tseries_sub["step"], tseries_sub["lb"],
+                            tseries_sub["ub"], alpha=af, color="C0", ec=None)
+        sim_sub = psim[psim["shape"] == ORDER[i]]
+        sim_sub_mle = psim_mle[psim_mle["shape"] == ORDER[i]]
+        l_fit, = ax.plot(sim_sub_mle["t"], sim_sub_mle["P"],  # plot sim ctmc
+                         c="C1", ls="--", alpha=al)
+        ax.fill_between(sim_sub["t"], sim_sub["lb"], sim_sub["ub"],
+                        alpha=af, color="C1", ec=None)
+        ax.set_xlim(0, s_xlim_loc)
+        ax.grid(alpha=0.3)
+        if i in range(0, 3):
+            ax.set_xticklabels([])
+        else:
+            ax.set_xlabel("Simulation step")
+        ax.tick_params(axis="y", labelleft=True)  # make sure ytick labs on
+
+    for i, ax in enumerate(axs_g3):  # phylogeny
+
+        ppz_sub = ppz[ppz["shape"] == ORDER[i]]
+        ppz_sub_mle = ppz_mle[ppz_mle["shape"] == ORDER[i]]
+        l_phy_z, = ax.plot(ppz_sub_mle["t"], ppz_sub_mle["P"], c="C2",
+                           ls="--", alpha=al)
+        ax.fill_between(ppz_sub["t"], ppz_sub["lb"], ppz_sub["ub"],
+                        alpha=af, color="C2", ec=None)
+
+        ppj_sub = ppj[ppj["shape"] == ORDER[i]]
+        ppj_sub_mle = ppj_mle[ppj_mle["shape"] == ORDER[i]]
+        l_phy_j, = ax.plot(ppj_sub_mle["t"], ppj_sub_mle["P"], c="C3",
+                           ls="--", alpha=al)
+        ax.fill_between(ppj_sub["t"], ppj_sub["lb"], ppj_sub["ub"],
+                        alpha=af, color="C3", ec=None)
+        ax.set_xlim(0, p_xlim_loc)
+        ax.grid(alpha=0.3)
+        if i in range(0, 3):
+            ax.set_xticklabels([])
+        else:
+            ax.set_xlabel("Branch length (Myr)")
+
+    for i, ax in enumerate(axs_g1):
+        ax.axis("off")
+        if LEAF_ICONS:
+            img_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
+            text_box = TextArea(
+                ["Unlobed", "Lobed", "Dissected", "Compound"][i],)
+            a_box = VPacker(children=[img_box, text_box],
+                            align="center", pad=0, sep=4)
+            aln = (0.5, 0.5)  # box alignment axes frac
+            ab = AnnotationBbox(
+                a_box,
+                aln,
+                xycoords="axes fraction",
+                box_alignment=aln,
+                frameon=False,
+                pad=0.2,
+            )
+            ax.add_artist(ab)
+
+    fig.supylabel("Proportion")
+    if SHOW_PHYLO:
+        leg = fig.legend([l_data, l_fit, l_phy_z, l_phy_j],
+                         ["Simulation Data", "Simulation CTMC",
+                         "Phylogeny CTMC\nZuntini et al. (2024)",
+                          "Phylogeny CTMC\nJanssens et al. (2021)"],
+                         loc="outside center right"
+                         )
+    else:
+        leg = fig.legend([l_data, l_fit],
+                         ["Simulation Data", "Simulation CTMC"],
+                         loc="outside center right")
+    for lh in leg.legend_handles:
+        lh.set_alpha(1)
     plt.savefig(f"sim_ctmc_fit_mcerr{MC_ERR_SAMP}.pdf", format="pdf", dpi=1200)
     plt.show()
 
@@ -1118,3 +1260,5 @@ if __name__ == "__main__":
     if PLOT == 3:
         goodness_of_fit_trans()
         # goodness_of_fit_prev()
+    if PLOT == 4:
+        plot_sim_and_phylogeny_curves_new_alt()
