@@ -846,7 +846,7 @@ def plot_sim_and_phylogeny_curves_new():
     # Create subplots
     # plt.rcParams["font.family"] = "CMU Serif"
     fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(
-        9, 6), sharex=not SHOW_PHYLO, sharey=False)
+        9, 6), sharex=not VARIABLE_SIM_XLIM, sharey=False)
     p_xlim_loc = PHYLO_XLIM  # default xlims
     s_xlim_loc = SIM_XLIM
 
@@ -877,6 +877,8 @@ def plot_sim_and_phylogeny_curves_new():
         ax.fill_between(sim_sub["t"], sim_sub["lb"], sim_sub["ub"],
                         alpha=af, color="C1", ec=None)
         ax.set_xlim(0, s_xlim_loc)
+        if i in [2, 3]:
+            ax.set_xlabel("Simulation step")
         if SHOW_PHYLO:
             secax = ax.secondary_xaxis('top', functions=(fwd, inv))
 
@@ -904,7 +906,7 @@ def plot_sim_and_phylogeny_curves_new():
         ax.grid(alpha=0.3)
         if LEAF_ICONS:
             imbg_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
-            aln = (0, 1)  # image corner alignment
+            aln = (1, 1) if i != 0 else (0, 1)
             ab = AnnotationBbox(
                 imbg_box,
                 aln,
@@ -938,7 +940,7 @@ def plot_sim_and_phylogeny_curves_new():
     left = min(ax.get_position().x0 for ax in axs.flat)
     right = max(ax.get_position().x1 for ax in axs.flat)
     center = (left + right) / 2  # center of 2x2 plot grid for x lab
-    fig.supxlabel("Simulation step", x=center)
+    # fig.supxlabel("Simulation step", x=center)
     plt.tight_layout()
     fig.subplots_adjust(right=0.73)  # make room for legend
     plt.savefig(f"sim_ctmc_fit_mcerr{MC_ERR_SAMP}.pdf", format="pdf", dpi=1200)
@@ -1023,7 +1025,9 @@ def plot_sim_and_phylogeny_curves_new_alt():
         if i in range(0, 3):
             ax.set_xticklabels([])
         else:
-            ax.set_xlabel("Simulation step")
+            ax.set_xlabel("Time (step)")
+        if i == 0:
+            ax.set_title("Simulation")
         ax.tick_params(axis="y", labelleft=True)  # make sure ytick labs on
 
     for i, ax in enumerate(axs_g3):  # phylogeny
@@ -1046,7 +1050,9 @@ def plot_sim_and_phylogeny_curves_new_alt():
         if i in range(0, 3):
             ax.set_xticklabels([])
         else:
-            ax.set_xlabel("Branch length (Myr)")
+            ax.set_xlabel("Time (Myr)")
+        if i == 0:
+            ax.set_title("Phylogeny")
 
     for i, ax in enumerate(axs_g1):
         ax.axis("off")
@@ -1081,7 +1087,8 @@ def plot_sim_and_phylogeny_curves_new_alt():
                          loc="outside center right")
     for lh in leg.legend_handles:
         lh.set_alpha(1)
-    plt.savefig(f"sim_ctmc_fit_mcerr{MC_ERR_SAMP}.pdf", format="pdf", dpi=1200)
+    plt.savefig(
+        f"sim_ctmc_fit_vert_mcerr{MC_ERR_SAMP}.pdf", format="pdf", dpi=1200)
     plt.show()
 
 
