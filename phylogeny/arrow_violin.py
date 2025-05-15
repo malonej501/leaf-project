@@ -35,6 +35,11 @@ PLOT_ORDER = [
     # "jan_equal_genus_phylo_nat_class_uniform0-0.1_4",
     # "zuntini_genera_equal_genus_phylo_nat_class_uniform0-0.1_4",
 ]
+TRANS_FNAME = ["ulvd.png", "udvd.png", "ucvd.png",  # transition icons
+               "ldvd.png", "lcvd.png", "dcvd.png"]
+ICON_FNAME = ["leaf_p7a_0_0.png", "leaf_p8ae_0_0.png",  # single leaf icons
+              "leaf_pd1_0_0.png", "leaf_pc1_alt_0_0.png"]
+
 
 rates_map2 = {
     "0": "u→l",
@@ -115,21 +120,21 @@ def import_phylo_and_sim_rates(calc_diff):
 
     phylo_sim = calc_net_rate(phylo_sim) if calc_diff else phylo_sim
 
-    phylo_sim_long = pd.melt(
+    phy_sim = pd.melt(
         phylo_sim,
         id_vars=["Dataset"],
         var_name="transition",
         value_name="rate",
     )
-    phylo_sim_long["dataname"] = phylo_sim_long["Dataset"].apply(
+    phy_sim["dataname"] = phy_sim["Dataset"].apply(
         lambda x: x.split("_class", 1)[0] + "_class"
     )
     # filter to only rows with dataset in the PLOT_ORDER list
-    phylo_sim_long = phylo_sim_long[
-        phylo_sim_long["Dataset"].isin(PLOT_ORDER)
+    phy_sim = phy_sim[
+        phy_sim["Dataset"].isin(PLOT_ORDER)
     ].reset_index(drop=True)
 
-    return phylo_sim_long
+    return phy_sim
 
 
 def import_phylo_ml_rates(calc_diff):
@@ -168,18 +173,18 @@ def import_phylo_ml_rates(calc_diff):
     return qml_long
 
 
-def test_rates_diff_from_zero(phylo_sim_long):
+def test_rates_diff_from_zero(phy_sim):
     """Return fraction of normalised rate posteriors that are > 0"""
-    phylo_sim_long_filt = phylo_sim_long[
-        phylo_sim_long["transition"].str.contains(
+    phy_sim_filt = phy_sim[
+        phy_sim["transition"].str.contains(
             r"^[a-zA-Z]→[a-zA-Z]-[a-zA-Z]→[a-zA-Z]$"
         )
     ]
-    transitions = phylo_sim_long_filt["transition"].unique()
+    transitions = phy_sim_filt["transition"].unique()
     results = []
     for trans in transitions:
-        mcmc_plot_data = phylo_sim_long[phylo_sim_long["transition"] == trans]
-        for name, group in mcmc_plot_data.groupby("Dataset"):
+        mcmc_phy_pdata = phy_sim[phy_sim["transition"] == trans]
+        for name, group in mcmc_phy_pdata.groupby("Dataset"):
             n = len(group)
             ng0 = len(group[group["rate_norm"] > 0])  # number of rates > 0
 
@@ -332,16 +337,16 @@ def import_sim_ml_rates(calc_diff):
     return sim_ml_long
 
 
-def normalise_rates(phylo_sim_long, ml_phylo_rates_long, ml_sim_rates_long):
+def normalise_rates(phy_sim, ml_q_phy, ml_q_sim):
     """
     Normalise the rates across datasets with the specified method
     NORM_MTHD = "meanmean", "zscore", "zscore+2.7", "zscore_global", "minmax"
     """
     # only calculate the mean rate for transitions, not transition differences
-    phylo_sim_long_filt = phylo_sim_long[
-        phylo_sim_long["transition"].isin(rates_map3.values())
+    phy_sim_filt = phy_sim[
+        phy_sim["transition"].isin(rates_map3.values())
     ]
-    phylo_sim_long["mean_rate"] = phylo_sim_long_filt.groupby(
+    phy_sim["mean_rate"] = phy_sim_filt.groupby(
         ["Dataset", "transition"]
     )["rate"].transform(
         "mean"
@@ -350,120 +355,115 @@ def normalise_rates(phylo_sim_long, ml_phylo_rates_long, ml_sim_rates_long):
     if NORM_MTHD == "meanmean":
         # get the mean mean transition rate per dataset (i.e. the centre of the
         # rates for that dataset)
-        phylo_sim_long["mean_mean"] = phylo_sim_long.groupby(["Dataset"])[
+        phy_sim["mean_mean"] = phy_sim.groupby(["Dataset"])[
             "mean_rate"
         ].transform("mean")
         # normalise by dividing by the mean mean transition rate for each
         # dataset
-        phylo_sim_long["rate_norm"] = (
-            phylo_sim_long["rate"] / phylo_sim_long["mean_mean"]
-        )
+        phy_sim["rate_norm"] = phy_sim["rate"] / phy_sim["mean_mean"]
 
         # merge mcmc mean-means with ML-rates
-        ml_phylo_rates_long = pd.merge(
-            ml_phylo_rates_long,
-            phylo_sim_long[["dataname", "mean_mean"]].drop_duplicates(
+        ml_q_phy = pd.merge(
+            ml_q_phy,
+            phy_sim[["dataname", "mean_mean"]].drop_duplicates(
                 subset=["dataname"]
             ),
             on="dataname",
         )
-        ml_sim_rates_long = pd.merge(
-            ml_sim_rates_long,
-            phylo_sim_long[["dataname", "mean_mean"]].drop_duplicates(
+        ml_q_sim = pd.merge(
+            ml_q_sim,
+            phy_sim[["dataname", "mean_mean"]].drop_duplicates(
                 subset=["dataname"]
             ),
             on="dataname",
         )
         # normalise ML rates
-        ml_phylo_rates_long["rate_norm"] = (
-            ml_phylo_rates_long["rate"] / ml_phylo_rates_long["mean_mean"]
-        )
-        ml_sim_rates_long["rate_norm"] = (
-            ml_sim_rates_long["rate"] / ml_sim_rates_long["mean_mean"]
-        )
-        # phylo_sim_long["initial_shape"], phylo_sim_long["final_shape"] = zip(
-        #     *phylo_sim_long["transition"].map(rates_map)
+        ml_q_phy["rate_norm"] = ml_q_phy["rate"] / ml_q_phy["mean_mean"]
+
+        ml_q_sim["rate_norm"] = ml_q_sim["rate"] / ml_q_sim["mean_mean"]
+        # phy_sim["initial_shape"], phy_sim["final_shape"] = zip(
+        #     *phy_sim["transition"].map(rates_map)
         # )
 
     elif NORM_MTHD == "zscore":
         # get the mean mean transition rate per dataset (i.e. the centre of the
         # rates for that dataset)
-        phylo_sim_long["mean_mean"] = phylo_sim_long.groupby(["Dataset"])[
+        phy_sim["mean_mean"] = phy_sim.groupby(["Dataset"])[
             "mean_rate"
         ].transform("mean")
         # get the stdev of the mean transition rate per dataset
-        phylo_sim_long["std_mean"] = phylo_sim_long.groupby("Dataset")[
+        phy_sim["std_mean"] = phy_sim.groupby("Dataset")[
             "mean_rate"
         ].transform("std")
         # z-score normalisation
-        phylo_sim_long["rate_norm"] = (
-            phylo_sim_long["rate"] - phylo_sim_long["mean_mean"]
-        ) / phylo_sim_long["std_mean"]
+        phy_sim["rate_norm"] = (
+            phy_sim["rate"] - phy_sim["mean_mean"]
+        ) / phy_sim["std_mean"]
         # normalise ML rates
-        ml_phylo_rates_long["rate_norm"] = (
-            ml_phylo_rates_long["rate"] - phylo_sim_long["mean_mean"]
-        ) / phylo_sim_long["std_mean"]
+        ml_q_phy["rate_norm"] = (
+            ml_q_phy["rate"] - phy_sim["mean_mean"]
+        ) / phy_sim["std_mean"]
 
     elif NORM_MTHD == "zscore+2.7":
         # get the mean mean transition rate per dataset (i.e. the centre of the
         # rates for that dataset)
-        phylo_sim_long["mean_mean"] = phylo_sim_long.groupby(["Dataset"])[
+        phy_sim["mean_mean"] = phy_sim.groupby(["Dataset"])[
             "mean_rate"
         ].transform("mean")
         # get the stdev of the mean transition rate per dataset
-        phylo_sim_long["std_mean"] = phylo_sim_long.groupby("Dataset")[
+        phy_sim["std_mean"] = phy_sim.groupby("Dataset")[
             "mean_rate"
         ].transform("std")
         # z-score normalisation
-        phylo_sim_long["rate_norm"] = (
-            (phylo_sim_long["rate"] - phylo_sim_long["mean_mean"])
-            / phylo_sim_long["std_mean"]
+        phy_sim["rate_norm"] = (
+            (phy_sim["rate"] - phy_sim["mean_mean"])
+            / phy_sim["std_mean"]
         ) + 2.7  # move data up by 2.7 to get rid of negatives
         # normalise ML rates
-        ml_phylo_rates_long["rate_norm"] = (
-            (ml_phylo_rates_long["rate"] - phylo_sim_long["mean_mean"])
-            / phylo_sim_long["std_mean"]
+        ml_q_phy["rate_norm"] = (
+            (ml_q_phy["rate"] - phy_sim["mean_mean"])
+            / phy_sim["std_mean"]
         ) + 2.7
 
     elif NORM_MTHD == "zscore_global":
-        phylo_sim_long["dataset_mean"] = phylo_sim_long.groupby(["Dataset"])[
+        phy_sim["dataset_mean"] = phy_sim.groupby(["Dataset"])[
             "rate"
         ].transform(
             "mean"
         )  # get mean overall rate for each dataset
         # get the stdev of rates per dataset
-        phylo_sim_long["dataset_std"] = phylo_sim_long.groupby("Dataset")[
+        phy_sim["dataset_std"] = phy_sim.groupby("Dataset")[
             "rate"
         ].transform("std")
         # zscore normalisation
-        phylo_sim_long["rate_norm"] = (
-            phylo_sim_long["rate"] - phylo_sim_long["dataset_mean"]
-        ) / phylo_sim_long["dataset_std"]
+        phy_sim["rate_norm"] = (
+            phy_sim["rate"] - phy_sim["dataset_mean"]
+        ) / phy_sim["dataset_std"]
         # normalise ML rates
-        ml_phylo_rates_long["rate_norm"] = (
-            ml_phylo_rates_long["rate"] - phylo_sim_long["dataset_mean"]
-        ) / phylo_sim_long["dataset_std"]
+        ml_q_phy["rate_norm"] = (
+            ml_q_phy["rate"] - phy_sim["dataset_mean"]
+        ) / phy_sim["dataset_std"]
 
     elif NORM_MTHD == "minmax":
         # min max normalisation
-        phylo_sim_long["min_mean"] = phylo_sim_long.groupby("Dataset")[
+        phy_sim["min_mean"] = phy_sim.groupby("Dataset")[
             "mean_rate"
         ].transform("min")
-        phylo_sim_long["max_mean"] = phylo_sim_long.groupby("Dataset")[
+        phy_sim["max_mean"] = phy_sim.groupby("Dataset")[
             "mean_rate"
         ].transform("max")
-        phylo_sim_long["rate_norm"] = (
-            phylo_sim_long["rate"] - phylo_sim_long["min_mean"]
-        ) / (phylo_sim_long["max_mean"] - phylo_sim_long["min_mean"])
+        phy_sim["rate_norm"] = (
+            phy_sim["rate"] - phy_sim["min_mean"]
+        ) / (phy_sim["max_mean"] - phy_sim["min_mean"])
         # normalise ML rates
-        ml_phylo_rates_long["rate_norm"] = (
-            ml_phylo_rates_long["rate"] - phylo_sim_long["min_mean"]
-        ) / (phylo_sim_long["max_mean"] - phylo_sim_long["min_mean"])
+        ml_q_phy["rate_norm"] = (
+            ml_q_phy["rate"] - phy_sim["min_mean"]
+        ) / (phy_sim["max_mean"] - phy_sim["min_mean"])
 
     else:
         raise RuntimeError("Invalid NORM_MTHD argument.")
 
-    return phylo_sim_long, ml_phylo_rates_long, ml_sim_rates_long
+    return phy_sim, ml_q_phy, ml_q_sim
 
 
 def draw_arc(r, at, to, ax, c, rc, rs, sig, c_val, dc_val):
@@ -510,39 +510,28 @@ def draw_arc(r, at, to, ax, c, rc, rs, sig, c_val, dc_val):
                 r, rc, rs, sig, dc_val)
 
 
-def arrow_w_viol():
-    """Plot arrows and violin plots for the phylo and sim rates"""
+def arrow_viol_h():
+    """Plot arrows and violin plots for all phylo and sim rates"""
     # plt.rcParams["font.family"] = "CMU Serif"
 
-    icon_filenames = [
-        "leaf_p7a_0_0.png",
-        "leaf_p8ae_0_0.png",
-        "leaf_pd1_0_0.png",
-        "leaf_pc1_alt_0_0.png",
-    ]
-    transition_filenames = [
-        "ulvd.png",
-        "udvd.png",
-        "ucvd.png",
-        "ldvd.png",
-        "lcvd.png",
-        "dcvd.png",
-    ]
-    icons = [os.path.join("uldc_model_icons", path) for path in icon_filenames]
+    # import icon images
+    icons = [os.path.join("uldc_model_icons", p) for p in ICON_FNAME]
     transition_icons = [
-        os.path.join("uldc_model_icons", path) for path in transition_filenames
+        os.path.join("uldc_model_icons", p) for p in TRANS_FNAME
     ]
-    icon_imgs = [Image.open(path) for path in icons]
-    trans_imgs = [Image.open(path) for path in transition_icons]
+    icon_imgs = [Image.open(p) for p in icons]
+    trans_imgs = [Image.open(p) for p in transition_icons]
 
-    ml_phylo_rates_long = import_phylo_ml_rates(calc_diff=True)
-    ml_sim_rates_long = import_sim_ml_rates(calc_diff=True)
-    phylo_sim_long = import_phylo_and_sim_rates(calc_diff=True)
-    phylo_sim_long, ml_phylo_rates_long, ml_sim_rates_long = normalise_rates(
-        phylo_sim_long, ml_phylo_rates_long, ml_sim_rates_long
+    # load rate data
+    ml_q_phy = import_phylo_ml_rates(calc_diff=True)
+    ml_q_sim = import_sim_ml_rates(calc_diff=True)
+    phy_sim = import_phylo_and_sim_rates(calc_diff=True)
+    phy_sim, ml_q_phy, ml_q_sim = normalise_rates(
+        phy_sim, ml_q_phy, ml_q_sim
     )
 
-    rate_data = test_rates_diff_from_zero(phylo_sim_long)
+    # process rate data
+    rate_data = test_rates_diff_from_zero(phy_sim)
     rate_data["fwd"] = rate_data["transition"].str[:3]
     rate_data["bwd"] = rate_data["transition"].str[-3:]
     rate_data.to_csv(f"rate_data_bw_fw_{str(date.today())}.csv", index=False)
@@ -552,13 +541,13 @@ def arrow_w_viol():
     rate_data.to_csv(
         f"rate_data_{NORM_MTHD}_{str(date.today())}.csv", index=False)
 
-    # centers = [(2, 6), (6, 6), (6, 2), (2, 2)]
+    # define arrow properties and plot titles
     c_proper = {"u": (2, 6), "l": (6, 6), "d": (6, 2), "c": (2, 2)}
     rad = 0.5  # padding between leaf icon and circle where arrows join
     texts = ["Unlobed", "Lobed", "Dissected",
              "Compound"] if LAYOUT == "v" else ["", "", "", ""]
-    c = {
-        "uN": (2, 6 + rad),  # define arrow attachment points for nodes
+    c = {  # define arrow attachment points for nodes
+        "uN": (2, 6 + rad),
         "uE": (2 + rad, 6),
         "uS": (2, 6 - rad),
         "uW": (2 - rad, 6),
@@ -575,151 +564,100 @@ def arrow_w_viol():
         "cS": (2, 2 - rad),
         "cW": (2 - rad, 2),
     }
-    transitions = [
-        "l→u-u→l",
-        "d→u-u→d",
-        "c→u-u→c",
-        "l→d-d→l",
-        "l→c-c→l",
-        "d→c-c→d",
-    ]
-    plot_titles = [
-        "MUT1",
-        "MUT2",
-        "Janssens et al. (2020)",
-        "Zuntini et al. (2024)",
-        "Geeta et al. (2012)",
-    ]
+    transitions = ["l→u-u→l", "d→u-u→d", "c→u-u→c",
+                   "l→d-d→l", "l→c-c→l", "d→c-c→d"]
+    plot_titles = ["MUT1", "MUT2", "Janssens et al. (2020)",
+                   "Zuntini et al. (2024)", "Geeta et al. (2012)"]
 
-    # Draw circles with text in the center
-    if LAYOUT == "h":
-        fig_h = 6
-        fig_w = 14
-        fig, axs = plt.subplots(
-            2,
-            len(PLOT_ORDER),
-            figsize=(fig_w, fig_h),
+    # Set up fig
+    fig, axs = plt.subplots(2, len(PLOT_ORDER), figsize=(14, 6))
+    ax_g1 = axs[0]  # 1st row subplots
+    ax_g2 = axs[1]  # 2nd row subplots
+    for i, ax in enumerate(ax_g1):  # arrow plots
+        dataset = PLOT_ORDER[i]
+        ax.axis("off")
+        ax.set_xlim(0, 8)
+        ax.set_ylim(0, 8)
+        plot_data = rate_data[rate_data["dataset"] == dataset]
+        nodes(ax, c_proper, rad, texts, icon_imgs)
+        for _, row in plot_data.iterrows():
+            at = row["fwd"][0]
+            to = row["fwd"][2]
+            # increase the SF to scale the width of the arrows
+            r = row["mean_rate_norm"] * SF  # adjusted rate
+            rc = "lightgrey" if row["prop_over_zero"] < CI else "black"
+            sig = False if row["prop_over_zero"] < CI else True
+            rs = False  # set to false to disable multi-arrows
+
+            draw_arc(r, at, to, ax, c, rc, rs, sig,
+                     C_VAL, DC_VAL)  # draw arrow
+
+        title = plot_titles[i]
+        ax.set_title(title, fontsize=9)
+
+    for i, ax in enumerate(ax_g2):  # violin plots
+        mcmc_phy_pdata = phy_sim[phy_sim["Dataset"] == dataset]
+        ml_phy_pdata = ml_q_phy[ml_q_phy["dataname"].apply(
+            lambda x: x in dataset)]
+        ml_sim_pdata = ml_q_sim[
+            ml_q_sim["Dataset"].apply(lambda x: x in dataset)]
+        rates = []
+        ml_rates = []
+        for transition in transitions:
+            rates.append(
+                mcmc_phy_pdata["rate_norm"][
+                    mcmc_phy_pdata["transition"] == transition
+                ].squeeze()
+            )
+            if not ml_phy_pdata.empty:
+                x = ml_phy_pdata[
+                    ml_phy_pdata["transition"] == transition
+                ].reset_index(drop=True)
+
+                if not x.empty:
+                    ml_rates.append(x.loc[0, "rate_norm"])
+            if not ml_sim_pdata.empty:
+                x = ml_sim_pdata[
+                    ml_sim_pdata["transition"] == transition
+                ].reset_index(drop=True)
+                if not x.empty:
+                    ml_rates.append(x.loc[0, "rate_norm"])
+            if ml_phy_pdata.empty and ml_sim_pdata.empty:
+                ml_rates.append(np.nan)
+
+        ax.violinplot(rates, showextrema=False, showmeans=True)
+
+        if ML_DATA:
+            pos = list(range(1, len(transitions) + 1))
+            ax.scatter(pos, ml_rates, color="black", zorder=5, s=8,
+                       facecolors="white")  # , marker="D")
+        ax.axhline(0, linestyle="--", color="C1", alpha=0.5)
+        ax.set_ylim(-8, 8)
+        ax.set_xticks(
+            list(range(1, len(transitions) + 1)),
+            transitions,
+            fontsize=9,
         )
-    elif LAYOUT == "v":
-        fig_h = 4 * len(PLOT_ORDER)
-        fig_w = 8
-        fig, axs = plt.subplots(
-            len(PLOT_ORDER) * 2,
-            2,
-            figsize=(fig_h, fig_w),
-            gridspec_kw={
-                "height_ratios": [
-                    3 if i % 2 == 0 else 1 for i in range(len(PLOT_ORDER) * 2)
-                ],
-                "width_ratios": [2, 1],
-            },
-        )
-    else:
-        raise RuntimeError("incorrect LAYOUT argument")
-    if len(PLOT_ORDER) == 1:
-        axs = [axs]
-    dataset = None
-    for i, row_ in enumerate(axs):
-        for j, ax in enumerate(row_):
-            if LAYOUT == "v" and i % 2 == 1:
-                ax.axis("off")
-                continue
-            dataset = PLOT_ORDER[j] if LAYOUT == "h" else PLOT_ORDER[i // 2]
-            if (LAYOUT == "h" and i == 0) or (LAYOUT == "v" and j == 0):
-                ax.axis("off")
-                if LAYOUT == "v":
-                    ax = plt.subplot2grid(shape=(2, 2), loc=(i // 2, 0))
-                    ax.axis("off")
-                ax.set_xlim(0, 8)
-                ax.set_ylim(0, 8)
-
-                plot_data = rate_data[rate_data["dataset"] == dataset]
-                nodes(ax, c_proper, rad, texts, icon_imgs)
-                for _, row in plot_data.iterrows():
-                    at = row["fwd"][0]
-                    to = row["fwd"][2]
-                    # increase the multiplier to scale the width of the arrows
-                    r = row["mean_rate_norm"] * SF  # adjusted rate
-                    rc = "lightgrey" if row["prop_over_zero"] < CI else "black"
-                    sig = False if row["prop_over_zero"] < CI else True
-                    rs = False  # set to false to disable multi-arrows
-
-                    draw_arc(r, at, to, ax, c, rc, rs, sig,
-                             C_VAL, DC_VAL)  # draw arrow
-
-                title = plot_titles[j] if LAYOUT == "h" \
-                    else plot_titles[i // 2]
-                ax.set_title(title, fontsize=9)
-            if (LAYOUT == "h" and i == 1) or (LAYOUT == "v" and j == 1):
-
-                mcmc_plot_data = phylo_sim_long[
-                    phylo_sim_long["Dataset"] == dataset]
-                ml_phylo_plot_data = ml_phylo_rates_long[
-                    ml_phylo_rates_long["dataname"].apply(
-                        lambda x: x in dataset)
-                ]
-                ml_sim_plot_data = ml_sim_rates_long[
-                    ml_sim_rates_long["Dataset"].apply(lambda x: x in dataset)]
-                rates = []
-                ml_rates = []
-                for transition in transitions:
-                    rates.append(
-                        mcmc_plot_data["rate_norm"][
-                            mcmc_plot_data["transition"] == transition
-                        ].squeeze()
-                    )
-                    if not ml_phylo_plot_data.empty:
-                        x = ml_phylo_plot_data[
-                            ml_phylo_plot_data["transition"] == transition
-                        ].reset_index(drop=True)
-
-                        if not x.empty:
-                            ml_rates.append(x.loc[0, "rate_norm"])
-                    if not ml_sim_plot_data.empty:
-                        x = ml_sim_plot_data[
-                            ml_sim_plot_data["transition"] == transition
-                        ].reset_index(drop=True)
-                        if not x.empty:
-                            ml_rates.append(x.loc[0, "rate_norm"])
-                    if ml_phylo_plot_data.empty and ml_sim_plot_data.empty:
-                        ml_rates.append(np.nan)
-
-                ax.violinplot(rates, showextrema=False, showmeans=True)
-
-                if ML_DATA:
-                    pos = list(range(1, len(transitions) + 1))
-                    ax.scatter(pos, ml_rates, color="black", zorder=5, s=8,
-                               facecolors="white")  # , marker="D")
-                ax.axhline(0, linestyle="--", color="C1", alpha=0.5)
-                ax.set_ylim(-8, 8)
-                ax.set_xticks(
-                    list(range(1, len(transitions) + 1)),
-                    transitions,
-                    fontsize=9,
-                )
-                xl, yl, xh, yh = np.array(ax.get_position()).ravel()
-                w = xh - xl
-                h = yh - yl
-                size = (
-                    0.1 if LAYOUT == "h" else 0.08
-                )  # worked well for horizontal and multiple vertical
-                for x, xtick_pos in enumerate(range(1, len(transitions) + 1)):
-                    xp = (
-                        xl
-                        + (w / (len(transitions)) * xtick_pos)
-                        - (0.5 * (w / (len(transitions))))
-                    )
-                    ax1 = fig.add_axes(
-                        [xp - (size * 0.5), yl - size -
-                         (0.1 * size), size, size]
-                    )
-                    ax1.axison = False
-                    ax1.imshow(trans_imgs[x])
-                ax.set_xticklabels([])
-                ax.set_ylabel("Net normalised rate")
-                if LAYOUT == "h" and j > 0:
-                    ax.set_ylabel("")
-
+        xl, yl, xh, yh = np.array(ax.get_position()).ravel()
+        w = xh - xl
+        h = yh - yl
+        size = 0.1  # size for transition icons
+        for x, xtick_pos in enumerate(range(1, len(transitions) + 1)):
+            xp = (
+                xl
+                + (w / (len(transitions)) * xtick_pos)
+                - (0.5 * (w / (len(transitions))))
+            )
+            ax1 = fig.add_axes(
+                [xp - (size * 0.5), yl - size -
+                    (0.1 * size), size, size]
+            )
+            ax1.axison = False
+            ax1.imshow(trans_imgs[x])
+        ax.set_xticklabels([])
+        ax.set_ylabel("Net normalised rate")
+        if i > 0:
+            ax.set_ylabel("")
     # Create legend
     labels = ["Compound", "Dissected", "Lobed", "Unlobed"]
     # left_pos, bottom_pos, width, height
@@ -738,4 +676,4 @@ def arrow_w_viol():
 
 
 if __name__ == "__main__":
-    arrow_w_viol()
+    arrow_viol_h()
