@@ -11,7 +11,7 @@ from scipy.stats import chisquare, chi2
 from PIL import Image
 import seaborn as sns
 
-PLOT = 4  # type of plot to produce
+PLOT = 1  # type of plot to produce
 # 0-three rows with error bars,
 # 1-two rows with mean model,
 # 2-proportion of shapes over simulation time against model predictions
@@ -465,6 +465,9 @@ def plot_sim_and_phylogeny_curves_nouncert():
 
     #### Get phylo-rates ####
     phylo_summary, _ = get_phylo_rates()
+    _, raw_zun = get_phylo_rates(PHYLORATES1, "mcmc")
+    _, raw_zun_mle = get_phylo_rates(PHYLORATES_ML1, "mle")
+
     #### Get sim-rates ####
     sim_summary, _ = get_sim_rates()
     #### Get sim timeseries data ####
@@ -502,6 +505,24 @@ def plot_sim_and_phylogeny_curves_nouncert():
         sim_curves.append([pt, pllt, puut])
     sim_plot = pd.DataFrame(
         plot_data_from_probcurves(sim_curves, t_plot, t_calc))
+    print(sim_plot)
+    ppzs = []
+    ppzs_mle = []
+    for i, s in enumerate(ORDER):  # loop different inits
+        init_ratio = np.zeros(4)
+        init_ratio[i] = 1
+        ppz = get_plot_vals_alt(raw_zun, init_ratio, "phylo", "mcmc")
+        ppz_mle = get_plot_vals_alt(raw_zun_mle, init_ratio, "phylo", "mle")
+        ppz["first_cat"] = s  # append first_cat
+        ppz_mle["first_cat"] = s
+        ppzs.append(ppz)
+        ppzs_mle.append(ppz_mle)
+    ppz = pd.concat(ppzs, ignore_index=True)
+    ppz_mle = pd.concat(ppzs_mle, ignore_index=True)
+    print(ppz_mle)
+    print(ppz)
+
+    #
 
     # Create subplots
     # plt.rcParams["font.family"] = "CMU Serif"
@@ -513,11 +534,11 @@ def plot_sim_and_phylogeny_curves_nouncert():
     for i, row in enumerate(axs):
         for j, ax in enumerate(row):
             idx = j - 1
+            cat = ORDER[idx]
             sim_cat_data = pd.DataFrame()
             if i < 1 or j < 1:
                 ax.axis("off")
                 continue
-            cat = ORDER[idx]
             if idx != 0:
                 ax.set_yticklabels([])
             if i == 1:  # timeseries data on the left
@@ -536,7 +557,7 @@ def plot_sim_and_phylogeny_curves_nouncert():
             if i == 2:
                 ax.axis("off")
             if i == 3:  # phylogeny data on the right
-                cat_data = phylo_plot[phylo_plot["first_cat"] == cat]
+                cat_data = ppz[ppz["first_cat"] == cat]
                 ax.set_xlim(0, PHYLO_XLIM)
                 ax.set_xlabel("Branch length (Myr)")
                 ax.set_xticks(np.arange(0, PHYLO_XLIM+1, PHYLO_XLIM/4))
@@ -545,9 +566,16 @@ def plot_sim_and_phylogeny_curves_nouncert():
             if i != 2:
                 for s, shape in enumerate(ORDER):
                     sd = cat_data[cat_data["shape"] == shape]  # shape data
-                    (line,) = ax.plot(sd["t"], sd["P"], label=shape,
-                                      c=sns.color_palette("colorblind")[s],
-                                      linestyle="--" if i == 1 else "-")
+                    cat_data_mle = ppz_mle[ppz_mle["first_cat"] == cat]
+                    sd_mle = cat_data_mle[cat_data_mle["shape"] == shape]
+                    if i == 3:
+                        (line,) = ax.plot(sd_mle["t"], sd_mle["P"], label=shape,
+                                          c=sns.color_palette("colorblind")[s],
+                                          linestyle="--" if i == 1 else "-")
+                    else:
+                        (line,) = ax.plot(sd["t"], sd["P"], label=shape,
+                                          c=sns.color_palette("colorblind")[s],
+                                          linestyle="--" if i == 1 else "-")
                     ax.fill_between(sd["t"], sd["lb"], sd["ub"], alpha=0.2)
                     if not sim_cat_data.empty:
                         sd = sim_cat_data[sim_cat_data["shape"] == shape]
@@ -663,7 +691,8 @@ def get_plot_vals(rates, init_ratio, dtype):
 
 def get_plot_vals_alt(rates, init_ratio, dtype, q_mthd):
     """Get the predicted proportion of each shape at each step of the walk
-    from the simulation or phylogeny rates"""
+    from the simulation or phylogeny rates with error bands using Monte Carlo
+    error propagation."""
 
     # no. time points must match no. steps in sim data, phylo time scale is
     # different
