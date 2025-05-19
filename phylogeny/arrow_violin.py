@@ -2,16 +2,18 @@ import os
 from datetime import date
 import numpy as np
 import pandas as pd
+from textwrap import wrap
 import matplotlib.pyplot as plt
-import matplotlib as mpl
-from matplotlib.patches import FancyArrowPatch, ArrowStyle
+from matplotlib.patches import FancyArrowPatch
 from PIL import Image
 
 
-LAYOUT = "h"
-SF = 4  # 6 good for v with 2 plots # scale factor for the thickness of the arrows
+PLOT = 1  # 0-arrow violin, 1-arrow single
+P1_DSET = 3  # dataset to plot for arrow_plot in PLOT_ORDER[P1_DSET]
+SF = 4  # scale factor for the thickness of the arrows
 C_VAL = 2  # increase to increase the curviness of the arrows
 DC_VAL = 5  # increas to increase diagonal arrow curviness
+RAD = 0.5  # padding between leaf icon and circle where arrows join
 # the credible interval for shading the arrows grey or black
 # (>CI must be above or below zero to be black)
 CI = 0.90
@@ -21,11 +23,12 @@ ML_DATA = "ML6_genus_mean_rates_all"
 # sim1 = "MUT1_mcmc_11-12-24"
 # sim2 = "MUT2_mcmc_11-12-24"
 SIM1 = "MUT1_06-02-25"
-SIM2 = "MUT2_mcmc_05-02-25"
+# SIM2 = "MUT2_mcmc_05-02-25"
+SIM2 = "MUT2_320_mcmc_2_24-04-25"
 
 PLOT_ORDER = [
-    "MUT1_simulation",
-    "MUT2_simulation",
+    SIM1,
+    SIM2,
     # "jan_phylo_nat_class_uniform0-0.1_5",
     # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_5",
     # "geeta_phylo_geeta_class_uniform0-100_6",
@@ -39,6 +42,9 @@ TRANS_FNAME = ["ulvd.png", "udvd.png", "ucvd.png",  # transition icons
                "ldvd.png", "lcvd.png", "dcvd.png"]
 ICON_FNAME = ["leaf_p7a_0_0.png", "leaf_p8ae_0_0.png",  # single leaf icons
               "leaf_pd1_0_0.png", "leaf_pc1_alt_0_0.png"]
+SHOW_TITLES = True  # show titles on the plots
+PLOT_TITLES = ["MUT1", "MUT2", "Janssens et al. (2020)",
+               "Zuntini et al. (2024)", "Geeta et al. (2012)"]
 
 
 rates_map2 = {
@@ -109,8 +115,8 @@ def import_phylo_and_sim_rates(calc_diff):
                      f"posteriors_{SIM1}.csv")
     s2 = pd.read_csv(f"../data-processing/markov_fitter_reports/emcee/{SIM2}/"
                      f"posteriors_{SIM2}.csv")
-    s1["phylo-class"] = "MUT1_simulation"
-    s2["phylo-class"] = "MUT2_simulation"
+    s1["phylo-class"] = SIM1
+    s2["phylo-class"] = SIM2
 
     sim_rates = pd.concat([s1, s2]).reset_index(drop=True)
     sim_rates = sim_rates.rename(columns=rates_map2)
@@ -171,6 +177,31 @@ def import_phylo_ml_rates(calc_diff):
         qml_long["dataname"].isin(ml_plot_order)
     ].reset_index(drop=True)
     return qml_long
+
+
+def import_sim_ml_rates(calc_diff):
+    """Import Q-matrix ML estimates for sim"""
+    mut1_ml = pd.read_csv(
+        f"../data-processing/markov_fitter_reports/emcee/{SIM1}/ML_{SIM1}.csv")
+    mut2_ml = pd.read_csv(
+        f"../data-processing/markov_fitter_reports/emcee/{SIM2}/ML_{SIM2}.csv")
+    mut1_ml["Dataset"] = SIM1
+    mut2_ml["Dataset"] = SIM2
+    sim_ml = pd.concat([mut1_ml, mut2_ml], ignore_index=True)
+    sim_ml = sim_ml.rename(columns=rates_map2)
+
+    if calc_diff:
+        transitions = rates_map3.values()
+        for fwd in transitions:
+            bwd = fwd[2] + "→" + fwd[0]
+            if fwd != bwd:
+                col_name = f"{fwd}-{bwd}"
+                sim_ml[col_name] = sim_ml[fwd] - sim_ml[bwd]
+
+    sim_ml_long = pd.melt(sim_ml, id_vars="Dataset",
+                          var_name="transition", value_name="rate")
+    sim_ml_long["dataname"] = sim_ml_long["Dataset"] + "_class"
+    return sim_ml_long
 
 
 def test_rates_diff_from_zero(phy_sim):
@@ -280,10 +311,10 @@ def arc(ax, startpoint, endpoint, curvature, rate, rate_c, rate_std,
         ax.add_patch(arrow_lb)
 
 
-def nodes(ax, c_proper, rad, texts, icon_imgs):
+def nodes(ax, texts, icon_imgs):
     """Draw nodes with leaf icons and text"""
     # textplacement goes from top right clockwise
-    # text_placement = ((-0.7, 0.7), (0.7, 0.7), (0.7, -0.7), (-0.7, -0.7))
+    c_proper = {"u": (2, 6), "l": (6, 6), "d": (6, 2), "c": (2, 2)}  # node pos
     text_placement = ((-0.1, 1), (0.1, 1), (0.1, -1), (-0.1, -1))
     for i, center in enumerate(c_proper.values()):
         x, y = center
@@ -293,12 +324,8 @@ def nodes(ax, c_proper, rad, texts, icon_imgs):
 
         ax.imshow(
             icon_imgs[i],
-            extent=[
-                x - (w * scf / 2),
-                x + (w * scf / 2),
-                y - (h * scf / 2),
-                y + (h * scf / 2),
-            ],
+            extent=[x - (w * scf / 2), x + (w * scf / 2),
+                    y - (h * scf / 2), y + (h * scf / 2)],
             rasterized=True,
         )
 
@@ -309,32 +336,8 @@ def nodes(ax, c_proper, rad, texts, icon_imgs):
             horizontalalignment="left" if i in [1, 2] else "right",
             verticalalignment="center",
             color="black",
+            fontsize=9,
         )
-
-
-def import_sim_ml_rates(calc_diff):
-    """Import Q-matrix ML estimates for sim"""
-    mut1_ml = pd.read_csv(
-        f"../data-processing/markov_fitter_reports/emcee/{SIM1}/ML_{SIM1}.csv")
-    mut1_ml["Dataset"] = "MUT1_simulation"
-    mut2_ml = pd.read_csv(
-        f"../data-processing/markov_fitter_reports/emcee/{SIM2}/ML_{SIM2}.csv")
-    mut2_ml["Dataset"] = "MUT2_simulation"
-    sim_ml = pd.concat([mut1_ml, mut2_ml], ignore_index=True)
-    sim_ml = sim_ml.rename(columns=rates_map2)
-
-    if calc_diff:
-        transitions = rates_map3.values()
-        for fwd in transitions:
-            bwd = fwd[2] + "→" + fwd[0]
-            if fwd != bwd:
-                col_name = f"{fwd}-{bwd}"
-                sim_ml[col_name] = sim_ml[fwd] - sim_ml[bwd]
-
-    sim_ml_long = pd.melt(sim_ml, id_vars="Dataset",
-                          var_name="transition", value_name="rate")
-    sim_ml_long["dataname"] = sim_ml_long["Dataset"] + "_class"
-    return sim_ml_long
 
 
 def normalise_rates(phy_sim, ml_q_phy, ml_q_sim):
@@ -466,55 +469,51 @@ def normalise_rates(phy_sim, ml_q_phy, ml_q_sim):
     return phy_sim, ml_q_phy, ml_q_sim
 
 
-def draw_arc(r, at, to, ax, c, rc, rs, sig, c_val, dc_val):
-    """Draw the appropriate arcs between nodes depending on the node
-    identities."""
-    if r > 0:
-        if at + to == "ul":
-            arc(ax, c["uS"], c["lS"], "+",
-                r, rc, rs, sig, c_val)
-        if at + to == "lu":
-            arc(ax, c["lN"], c["uN"], "+",
-                r, rc, rs, sig, c_val)
-        if at + to == "ld":
-            arc(ax, c["lE"], c["dE"], "-",
-                r, rc, rs, sig, c_val)
-        if at + to == "dl":
-            arc(ax, c["dE"], c["lE"], "+",
-                r, rc, rs, sig, c_val)
-        if at + to == "dc":
-            arc(ax, c["dS"], c["cS"], "-",
-                r, rc, rs, sig, c_val)
-        if at + to == "cd":
-            arc(ax, c["cS"], c["dS"], "+",
-                r, rc, rs, sig, c_val)
-        if at + to == "cu":
-            arc(ax, c["cW"], c["uW"], "-",
-                r, rc, rs, sig, c_val)
-        if at + to == "uc":
-            arc(ax, c["uE"], c["cE"], "-",
-                r, rc, rs, sig, c_val)
+def arcs(plot_data, ax, c_val, dc_val):
+    """Draw single arcs between each node with thickness porportional to the
+    net rate."""
+    c = {  # define arrow attachment points for nodes
+        "uN": (2, 6 + RAD), "uE": (2 + RAD, 6), "uS": (2, 6 - RAD),
+        "uW": (2 - RAD, 6), "lN": (6, 6 + RAD), "lE": (6 + RAD, 6),
+        "lS": (6, 6 - RAD), "lW": (6 - RAD, 6), "dN": (6, 2 + RAD),
+        "dE": (6 + RAD, 2), "dS": (6, 2 - RAD), "dW": (6 - RAD, 2),
+        "cN": (2, 2 + RAD), "cE": (2 + RAD, 2), "cS": (2, 2 - RAD),
+        "cW": (2 - RAD, 2),
+    }
+    # map transitions to their arc parameters: (start, end, curvature, is_diag)
+    arc_map = {
+        "ul": ("uS", "lS", "+", False),
+        "lu": ("lN", "uN", "+", False),
+        "ld": ("lE", "dE", "-", False),
+        "dl": ("dE", "lE", "+", False),
+        "dc": ("dS", "cS", "-", False),
+        "cd": ("cS", "dS", "+", False),
+        "cu": ("cW", "uW", "-", False),
+        "uc": ("uE", "cE", "-", False),
+        # diagonals
+        "ud": ("uS", "dW", "+", True),
+        "du": ("dW", "uS", "-", True),
+        "cl": ("cE", "lS", "+", True),
+        "lc": ("lS", "cE", "-", True),
+    }
 
-        #### diagonals ####
-        if at == "u" and to == "d":
-            arc(ax, c["uS"], c["dW"], "+",
-                r, rc, rs, sig, dc_val)
-        if at == "d" and to == "u":
-            arc(ax, c["dW"], c["uS"], "-",
-                r, rc, rs, sig, dc_val)
-        if at == "c" and to == "l":
-            arc(ax, c["cE"], c["lS"], "+",
-                r, rc, rs, sig, dc_val)
-        if at == "l" and to == "c":
-            arc(ax, c["lS"], c["cE"], "-",
-                r, rc, rs, sig, dc_val)
+    for _, row in plot_data.iterrows():
+        at = row["fwd"][0]
+        to = row["fwd"][2]
+        key = at + to
+        r = row["mean_rate_norm"] * SF
+        rc = "lightgrey" if row["prop_over_zero"] < CI else "black"
+        sig = row["prop_over_zero"] >= CI
+        rs = False  # set to false to disable multi-arrows
+
+        if r > 0 and key in arc_map:
+            start, end, curvature, is_diag = arc_map[key]
+            curv = dc_val if is_diag else c_val
+            arc(ax, c[start], c[end], curvature, r, rc, rs, sig, curv)
 
 
-def arrow_viol_h():
-    """Plot arrows and violin plots for all phylo and sim rates"""
-    # plt.rcParams["font.family"] = "CMU Serif"
-
-    # import icon images
+def import_imgs():
+    """Import leaf icon images"""
     icons = [os.path.join("uldc_model_icons", p) for p in ICON_FNAME]
     transition_icons = [
         os.path.join("uldc_model_icons", p) for p in TRANS_FNAME
@@ -522,85 +521,58 @@ def arrow_viol_h():
     icon_imgs = [Image.open(p) for p in icons]
     trans_imgs = [Image.open(p) for p in transition_icons]
 
+    return icon_imgs, trans_imgs
+
+
+def arrow_viol_h():
+    """Plot arrows and violin plots for all phylo and sim rates"""
+    # plt.rcParams["font.family"] = "CMU Serif"
+    icon_imgs, trans_imgs = import_imgs()  # import icon images
+
     # load rate data
     ml_q_phy = import_phylo_ml_rates(calc_diff=True)
     ml_q_sim = import_sim_ml_rates(calc_diff=True)
     phy_sim = import_phylo_and_sim_rates(calc_diff=True)
-    phy_sim, ml_q_phy, ml_q_sim = normalise_rates(
-        phy_sim, ml_q_phy, ml_q_sim
-    )
+    phy_sim, ml_q_phy, ml_q_sim = normalise_rates(phy_sim, ml_q_phy, ml_q_sim)
 
     # process rate data
-    rate_data = test_rates_diff_from_zero(phy_sim)
-    rate_data["fwd"] = rate_data["transition"].str[:3]
-    rate_data["bwd"] = rate_data["transition"].str[-3:]
-    rate_data.to_csv(f"rate_data_bw_fw_{str(date.today())}.csv", index=False)
+    q_data = test_rates_diff_from_zero(phy_sim)
+    q_data["fwd"] = q_data["transition"].str[:3]
+    q_data["bwd"] = q_data["transition"].str[-3:]
+    q_data.to_csv(f"q_data_bw_fw_{str(date.today())}.csv", index=False)
 
     cmap = plt.get_cmap("viridis")
-    rate_data["std_c"] = rate_data["std"].map(cmap)
-    rate_data.to_csv(
-        f"rate_data_{NORM_MTHD}_{str(date.today())}.csv", index=False)
+    q_data["std_c"] = q_data["std"].map(cmap)
+    q_data.to_csv(
+        f"q_data_{NORM_MTHD}_{str(date.today())}.csv", index=False)
 
     # define arrow properties and plot titles
-    c_proper = {"u": (2, 6), "l": (6, 6), "d": (6, 2), "c": (2, 2)}
-    rad = 0.5  # padding between leaf icon and circle where arrows join
-    texts = ["Unlobed", "Lobed", "Dissected",
-             "Compound"] if LAYOUT == "v" else ["", "", "", ""]
-    c = {  # define arrow attachment points for nodes
-        "uN": (2, 6 + rad),
-        "uE": (2 + rad, 6),
-        "uS": (2, 6 - rad),
-        "uW": (2 - rad, 6),
-        "lN": (6, 6 + rad),
-        "lE": (6 + rad, 6),
-        "lS": (6, 6 - rad),
-        "lW": (6 - rad, 6),
-        "dN": (6, 2 + rad),
-        "dE": (6 + rad, 2),
-        "dS": (6, 2 - rad),
-        "dW": (6 - rad, 2),
-        "cN": (2, 2 + rad),
-        "cE": (2 + rad, 2),
-        "cS": (2, 2 - rad),
-        "cW": (2 - rad, 2),
-    }
+    texts = ["", "", "", ""]  # labels for the leaf icons
     transitions = ["l→u-u→l", "d→u-u→d", "c→u-u→c",
                    "l→d-d→l", "l→c-c→l", "d→c-c→d"]
-    plot_titles = ["MUT1", "MUT2", "Janssens et al. (2020)",
-                   "Zuntini et al. (2024)", "Geeta et al. (2012)"]
 
     # Set up fig
     fig, axs = plt.subplots(2, len(PLOT_ORDER), figsize=(14, 6))
     ax_g1 = axs[0]  # 1st row subplots
     ax_g2 = axs[1]  # 2nd row subplots
     for i, ax in enumerate(ax_g1):  # arrow plots
-        dataset = PLOT_ORDER[i]
         ax.axis("off")
         ax.set_xlim(0, 8)
         ax.set_ylim(0, 8)
-        plot_data = rate_data[rate_data["dataset"] == dataset]
-        nodes(ax, c_proper, rad, texts, icon_imgs)
-        for _, row in plot_data.iterrows():
-            at = row["fwd"][0]
-            to = row["fwd"][2]
-            # increase the SF to scale the width of the arrows
-            r = row["mean_rate_norm"] * SF  # adjusted rate
-            rc = "lightgrey" if row["prop_over_zero"] < CI else "black"
-            sig = False if row["prop_over_zero"] < CI else True
-            rs = False  # set to false to disable multi-arrows
+        plot_data = q_data[q_data["dataset"] == PLOT_ORDER[i]]
+        nodes(ax, texts, icon_imgs)  # draw nodes with leaf icons
+        arcs(plot_data, ax, C_VAL, DC_VAL)  # draw arrow
 
-            draw_arc(r, at, to, ax, c, rc, rs, sig,
-                     C_VAL, DC_VAL)  # draw arrow
-
-        title = plot_titles[i]
-        ax.set_title(title, fontsize=9)
+        if SHOW_TITLES:
+            # ax.set_title(PLOT_TITLES[i], fontsize=9)
+            ax.set_title("\n".join(wrap(PLOT_ORDER[i], 40)), fontsize=9)
 
     for i, ax in enumerate(ax_g2):  # violin plots
-        mcmc_phy_pdata = phy_sim[phy_sim["Dataset"] == dataset]
+        mcmc_phy_pdata = phy_sim[phy_sim["Dataset"] == PLOT_ORDER[i]]
         ml_phy_pdata = ml_q_phy[ml_q_phy["dataname"].apply(
-            lambda x: x in dataset)]
+            lambda x: x in PLOT_ORDER[i])]
         ml_sim_pdata = ml_q_sim[
-            ml_q_sim["Dataset"].apply(lambda x: x in dataset)]
+            ml_q_sim["Dataset"].apply(lambda x: x in PLOT_ORDER[i])]
         rates = []
         ml_rates = []
         for transition in transitions:
@@ -626,12 +598,12 @@ def arrow_viol_h():
                 ml_rates.append(np.nan)
 
         ax.violinplot(rates, showextrema=False, showmeans=True)
-
         if ML_DATA:
             pos = list(range(1, len(transitions) + 1))
             ax.scatter(pos, ml_rates, color="black", zorder=5, s=8,
                        facecolors="white")  # , marker="D")
-        ax.axhline(0, linestyle="--", color="C1", alpha=0.5)
+        # ax.axhline(0, linestyle="--", color="gray", alpha=0.5)
+        ax.grid(alpha=0.3)
         ax.set_ylim(-8, 8)
         ax.set_xticks(
             list(range(1, len(transitions) + 1)),
@@ -675,5 +647,55 @@ def arrow_viol_h():
     plt.show()
 
 
+def arrow_plot():
+    """
+    Plot arrow plot for single dataset given by PLOT_ORDER[dset]
+    [dset]  0 - MUT1
+            1 - MUT2
+            2 - Janssens et al. (2020)
+            3 - Zuntini et al. (2024)
+            4 - Geeta et al. (2012)
+    """
+
+    icon_imgs, _ = import_imgs()  # import icon images
+    texts = ["Unlobed", "Lobed",
+             "Dissected", "Compound"]  # labels for the leaf icons
+
+    # load rate data
+    ml_q_phy = import_phylo_ml_rates(calc_diff=True)
+    ml_q_sim = import_sim_ml_rates(calc_diff=True)
+    phy_sim = import_phylo_and_sim_rates(calc_diff=True)
+    phy_sim, ml_q_phy, ml_q_sim = normalise_rates(phy_sim, ml_q_phy, ml_q_sim)
+
+    # process rate data
+    q_data = test_rates_diff_from_zero(phy_sim)
+    q_data["fwd"] = q_data["transition"].str[:3]
+    q_data["bwd"] = q_data["transition"].str[-3:]
+    q_data.to_csv(f"q_data_bw_fw_{str(date.today())}.csv", index=False)
+
+    _, ax = plt.subplots(figsize=(3, 3))
+    ax.set_xlim(0, 8)
+    ax.set_ylim(0, 8)
+    plot_data = q_data[q_data["dataset"] == PLOT_ORDER[P1_DSET]]  # sub dataset
+
+    # Plotting
+    ax.axis("off")
+    nodes(ax, texts, icon_imgs)  # draw nodes with leaf icons
+    arcs(plot_data, ax, C_VAL, DC_VAL)  # draw arrows
+    if SHOW_TITLES:
+        # ax.set_title(PLOT_TITLES[dset])
+        ax.set_title("\n".join(wrap(PLOT_ORDER[P1_DSET], 40)), fontsize=9)
+    plt.savefig(
+        f"arrow_plot_{PLOT_ORDER[P1_DSET]}.svg", format="svg", dpi=1200)
+    print(f"Exported arrow_plot_{PLOT_ORDER[P1_DSET]}.svg")
+    plt.show()
+
+
 if __name__ == "__main__":
-    arrow_viol_h()
+    for name, val in zip(list(globals()), list(globals().values())):
+        if name.isupper():
+            print(name, val)
+    if PLOT == 0:
+        arrow_viol_h()
+    elif PLOT == 1:
+        arrow_plot()
