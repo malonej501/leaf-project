@@ -8,6 +8,19 @@ library(svglite)
 library(stringr)
 library(RColorBrewer)
 
+show_tip_labs <- FALSE # set to True to show tip labs on tree plots
+show_order_heatmap <- FALSE # set to True to show order heatmap on tree plots
+scale_bar <- FALSE # show scale bar on tree plots
+legend <- FALSE # show legend on tree plots
+tree_plot <- 1 # choose from tree_files which tree to plot
+branch_width <- 0.3 # set the branch width for the tree plot 0.1 default
+tree_files <- c(
+  "zun_genus_phylo_nat_class_26-09-24.tre",
+  "jan_genus_phylo_nat_class_26-09-24.tre",
+  "geeta_phylo_geeta_class_23-04-24.tre",
+  "jan_phylo_nat_class_21-01-24.tre"
+)
+
 import_trees <- function() {
   # import trees
   tre_names <- sort(list.files("phylo_data/trees_final"))
@@ -118,59 +131,58 @@ plot_ggtrees <- function(summary) {
   # set the vertical justification for tip labels and heatmap labels to
   # ensure alignmnet with tree tips
   tiplab_vjust <- 0.25
-  # plot_tree <- "zun_genus_phylo_nat_class_26-09-24.tre" # tree to plot
-  # plot_tree <- "jan_phylo_nat_class_21-01-24.tre"
-  plot_tree <- "jan_genus_phylo_nat_class_26-09-24.tre"
+  dataset <- tree_files[tree_plot]
   label_data <- import_labels()
   label_data <- map_higher_order_labels(label_data)
   print(label_data)
-  tree_names <- summary$dataset
-  # tree_names <- list("jan_genus_phylo_nat_class_26-09-24.tre")
-  tree_names <- list(plot_tree)
-  # tree_names <- list("geeta_phylo_geeta_class_23-04-24.tre")
   trees <- list() # Initialize an empty list to store trees
   heatmap_data <- c()
 
-  for (dataset in tree_names) {
-    data_name <- sub("^(.*class).*", "\\1", dataset)
-    tree_path <- paste0("phylo_data/trees_final/", dataset)
-    tree <- read.nexus(tree_path)
-    labels <- label_data[label_data$dataset == data_name, ]
-    # Create a data frame with the tree tip labels in the tree order
-    label_data_ordered <- data.frame("label" = tree$tip.label)
-    # Join with the labels data frame to get the order
-    label_data_ordered <- left_join(label_data_ordered, labels, by = "label")
-    # here we specify the taxonomic level to be used for the heatmap
-    heatmap_data <- data.frame("order" = label_data_ordered$order)
-    rownames(heatmap_data) <- label_data_ordered$label
+  data_name <- sub("^(.*class).*", "\\1", dataset)
+  tree_path <- paste0("phylo_data/trees_final/", dataset)
+  tree <- read.nexus(tree_path)
+  labels <- label_data[label_data$dataset == data_name, ]
+  # Create a data frame with the tree tip labels in the tree order
+  label_data_ordered <- data.frame("label" = tree$tip.label)
+  # Join with the labels data frame to get the order
+  label_data_ordered <- left_join(label_data_ordered, labels, by = "label")
+  # here we specify the taxonomic level to be used for the heatmap
+  heatmap_data <- data.frame("order" = label_data_ordered$order)
+  rownames(heatmap_data) <- label_data_ordered$label
 
-    if (inherits(tree, "phylo")) {
-      tree <- left_join(tree, labels, by = "label")
-      trees[[dataset]] <- tree
-    } else if (inherits(tree, "multiPhylo")) {
-      tree <- left_join(tree[[1]], labels, by = "label")
-      trees[[dataset]] <- tree # Select first tree if multiPhylo
-    }
+  if (inherits(tree, "phylo")) {
+    tree <- left_join(tree, labels, by = "label")
+    trees[[dataset]] <- tree
+  } else if (inherits(tree, "multiPhylo")) {
+    tree <- left_join(tree[[1]], labels, by = "label")
+    trees[[dataset]] <- tree # Select first tree if multiPhylo
   }
+
   class(trees) <- "multiPhylo"
   print(trees[[1]])
   p <- ggtree(trees,
     layout = "circular",
-    size = ifelse(length(trees) == 1, 0.1, 0.07)
+    size = branch_width
   ) +
     aes(colour = shape) +
     facet_wrap(~.id, scale = "free", ncol = 4) +
     # theme_tree2() +
     # geom_tippoint(aes(colour=factor(order))) +
-    geom_tiplab(size = tiplab_text_size, vjust = tiplab_vjust) +
     scale_color_manual(values = c(
       "unlobed" = "#0173B2",
       "lobed" = "#DE8F05", "dissected" = "#029E73",
       "compound" = "#D55E00"
-    )) +
-    # width=0.1 for geeta, 100 for jan, zun
-    geom_treescale(x = 0, y = 0, width = 100, offset = 5)
+    ))
 
+  if (!legend) {
+    p <- p + theme(legend.position = "none")
+  }
+  if (scale_bar) { # width=0.1 for geeta, 100 for jan, zun
+    p <- p + geom_treescale(x = 0, y = 0, width = 100, offset = 5)
+  }
+  if (show_tip_labs) {
+    p <- p + geom_tiplab(size = tiplab_text_size, vjust = tiplab_vjust)
+  }
   # gives the tip labels in the order they appear in ggplot
   tips_plot_order <- rev(get_taxa_name(p))
   tips_ape_order <- rownames(heatmap_data)
@@ -187,20 +199,24 @@ plot_ggtrees <- function(summary) {
   add_nodes <- total_nodes - length(ang)
   ang_ext <- c(ang, rep(list(NULL), add_nodes))
 
-  p <- gheatmap(p, heatmap_data,
-    offset = 0.05, width = 0.1, color = NULL,
-    colnames = TRUE, hjust = 0.5, colnames_offset_x = 5
-  ) +
-    scale_fill_viridis_d(option = "D") +
-    geom_text(aes(label = order, angle = ang_ext),
-      color = "white",
-      size = tiplab_text_size, nudge_x = 20, vjust = tiplab_vjust, hjust = 0.5
+  if (show_order_heatmap) {
+    p <- gheatmap(p, heatmap_data,
+      offset = 0.05, width = 0.1, color = NULL,
+      colnames = TRUE, hjust = 0.5, colnames_offset_x = 5
     ) +
-    guides(fill = "none") # remove heatmap legend
+      scale_fill_viridis_d(option = "D") +
+      geom_text(aes(label = order, angle = ang_ext),
+        color = "white", size = tiplab_text_size, nudge_x = 20,
+        vjust = tiplab_vjust, hjust = 0.5
+      ) +
+      guides(fill = "none") # remove heatmap legend
+  }
   ggsave(
-    file = paste0(plot_tree, ".svg"), plot = p, width = 10, height = 10,
+    file = paste0(dataset, ".svg"), plot = p, width = 10, height = 10,
     dpi = 10000
   ) # text below a certain size will not be rendered with .pdf
+  print(paste("Tree plot exported as", dataset, ".svg"))
+  print(p)
 }
 
 get_shape_counts <- function(summary) {
