@@ -11,7 +11,7 @@ from scipy.stats import chisquare, chi2
 from PIL import Image
 import seaborn as sns
 
-PLOT = 4  # type of plot to produce
+PLOT = 1  # type of plot to produce
 # 0-three rows with error bars,
 # 1-two rows with mean model,
 # 2-proportion of shapes over simulation time against model predictions
@@ -47,6 +47,8 @@ SHOW_PHYLO = True
 SHOW_STAT_DIST = False  # show stationary values for phylo and sim CTMC
 LEAF_ICONS = True  # show leaf icons in plot
 V = False  # verbose for debugging
+AL = 1  # alpha for line plots
+AF = 0.2  # alpha for fill_between
 
 # sns.set_palette("colorblind")
 ORDER = ["u", "l", "d", "c"]
@@ -463,135 +465,134 @@ def plot_sim_and_phylogeny_curves_nouncert():
     simulation and phylogeny CTMCs. The scale for the phylogeny is different
     to the simulation scale."""
 
-    #### Get phylo-rates ####
-    phylo_summary, _ = get_phylo_rates()
-    #### Get sim-rates ####
-    sim_summary, _ = get_sim_rates()
-    #### Get sim timeseries data ####
-    tseries = get_timeseries()
+    cmap = plt.get_cmap("tab10")
 
-    # produce phylo-curves
-    t_calc = np.linspace(0, PHYLO_XLIM, 100)
-    t_plot = t_calc
-    phylo_curves = []
-    q = np.array(phylo_summary["mean_rate"].values).reshape(4, 4)
-    ql = np.array(phylo_summary["lb"].values).reshape(4, 4)
-    qu = np.array(phylo_summary["ub"].values).reshape(4, 4)
-    for t in t_calc:
-        pt = linalg.expm(q * t)
-        pllt = linalg.expm(ql * t)
-        puut = linalg.expm(qu * t)
-        phylo_curves.append([pt, pllt, puut])
-    phylo_plot = pd.DataFrame(
-        plot_data_from_probcurves(phylo_curves, t_plot, t_calc))
-
-    # produce sim-curves
-    t_calc = np.linspace(SIM_XON, SIM_XLIM, 100)
-    t_plot = t_calc
-    if RESET_FIRST_CAT:
-        t_calc = np.linspace(0, SIM_XLIM-SIM_XON, 100)
-        t_plot = np.linspace(SIM_XON, SIM_XLIM, 100)
-    sim_curves = []
-    q = np.array(sim_summary["mean_rate"].values).reshape(4, 4)
-    ql = np.array(sim_summary["lb"].values).reshape(4, 4)
-    qu = np.array(sim_summary["ub"].values).reshape(4, 4)
-    for t in t_calc:
-        pt = linalg.expm(q * t)
-        pllt = linalg.expm(ql * t)
-        puut = linalg.expm(qu * t)
-        sim_curves.append([pt, pllt, puut])
-    sim_plot = pd.DataFrame(
-        plot_data_from_probcurves(sim_curves, t_plot, t_calc))
-
-    # Create subplots
-    # plt.rcParams["font.family"] = "CMU Serif"
-    fig, axs = plt.subplots(nrows=4, ncols=5, figsize=(11, 7),
-                            gridspec_kw={"height_ratios": [3, 3, 1, 3]})
-    lines = []
-    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
-
-    for i, row in enumerate(axs):
-        for j, ax in enumerate(row):
-            idx = j - 1
-            sim_cat_data = pd.DataFrame()
-            if i < 1 or j < 1:
-                ax.axis("off")
-                continue
-            cat = ORDER[idx]
-            if idx != 0:
-                ax.set_yticklabels([])
-            if i == 1:  # timeseries data on the left
-                cat_data = tseries[tseries["first_cat"] == cat]
-                cat_data = cat_data.rename(columns={VAR: "P", "step": "t"})
-                ax.set_title(order_full[idx])
-                ax.set_xlim(SIM_XON, SIM_XLIM)
-                ax.set_xticks(
-                    np.arange(SIM_XON, SIM_XLIM + 1, (SIM_XLIM-SIM_XON)/4))
-                ax.set_xlabel("Step")
-                if idx == 0:
-                    ax.set_ylabel("P")
-                sim_cat_data = sim_plot[sim_plot["first_cat"] == cat]
-                sim_cat_data = sim_cat_data.rename(
-                    columns={VAR: "P", "step": "t"})
-            if i == 2:
-                ax.axis("off")
-            if i == 3:  # phylogeny data on the right
-                cat_data = phylo_plot[phylo_plot["first_cat"] == cat]
-                ax.set_xlim(0, PHYLO_XLIM)
-                ax.set_xlabel("Branch length (Myr)")
-                ax.set_xticks(np.arange(0, PHYLO_XLIM+1, PHYLO_XLIM/4))
-                if idx == 0:
-                    ax.set_ylabel("P")
-            if i != 2:
-                for s, shape in enumerate(ORDER):
-                    sd = cat_data[cat_data["shape"] == shape]  # shape data
-                    (line,) = ax.plot(sd["t"], sd["P"], label=shape,
-                                      c=sns.color_palette("colorblind")[s],
-                                      linestyle="--" if i == 1 else "-")
-                    ax.fill_between(sd["t"], sd["lb"], sd["ub"], alpha=0.2)
-                    if not sim_cat_data.empty:
-                        sd = sim_cat_data[sim_cat_data["shape"] == shape]
-                        (line,) = ax.plot(sd["t"], sd["P"], label=shape,
-                                          c=sns.color_palette("colorblind")[s],
-                                          linestyle="-")
-                        lines.append(line)
-            ax.set_ylim(0, 1)
-
-            if YSCALE == "log":
-                ax.set_ylim(1e-2, 1)
-                ax.set_yscale(YSCALE)
-                if j > 1:  # y labs off for all but leftmost panels
-                    ax.set_yticklabels([])
-
+    # load icons
     icon_filenames = ["u.png", "l.png", "d.png", "c.png"]
     icons = [os.path.join("uldc_model_icons", path) for path in icon_filenames]
     icon_imgs = [Image.open(path) for path in icons]
-    img_width, img_height = icon_imgs[1].size
-    sf = 1.1
 
-    for j in range(0, 4):
-        ax = axs[0, j + 1]
-        ax.imshow(icon_imgs[j])
-        ax.set_xlim(0 + (img_width * (sf - 1)),
-                    img_width - (img_width * (sf - 1)))
-        ax.set_ylim(img_height, -(img_height / sf))
-    for idx, i in enumerate([1, 3]):
-        ax = axs[i, 0]
-        labs = ["Simulation Data\nand CTMC (MUT2)",
-                "Phylogeny CTMC\nZuntini et al. (2024)"]
-        ax.text(0.2, 0.5, labs[idx], ha="center", va="center")
-    legend = fig.legend(
-        lines,
+    #### Get phylo-rates ####
+    _, raw_zun = get_phylo_rates(PHYLORATES1, "mcmc")
+    _, raw_zun_mle = get_phylo_rates(PHYLORATES_ML1, "mle")
+
+    #### Get sim-rates ####
+    _, raw_sim = get_sim_rates("mcmc")
+    _, raw_sim_mle = get_sim_rates("mle")
+
+    #### Get sim timeseries data ####
+    tseries = get_timeseries()
+    tseries = tseries.rename(columns={"mean_prop": "prop"})  # line is mean
+
+    ppzs = []
+    ppzs_mle = []
+    psims = []
+    psims_mle = []
+    for i, s in enumerate(ORDER):  # loop for different inits
+        init_ratio = np.zeros(4)
+        init_ratio[i] = 1
+        # produce phylo-curves
+        ppz = get_plot_vals_alt(raw_zun, init_ratio, "phylo", "mcmc")
+        ppz_mle = get_plot_vals_alt(raw_zun_mle, init_ratio, "phylo", "mle")
+        ppz["first_cat"] = s  # append first_cat
+        ppz_mle["first_cat"] = s
+        ppzs.append(ppz)
+        ppzs_mle.append(ppz_mle)
+        # produce sim-curves
+        psim = get_plot_vals_alt(raw_sim, init_ratio, "sim", "mcmc")
+        psim_mle = get_plot_vals_alt(raw_sim_mle, init_ratio, "sim", "mle")
+        psim["first_cat"] = s  # append first_cat
+        psim_mle["first_cat"] = s
+        psims.append(psim)
+        psims_mle.append(psim_mle)
+    ppz = pd.concat(ppzs, ignore_index=True)
+    ppz_mle = pd.concat(ppzs_mle, ignore_index=True)
+    psim = pd.concat(psims, ignore_index=True)
+    psim_mle = pd.concat(psims_mle, ignore_index=True)
+
+    # Create subplots
+    # plt.rcParams["font.family"] = "CMU Serif"
+    fig, axs = plt.subplots(nrows=4, ncols=5, figsize=(11, 6),
+                            gridspec_kw={"height_ratios": [0.01, 3, 0.5, 3]},
+                            sharey="row", layout="constrained")
+    axs_g0 = axs[0][1:]  # for icons
+    axs_g1 = axs[1][1:]  # for timeseries
+    axs_g3 = axs[3][1:]  # for phylogeny
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+
+    for i, ax in enumerate(axs_g1):  # loop for first_cat
+        ts = tseries[tseries["first_cat"] == ORDER[i]]  # sub for first_cat
+        sim = psim[psim["first_cat"] == ORDER[i]]
+        sim_mle = psim_mle[psim_mle["first_cat"] == ORDER[i]]
+        for j, s in enumerate(ORDER):  # loop for shape
+            ts_s = ts[ts["shape"] == s]  # add sim data
+            ax.plot(ts_s["step"], ts_s["prop"],
+                    label=s, color=cmap(j), ls="--")
+            ax.fill_between(ts_s["step"], ts_s["lb"], ts_s["ub"],
+                            alpha=AF, color=cmap(j), ec=None)
+            sim_s = sim[sim["shape"] == s]  # add sim ctmc
+            sim_mle_s = sim_mle[sim_mle["shape"] == s]
+            ax.plot(sim_mle_s["t"], sim_mle_s["P"],
+                    label=s,  color=cmap(j))
+            # ax.fill_between(sim_s["t"], sim_s["lb"], sim_s["ub"],
+            #                 alpha=af, color=cmap(j), ec=None)
+            ax.set_title(order_full[i])
+        ax.set_xlabel("Step")
+        ax.set_xlim(SIM_XON, SIM_XLIM)
+        ax.set_xticks(np.arange(SIM_XON, SIM_XLIM + 1, (SIM_XLIM-SIM_XON)/4))
+
+        if i == 0:
+            ax.tick_params(axis="y", labelleft=True)
+            ax.set_ylabel("P")
+
+    for i, ax in enumerate(axs_g3):  # add phylo data
+        ppz_s = ppz[ppz["first_cat"] == ORDER[i]]
+        ppz_mle_s = ppz_mle[ppz_mle["first_cat"] == ORDER[i]]
+        for s in ORDER:
+            ppz_ss = ppz_s[ppz_s["shape"] == s]
+            ppz_mle_ss = ppz_mle_s[ppz_mle_s["shape"] == s]
+            ax.plot(ppz_mle_ss["t"], ppz_mle_ss["P"], label=s)
+            ax.fill_between(ppz_ss["t"], ppz_ss["lb"], ppz_ss["ub"], alpha=AF)
+        ax.set_xlabel("Branch length (Myr)")
+        ax.set_xlim(0, PHYLO_XLIM)
+        ax.set_xticks(np.arange(0, PHYLO_XLIM+1, PHYLO_XLIM/4))
+
+        if i == 0:
+            ax.tick_params(axis="y", labelleft=True)
+            ax.set_ylabel("P")
+
+    for i, ax in enumerate(axs_g0):  # add icons
+        imbg_box = OffsetImage(icon_imgs[i], zoom=0.12, alpha=0.5)
+        aln = (0.5, 0)
+        ab = AnnotationBbox(
+            imbg_box,
+            aln,
+            xycoords="axes fraction",
+            box_alignment=aln,  # upper right corner alignment
+            frameon=False,
+            pad=0.2,
+        )
+        ax.add_artist(ab)
+        ax.axis("off")
+
+    axs[1, 0].text(0.5, 0.5, "Simulation Data\nand CTMC (MUT2)",
+                   ha="center", va="center")
+    axs[3, 0].text(0.5, 0.5, "Phylogeny CTMC\nZuntini et al. (2024)",
+                   ha="center", va="center")
+
+    for ax in axs.flatten():
+        ax.grid(alpha=0.3)
+        if ax not in axs_g1 and ax not in axs_g3:
+            ax.axis("off")
+    handles, _ = axs_g3[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
         order_full,
         loc="outside right",
         title="Final shape",
         ncol=1,
     )
-    title = legend.get_title()
-    title.set_fontsize(11)
-    fig.tight_layout()
-    fig.subplots_adjust(wspace=0.17, hspace=0.17, right=0.84)
-    plt.savefig("curves.pdf", format="pdf", dpi=1200)
+    plt.savefig(f"curves_mcerr{MC_ERR_SAMP}.pdf", format="pdf", dpi=1200)
     plt.show()
 
 
@@ -663,7 +664,8 @@ def get_plot_vals(rates, init_ratio, dtype):
 
 def get_plot_vals_alt(rates, init_ratio, dtype, q_mthd):
     """Get the predicted proportion of each shape at each step of the walk
-    from the simulation or phylogeny rates"""
+    from the simulation or phylogeny rates with error bands using Monte Carlo
+    error propagation."""
 
     # no. time points must match no. steps in sim data, phylo time scale is
     # different
@@ -953,8 +955,6 @@ def plot_sim_and_phylogeny_curves_new_alt():
     simulation and phylogeny CTMCs. The scale for the phylogeny is different
     to the simulation scale."""
 
-    al = 1  # alpha for lines
-    af = 0.2  # alpha for fill
     icon_imgs = load_leaf_imgs()  # get leaf icons
 
     #### Get phylo-rates ####
@@ -1013,13 +1013,13 @@ def plot_sim_and_phylogeny_curves_new_alt():
                           tseries_sub["prop"], c="C0", zorder=0)
         if {"lb", "ub"}.issubset(tseries_sub.columns):  # show error
             ax.fill_between(tseries_sub["step"], tseries_sub["lb"],
-                            tseries_sub["ub"], alpha=af, color="C0", ec=None)
+                            tseries_sub["ub"], alpha=AF, color="C0", ec=None)
         sim_sub = psim[psim["shape"] == ORDER[i]]
         sim_sub_mle = psim_mle[psim_mle["shape"] == ORDER[i]]
         l_fit, = ax.plot(sim_sub_mle["t"], sim_sub_mle["P"],  # plot sim ctmc
-                         c="C1", ls="--", alpha=al)
+                         c="C1", ls="--", alpha=AL)
         ax.fill_between(sim_sub["t"], sim_sub["lb"], sim_sub["ub"],
-                        alpha=af, color="C1", ec=None)
+                        alpha=AF, color="C1", ec=None)
         ax.set_xlim(0, s_xlim_loc)
         ax.grid(alpha=0.3)
         if i in range(0, 3):
@@ -1035,16 +1035,16 @@ def plot_sim_and_phylogeny_curves_new_alt():
         ppz_sub = ppz[ppz["shape"] == ORDER[i]]
         ppz_sub_mle = ppz_mle[ppz_mle["shape"] == ORDER[i]]
         l_phy_z, = ax.plot(ppz_sub_mle["t"], ppz_sub_mle["P"], c="C2",
-                           ls="--", alpha=al)
+                           ls="--", alpha=AL)
         ax.fill_between(ppz_sub["t"], ppz_sub["lb"], ppz_sub["ub"],
-                        alpha=af, color="C2", ec=None)
+                        alpha=AF, color="C2", ec=None)
 
         ppj_sub = ppj[ppj["shape"] == ORDER[i]]
         ppj_sub_mle = ppj_mle[ppj_mle["shape"] == ORDER[i]]
         l_phy_j, = ax.plot(ppj_sub_mle["t"], ppj_sub_mle["P"], c="C3",
-                           ls="--", alpha=al)
+                           ls="--", alpha=AL)
         ax.fill_between(ppj_sub["t"], ppj_sub["lb"], ppj_sub["ub"],
-                        alpha=af, color="C3", ec=None)
+                        alpha=AF, color="C3", ec=None)
         ax.set_xlim(0, p_xlim_loc)
         ax.grid(alpha=0.3)
         if i in range(0, 3):
