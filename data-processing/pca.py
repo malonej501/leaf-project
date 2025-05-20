@@ -21,13 +21,13 @@ LEAFIDS = ["p6af", "p6i", "p7a", "p7g", "p8ae", "p8i", "p9b", "p10c7", "p12b",
 SHOW_INITS = False  # whether to show initial leaves in PCA plot
 SHOW_HULLS = False  # whether to show convex hulls in PCA plot
 ORDER = ["u", "l", "d", "c"]
-SUB_SAMPLE = False  # whether to sub-sample the data
+SUB_SAMPLE = True  # whether to sub-sample the data
 SAMP_SIZE = 1000  # no. leaves to sample at random from each shape
 P_TYPE = 4  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
 N_BINS = 30  # number of bins for hist2d/hexbin/kdeplot
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
-DATA = 1  # 0-len 80, 1-len 320
+DATA = 0  # 0-len 80, 1-len 320
 
 
 def get_p_and_s_data():
@@ -83,25 +83,30 @@ def do_pca():
     Returns the PCA results for walks and inits, and explained variance ratio.
     """
     from dataprocessing import first_cats
-
+    idxs = ["leafid", "walkid", "step"]  # index columns for data sorting
+    psdata = pd.DataFrame()  # parameter data
     if DATA == 0:
         pdata = pd.read_csv("MUT2.2_trajectories_param.csv")
         pdata = pdata[pdata.iloc[:, 3].str.contains(
             "passed")].reset_index(drop=True)  # remove failed
         pdata = pdata.rename(columns={"0": "walkid", "1": "step"})
+        pdata = pdata.iloc[:, :-6]  # remove shape info
         sdata = pd.read_csv("MUT2.2_trajectories_shape.csv")
-        sdata = sort_walk_shape_data(pdata, sdata)
-        pdata = pdata.iloc[:, 5:-6]  # remove meta data and shape info
+        sdata = sdata[idxs + ["shape"]]  # filter sdata to relevant cols
+        psdata = pd.merge(pdata, sdata, on=idxs, how="inner")  # merge shapes
+        psdata = psdata.iloc[:, 5:]  # remove meta data
 
-    else:
+    elif DATA == 1:
         if os.path.isfile(f"{WD}/params.csv") and \
                 os.path.isfile(f"{WD}/shapes.csv"):
             pdata = pd.read_csv(f"{WD}/params.csv")
-            pdata = pdata[pdata["status"] ==
+            pdata = pdata[pdata["status"] ==  # remove failed
                           "leaf_check_passed"].reset_index(drop=True)
             pdata = pdata.rename(columns={"walk_id": "walkid"})
             sdata = pd.read_csv(f"{WD}/shapes.csv")
-            sdata = sort_walk_shape_data(pdata, sdata)
+            sdata = sdata[idxs + ["shape"]]  # filter to relevant cols
+            psdata = pd.merge(pdata, sdata, on=idxs, how="inner")
+
         else:
             print("Parameter and shape data not found. Generating...")
             pdata, sdata = get_p_and_s_data()
@@ -109,27 +114,42 @@ def do_pca():
             pdata = pdata[pdata["status"] ==
                           "leaf_check_passed"].reset_index(drop=True)
             pdata = pdata.rename(columns={"walk_id": "walkid"})
-            sdata = sort_walk_shape_data(pdata, sdata)
-        # remove meta data and shape info
-        pdata = pdata.drop(["leafid", "walkid", "step", "attempt", "status",
-                            "target", "prop_weightdifference", "middle",
-                            "leafwidth", "prop_overlappingmargin",
-                            "prop_veinarea", "veinswidth",
-                            "prop_veinsoutsidelamina"], axis=1)
+            psdata = pd.merge(pdata, sdata, on=idxs, how="inner")
 
+        # remove meta data and shape info
+        psdata = psdata.drop(["leafid", "walkid", "step", "attempt", "status",
+                              "target", "prop_weightdifference", "middle",
+                              "leafwidth", "prop_overlappingmargin",
+                              "prop_veinarea", "veinswidth",
+                              "prop_veinsoutsidelamina"], axis=1)
+
+    if SUB_SAMPLE:
+        psdata = psdata.groupby("shape").apply(
+            lambda x: x.sample(SAMP_SIZE, random_state=1)
+        ).reset_index(drop=True)
+
+    # Get params and shape data for initial leaves
     pinit = pd.DataFrame(pdict.values()).transpose()  # format pdict params
     # sort first_cats to match pdict order, to ensure correct labelling
     first_cats = first_cats.set_index("leafid").reindex(leafids).reset_index()
     assert list(first_cats["leafid"]) == leafids, (
         "first_cats and pdict leafid orders do not match"
     )
+    pinit["leafid"] = leafids  # add leafid to pinit
+    psinit = pd.merge(
+        pinit, first_cats, on="leafid", how="inner")
+    psinit = psinit.drop("leafid", axis=1)  # drop leafid
+    psinit = psinit.rename(columns={"first_cat": "shape"})  # rename first_cat
+    psinit.columns = range(psinit.shape[1])  # rename cols
 
     # pinit.to_csv("pinit.csv", index=False)
 
-    pdata.columns = range(pdata.shape[1])  # rename cols
+    psdata.columns = range(psdata.shape[1])  # rename cols
 
     # combine init and random walk leaves into 1 df for pca, separate later
-    pdata = pd.concat([pinit, pdata], ignore_index=True)
+    pdata = pd.concat([psinit, psdata], ignore_index=True)
+    sdata = pdata.iloc[:, -1:]  # separate shape data
+    pdata = pdata.iloc[:, :-1]
     pdata = pdata.replace(
         {r".*true*.": 1, r".*false*.": 0, r".*nan*.": np.nan}, regex=True
     ).infer_objects(copy=False)
@@ -145,11 +165,12 @@ def do_pca():
     princip_params = pca_params.fit_transform(scaled_data)
     evr = pca_params.explained_variance_ratio_
     pdf = pd.DataFrame(data=princip_params, columns=["pc1", "pc2"])
+    pdf["shape"] = sdata  # reattach shape data
     pdf_init = pdf.iloc[: len(pinit)]  # extract PCA of inits
-    pdf_init.insert(0, "shape", first_cats["first_cat"])  # label inits
     pdf_walk = pdf.iloc[len(pinit):].reset_index(drop=True)  # drop inits
-    assert len(pdf_walk) == len(sdata), "pdf_walk and sdata not same length"
-    pdf_walk.insert(0, "shape", sdata["shape"])  # attach shape
+    assert pdf_init["shape"].equals(first_cats["first_cat"]), (
+        "pdf_init and first_cats do not match"
+    )
 
     hulls = []  # Generate convex hulls
     for shape in ORDER:
@@ -213,10 +234,10 @@ def paramspace():
 
     pdf_walk, pdf_init, evr, hulls = do_pca()
 
-    if SUB_SAMPLE:  # sub-sample the data
-        pdf_walk = pdf_walk.groupby("shape").apply(
-            lambda x: x.sample(SAMP_SIZE, random_state=1)
-        ).reset_index(drop=True)
+    # if SUB_SAMPLE:  # sub-sample the data
+    #     pdf_walk = pdf_walk.groupby("shape").apply(
+    #         lambda x: x.sample(SAMP_SIZE, random_state=1)
+    #     ).reset_index(drop=True)
 
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
     vmin, vmax = get_vmax_vmin(pdf_walk)
@@ -269,8 +290,8 @@ def paramspace():
         ax.add_artist(ab)
         ax.grid(alpha=0.3)
         ax.set_title(fr"{order_full[i]}, $N={len(pld)}$")
-        if SUB_SAMPLE:
-            ax.set_title(f"{order_full[i]}")
+        # if SUB_SAMPLE:
+        #     ax.set_title(f"{order_full[i]}")
 
         if SHOW_INITS:  # plot initial points
             ax.scatter(
