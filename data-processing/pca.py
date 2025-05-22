@@ -1,4 +1,5 @@
 import os
+from textwrap import wrap
 import pandas as pd
 import numpy as np
 from pdict import pdict, leafids
@@ -7,6 +8,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from matplotlib.patches import Polygon
 import seaborn as sns
 from PIL import Image
 
@@ -22,12 +24,21 @@ SHOW_INITS = False  # whether to show initial leaves in PCA plot
 SHOW_HULLS = False  # whether to show convex hulls in PCA plot
 ORDER = ["u", "l", "d", "c"]
 SUB_SAMPLE = True  # whether to sub-sample the data
-SAMP_SIZE = 1000  # no. leaves to sample at random from each shape
-P_TYPE = 4  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
+BOOTSTRAP = True  # do "bootstrapping" on the final PCA distribution
+SAMP_SIZE = 4000  # no. leaves to sample at random from each shape
+BOOSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
+N_BOOTSTRAP = 10000  # no. bootstrap iterations
+PLOT_BIN_COUNT_DIST = True  # show histogram of bin counts for 2D hist of PCA
+P_TYPE = 6  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
-N_BINS = 30  # number of bins for hist2d/hexbin/kdeplot
+N_BINS = 50  # number of bins for hist2d/hexbin/kdeplot
+MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
-DATA = 0  # 0-len 80, 1-len 320
+DATA = 1  # 0-len 80, 1-len 320
+N_COMP = 4  # number of PCA components to keep
+XVAR = "PC1"  # which component to plot on x-axis
+YVAR = "PC2"  # which component to plot on y-axis
+G_PARAMS = {name: val for name, val in globals().items()if name.isupper()}
 
 
 def get_p_and_s_data():
@@ -66,7 +77,7 @@ def get_p_and_s_data():
 
 
 def sort_walk_shape_data(pdata, sdata):
-    """Sort walk shape data to match parameter data according to leafid, 
+    """Sort walk shape data to match parameter data according to leafid,
     walkid and step."""
     idxs = ["leafid", "walkid", "step"]  # index columns for data sorting
     sdata_sort = sdata.set_index(idxs).reindex(pdata.set_index(idxs).index)
@@ -84,8 +95,10 @@ def do_pca():
     """
     from dataprocessing import first_cats
     idxs = ["leafid", "walkid", "step"]  # index columns for data sorting
-    psdata = pd.DataFrame()  # parameter data
-    if DATA == 0:
+
+    # Get parameter and shape data for all walks
+    psdata = pd.DataFrame()
+    if DATA == 0:  # for wl-80
         pdata = pd.read_csv("MUT2.2_trajectories_param.csv")
         pdata = pdata[pdata.iloc[:, 3].str.contains(
             "passed")].reset_index(drop=True)  # remove failed
@@ -96,7 +109,7 @@ def do_pca():
         psdata = pd.merge(pdata, sdata, on=idxs, how="inner")  # merge shapes
         psdata = psdata.iloc[:, 5:]  # remove meta data
 
-    elif DATA == 1:
+    elif DATA == 1:  # for wl-320
         if os.path.isfile(f"{WD}/params.csv") and \
                 os.path.isfile(f"{WD}/shapes.csv"):
             pdata = pd.read_csv(f"{WD}/params.csv")
@@ -125,8 +138,11 @@ def do_pca():
 
     if SUB_SAMPLE:
         psdata = psdata.groupby("shape").apply(
-            lambda x: x.sample(SAMP_SIZE, random_state=1)
+            lambda x: x.sample(SAMP_SIZE)
         ).reset_index(drop=True)
+
+    print("psdata shape counts:\n",
+          psdata.groupby("shape").size().reset_index(name='count'))
 
     # Get params and shape data for initial leaves
     pinit = pd.DataFrame(pdict.values()).transpose()  # format pdict params
@@ -140,13 +156,10 @@ def do_pca():
         pinit, first_cats, on="leafid", how="inner")
     psinit = psinit.drop("leafid", axis=1)  # drop leafid
     psinit = psinit.rename(columns={"first_cat": "shape"})  # rename first_cat
-    psinit.columns = range(psinit.shape[1])  # rename cols
-
-    # pinit.to_csv("pinit.csv", index=False)
-
-    psdata.columns = range(psdata.shape[1])  # rename cols
 
     # combine init and random walk leaves into 1 df for pca, separate later
+    psdata.columns = range(psdata.shape[1])  # rename cols
+    psinit.columns = range(psinit.shape[1])  # rename cols
     pdata = pd.concat([psinit, psdata], ignore_index=True)
     sdata = pdata.iloc[:, -1:]  # separate shape data
     pdata = pdata.iloc[:, :-1]
@@ -160,11 +173,11 @@ def do_pca():
     pdata = pdata.dropna(axis=1, how="any")  # drop columns with any NaN
 
     scaled_data = StandardScaler().fit_transform(pdata)  # scale data
-
-    pca_params = PCA(n_components=2)  # PCA
+    pca_params = PCA(n_components=N_COMP)  # PCA
     princip_params = pca_params.fit_transform(scaled_data)
     evr = pca_params.explained_variance_ratio_
-    pdf = pd.DataFrame(data=princip_params, columns=["pc1", "pc2"])
+    pdf = pd.DataFrame(data=princip_params, columns=[
+                       f"PC{i+1}" for i in range(0, N_COMP)])
     pdf["shape"] = sdata  # reattach shape data
     pdf_init = pdf.iloc[: len(pinit)]  # extract PCA of inits
     pdf_walk = pdf.iloc[len(pinit):].reset_index(drop=True)  # drop inits
@@ -175,23 +188,101 @@ def do_pca():
     hulls = []  # Generate convex hulls
     for shape in ORDER:
         pca_sub = pdf_walk[pdf_walk["shape"] == shape]
-        pca_sub = pca_sub[["pc1", "pc2"]]
+        pca_sub = pca_sub[[XVAR, YVAR]]
         hull = spatial.ConvexHull(pca_sub)
         hulls.append(hull)
 
     return pdf_walk, pdf_init, evr, hulls
 
 
-def get_vmax_vmin(pdf_walk):
-    """Get global min and max for 2d histogram, hexbin and kde plots."""
+def get_pca_lims(pdf_walk):
+    """Get global min and max for PCA space to ensure consistent binning"""
+    x_min = pdf_walk[XVAR].min()
+    x_max = pdf_walk[XVAR].max()
+    y_min = pdf_walk[YVAR].min()
+    y_max = pdf_walk[YVAR].max()
+
+    lims = [[x_min, x_max], [y_min, y_max]]
+    return lims
+
+
+def boostrap_sample(pdf_walk, lims):
+    """Sub-sample the walk data many times to build a distribution of the PCA
+    space. Counts no. bins occupied by each shape in a 2D histogram of the PCA
+    space. Returns the bootstrap samples and the 2D hist bin counts."""
+
+    bin_counts = []
+    b_pdf_walks = []
+    htmps_by_shape = {shape: []for shape in ORDER}  # Store hists by shape
+    for i in range(N_BOOTSTRAP):
+        print(f"Bootstrap {i}", end="\r")
+        b_pdf_walk = pdf_walk.groupby("shape").sample(  # with replacement
+            n=BOOSTRAP_SIZE, replace=True  # equally over shape
+        ).reset_index(drop=True)
+        b_pdf_walk["bstrap"] = i  # add bootstrap column
+        b_pdf_walks.append(b_pdf_walk)
+
+        for shape in ORDER:
+            pca_sub = b_pdf_walk[b_pdf_walk["shape"] == shape]
+            # h = plt.hexbin(
+            #     x=pca_sub[XVAR],
+            #     y=pca_sub[YVAR],
+            #     gridsize=N_BINS,
+            #     mincnt=1,
+            # )
+            # print(h)
+            # bin_count = np.count_nonzero(h.get_array())
+            h, _, _ = np.histogram2d(
+                pca_sub[XVAR], pca_sub[YVAR], bins=N_BINS,
+                range=lims)  # global min and max for consistent binning
+            bin_count = np.count_nonzero(h)
+            bin_counts.append(
+                {"bstrap": i, "shape": shape, "bin_count": bin_count})
+            htmps_by_shape[shape].append(h)
+    # plt.close()
+    mean_htmps = {s: np.mean(htmps_by_shape[s], axis=0) for s in ORDER}
+
+    b_pdf_walk = pd.concat(b_pdf_walks, ignore_index=True)
+    bin_counts = pd.DataFrame(bin_counts)
+
+    return b_pdf_walk, bin_counts, mean_htmps
+
+
+def get_bin_count_dist(bin_counts):
+    """Plot distribution of bin counts for 2D histogram of PCA space."""
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    fig, ax = plt.subplots(figsize=(6, 4), layout="constrained")
+    for i, s in enumerate(ORDER):
+        sub = bin_counts[bin_counts["shape"] == s]
+        ax.hist(sub["bin_count"], alpha=0.3,
+                color=f"C{i}", label=order_full[i])
+    ax.grid(alpha=0.3)
+    ax.set_xlabel("PCA bins occupied")
+    ax.set_ylabel("Frequency")
+    ax.set_title("\n".join(wrap(
+        "No. PCA 2D histogram bins occupied by each shape over" +
+        f" {N_BOOTSTRAP} bootstraps", width=40))
+    )
+    fig.legend(title="Shape", loc="outside right")
+    if P_TYPE != 6:
+        plt.savefig(f"pca_bin_count_dist_ptype{P_TYPE}_{WD}.pdf", dpi=1200,
+                    metadata={"Keywords": str(G_PARAMS)})
+        plt.show()
+
+    return fig
+
+
+def get_vmax_vmin(pdf_walk, lims):
+    """Get global min and max for 2d histogram, hexbin and kde plots. Make
+    sure you implement the same binning for all plots."""
     glob = None
     if P_TYPE == 2:  # initialise grid for matplotlib kdeplot
         nbins = 100
         density = []
         for s in pdf_walk["shape"].unique():
             sub = pdf_walk[pdf_walk["shape"] == s]
-            x = sub["pc1"]
-            y = sub["pc2"]
+            x = sub[XVAR]
+            y = sub[YVAR]
             k = stats.gaussian_kde([x, y])
             xi, yi = np.mgrid[x.min():x.max():nbins*1j,
                               y.min():y.max():nbins*1j]
@@ -203,9 +294,19 @@ def get_vmax_vmin(pdf_walk):
         fig_tmp, ax_tmp = plt.subplots()
         for s in pdf_walk['shape'].unique():
             sub = pdf_walk[pdf_walk['shape'] == s]
-            hb = ax_tmp.hexbin(x=sub['pc1'], y=sub['pc2'], gridsize=N_BINS)
+            hb = ax_tmp.hexbin(x=sub[XVAR], y=sub[YVAR], gridsize=N_BINS)
             all_counts.append(hb.get_array())
         plt.close(fig_tmp)  # Close the temporary figure
+        glob = np.concatenate(all_counts)
+    if P_TYPE in [5, 6]:  # calculate vmin and vmax for 2d histogram
+        all_counts = []
+        fig_tmp, ax_tmp = plt.subplots()
+        for s in pdf_walk['shape'].unique():
+            sub = pdf_walk[pdf_walk['shape'] == s]
+            h, _, _ = np.histogram2d(
+                sub[XVAR], sub[YVAR], bins=N_BINS, range=lims)
+            all_counts.append(h)
+        plt.close(fig_tmp)
         glob = np.concatenate(all_counts)
 
     vmin = glob.min()
@@ -233,33 +334,38 @@ def paramspace():
     """Visualise walk leaves in PCA of parameter space."""
 
     pdf_walk, pdf_init, evr, hulls = do_pca()
+    lims = get_pca_lims(pdf_walk)  # get global min and max for PCA space
 
-    # if SUB_SAMPLE:  # sub-sample the data
-    #     pdf_walk = pdf_walk.groupby("shape").apply(
-    #         lambda x: x.sample(SAMP_SIZE, random_state=1)
-    #     ).reset_index(drop=True)
+    if BOOTSTRAP:
+        b_pdf_walk, bin_counts, mean_htmps = boostrap_sample(pdf_walk, lims)
+        if PLOT_BIN_COUNT_DIST:
+            bcount_fig = get_bin_count_dist(bin_counts)
+
+        pdf_walk = pdf_walk.groupby("shape").sample(
+            n=BOOSTRAP_SIZE, replace=True
+        ).reset_index(drop=True)  # reduce to BOOTSTRAP_SIZE
 
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
-    vmin, vmax = get_vmax_vmin(pdf_walk)
+    if P_TYPE in [2, 4, 5]:
+        vmin, vmax = get_vmax_vmin(pdf_walk, lims)
     icon_imgs = load_leaf_imgs()
 
     fig, axs = plt.subplots(2, 2, figsize=(6, 5), sharex=True, sharey=True,
                             layout="constrained")
+
     for i, ax in enumerate(axs.flat):
         shape = ORDER[i]
-        pld = pdf_walk[  # get walk data
-            pdf_walk["shape"] == shape
-        ].reset_index(drop=True)
+        pld = pdf_walk[pdf_walk["shape"] == shape].reset_index(drop=True)
 
         if P_TYPE == 0:  # plot walks
-            p = ax.scatter(x=pld["pc1"], y=pld["pc2"],
+            p = ax.scatter(x=pld[XVAR], y=pld[YVAR],
                            s=10, alpha=ALPHA, ec=None)
         elif P_TYPE == 1:
-            p = ax.hist2d(x=pld["pc1"], y=pld["pc2"],
+            p = ax.hist2d(x=pld[XVAR], y=pld[YVAR],
                           bins=N_BINS, cmap="viridis", cmin=1)
         elif P_TYPE == 2:
-            x = pld["pc1"]
-            y = pld["pc2"]
+            x = pld[XVAR]
+            y = pld[YVAR]
             xi, yi = np.mgrid[x.min():x.max():N_BINS*1j,
                               y.min():y.max():N_BINS*1j]
             k = stats.gaussian_kde([x, y])
@@ -269,14 +375,33 @@ def paramspace():
                             vmax=vmax, antialiased=True)
         elif P_TYPE == 3:
             # https://seaborn.pydata.org/generated/seaborn.kdeplot.html
-            p = sns.kdeplot(x=pld["pc1"], y=pld["pc2"], ax=ax, levels=5,
+            p = sns.kdeplot(x=pld[XVAR], y=pld[YVAR], ax=ax, levels=5,
                             fill=True)
             ax.set(xlabel=None, ylabel=None)
         elif P_TYPE == 4:  # hexbin
-            p = ax.hexbin(x=pld["pc1"], y=pld["pc2"], gridsize=N_BINS,
-                          cmap="viridis", vmin=vmin, vmax=vmax, mincnt=1,
-                          lw=0.2)
+            mincnt = 1 if MINCT == 0 else 0.05*vmax
+            print(f"mincnt: {mincnt}")
+            p = ax.hexbin(x=pld[XVAR], y=pld[YVAR], gridsize=N_BINS,
+                          cmap="viridis", vmin=vmin, vmax=vmax, lw=0.2,
+                          mincnt=mincnt)
+
+            bin_count = np.count_nonzero(p.get_array())
+            print(f"Bin count {shape}: {bin_count}")
             ax.set(xlabel=None, ylabel=None)
+            ax.text(1, 0, fr"Non-zero bins $={bin_count}$", ha="right",
+                    va="bottom", transform=ax.transAxes)
+        elif P_TYPE == 5:
+            c_thresh = 1e-6  # threshold value for bins to be counted
+            cmap = plt.get_cmap("viridis")
+            cmap.set_bad(color="white")
+            masked_heatmap = np.ma.masked_where(  # set white where count<1
+                mean_htmps[shape] < c_thresh, mean_htmps[shape])
+            p = ax.imshow(masked_heatmap.T, origin="lower",
+                          cmap=cmap, extent=lims, vmin=vmin, vmax=vmax)
+            bin_count = np.sum(~(mean_htmps[shape] < c_thresh))
+            print(f"Bin count {shape}: {bin_count}")
+            ax.text(1, 0, fr"Non-zero bins $={bin_count}$", ha="right",
+                    va="bottom", transform=ax.transAxes)
 
         imbg_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
         ab = AnnotationBbox(
@@ -295,8 +420,8 @@ def paramspace():
 
         if SHOW_INITS:  # plot initial points
             ax.scatter(
-                x=pdf_init["pc1"],
-                y=pdf_init["pc2"],
+                x=pdf_init[XVAR],
+                y=pdf_init[YVAR],
                 c=pdf_init["shape"].map(
                     {"u": "C0", "l": "C1", "d": "C2", "c": "C3", }
                 ),
@@ -313,29 +438,120 @@ def paramspace():
             hull_unlobed = hulls[0]
             for simplex in hull_unlobed.simplices:
                 ax.plot(
-                    unlobed_data["pc1"][simplex],
-                    unlobed_data["pc2"][simplex],
+                    unlobed_data[XVAR][simplex],
+                    unlobed_data[YVAR][simplex],
                     color="grey",
                 )
             for simplex in hull.simplices:
                 print(simplex)
                 ax.plot(
-                    pld["pc1"][simplex],
-                    pld["pc2"][simplex],
+                    pld[XVAR][simplex],
+                    pld[YVAR][simplex],
                     color="red",
                 )
             ax.set_title(f"{order_full[i]} h-vol:{round(hull.volume, 2)}")
 
-    if P_TYPE == 4:
+    if P_TYPE in [4, 5]:
         fig.colorbar(p, ax=axs, shrink=0.5, label="Frequency")
-    fig.supxlabel(fr"PC1 (${(evr[0] * 100):.2f}\%$)")
-    fig.supylabel(fr"PC2 (${(evr[1] * 100):.2f}\%$)")
+    fig.supxlabel(fr"{XVAR} (${(evr[0] * 100):.2f}\%$)")
+    fig.supylabel(fr"{YVAR} (${(evr[1] * 100):.2f}\%$)")
 
     # plt.tight_layout()
-    plt.savefig(f"pca_param_ptype{P_TYPE}_{WD}.pdf", dpi=1200)
+    plt.savefig(f"pca_param_ptype{P_TYPE}_{WD}.pdf", dpi=1200,
+                metadata={"Keywords": str(G_PARAMS)})
+    plt.show()
+
+
+def get_vmin_vmax_htmp(mean_htmps):
+    """Get global min and max for mean 2d histograms."""
+    glob = None
+    for s in mean_htmps:
+        if glob is None:
+            glob = mean_htmps[s]
+        else:
+            htmp = mean_htmps[s]
+            glob = np.concatenate((glob, htmp))
+    vmin = glob.min()
+    vmax = glob.max()
+    print(f"vmin: {vmin}, vmax: {vmax}")
+
+    return vmin, vmax
+
+
+def bincount_paramspace():
+    """Plot histogram of bincounts and PCA paramspace on same figure."""
+
+    c_thresh = 0.5  # threshold value for bins to be counted
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    icon_imgs = load_leaf_imgs()
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+    lims = get_pca_lims(pdf_walk)  # get global min and max for PCA space
+    b_pdf_walk, bin_counts, mean_htmps = boostrap_sample(pdf_walk, lims)
+    vmin, vmax = get_vmin_vmax_htmp(mean_htmps)
+
+    fig = plt.figure(figsize=(7, 8), layout="constrained")
+    subfigs = fig.subfigures(2, 1, height_ratios=[2, 1])
+    axs1 = subfigs[0].subplots(2, 2, sharex=True, sharey=True)
+    axs2 = subfigs[1].subplots(1, 1)
+
+    for i, ax in enumerate(axs1.flat):
+        shape = ORDER[i]
+        cmap = plt.get_cmap("viridis")
+        cmap.set_bad(color="white")
+        masked_heatmap = np.ma.masked_where(  # set white where count<1
+            mean_htmps[shape] < c_thresh, mean_htmps[shape])
+        p = ax.imshow(masked_heatmap.T, origin="lower",
+                      cmap=cmap, extent=np.concatenate(lims).tolist(),
+                      vmin=vmin, vmax=vmax)
+        bin_count = np.sum(mean_htmps[shape] >= c_thresh)
+        print(f"Bin count {shape}: {bin_count}")
+        print(f"Max grid val {shape}: {masked_heatmap.max()}")
+        ax.text(1, 0, fr"bins$>{c_thresh}$ $={bin_count}$", ha="right",
+                va="bottom", transform=ax.transAxes)
+        imbg_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
+        ab = AnnotationBbox(
+            imbg_box,
+            (1, 1),
+            xycoords="axes fraction",
+            box_alignment=(1, 1),  # upper right corner alignment
+            frameon=False,
+            pad=0.2,
+        )
+        ax.add_artist(ab)
+        ax.grid(alpha=0.3)
+        ax.set_title(fr"{order_full[i]}")
+    subfigs[0].colorbar(p, ax=axs1, shrink=0.5, label="Frequency")
+    subfigs[0].supxlabel(fr"{XVAR} (${(evr[0] * 100):.2f}\%$)")
+    subfigs[0].supylabel(fr"{YVAR} (${(evr[1] * 100):.2f}\%$)")
+    # subfigs[0].suptitle(
+    #     "\n".join(wrap(
+    #         "2D histogram of PCA space showing the mean bin counts for each" +
+    #         f" shape over {N_BOOTSTRAP} samples of size {BOOSTRAP_SIZE} from" +
+    #         f" a sample of {SAMP_SIZE} of each shape.", width=40))
+    # )
+    h_rng = (bin_counts["bin_count"].min(), bin_counts["bin_count"].max())
+    for i, s in enumerate(ORDER):
+        sub = bin_counts[bin_counts["shape"] == s]
+        axs2.hist(sub["bin_count"], alpha=0.3, range=h_rng,
+                  color=f"C{i}", label=order_full[i], bins=h_rng[1]-h_rng[0])
+    axs2.grid(alpha=0.3)
+    subfigs[1].supxlabel("PCA bins occupied")
+    subfigs[1].supylabel("Frequency")
+    subfigs[1].suptitle("\n".join(wrap(
+        "No. PCA 2D histogram bins occupied by each shape over" +
+        f" {N_BOOTSTRAP} bootstraps", width=40))
+    )
+    # axs2.legend(title="Shape", loc="upper right")
+    subfigs[1].legend(title="Shape", loc="outside right")
+
     plt.show()
 
 
 if __name__ == "__main__":
-    paramspace()
+    for name, val in G_PARAMS.items():
+        print(f"{name} {val}")
+    if P_TYPE != 6:
+        paramspace()
+    else:
+        bincount_paramspace()
     # get_p_and_s_data()
