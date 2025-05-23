@@ -26,10 +26,12 @@ ORDER = ["u", "l", "d", "c"]
 SUB_SAMPLE = True  # whether to sub-sample the data
 BOOTSTRAP = True  # do "bootstrapping" on the final PCA distribution
 SAMP_SIZE = 4000  # no. leaves to sample at random from each shape
+SAMP_SEED = 1  # seed for sub sampling raw walks to equal size per shape
 BOOSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
 N_BOOTSTRAP = 10000  # no. bootstrap iterations
 PLOT_BIN_COUNT_DIST = True  # show histogram of bin counts for 2D hist of PCA
 P_TYPE = 6  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
+# 5-2dhist for mean bin counts, 6-2d hist mean bin counts with bin counts hist
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
 N_BINS = 50  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
@@ -138,7 +140,7 @@ def do_pca():
 
     if SUB_SAMPLE:
         psdata = psdata.groupby("shape").apply(
-            lambda x: x.sample(SAMP_SIZE)
+            lambda x: x.sample(SAMP_SIZE, random_state=SAMP_SEED)
         ).reset_index(drop=True)
 
     print("psdata shape counts:\n",
@@ -218,7 +220,7 @@ def boostrap_sample(pdf_walk, lims):
         print(f"Bootstrap {i}", end="\r")
         b_pdf_walk = pdf_walk.groupby("shape").sample(  # with replacement
             n=BOOSTRAP_SIZE, replace=True  # equally over shape
-        ).reset_index(drop=True)
+        ).reset_index(drop=True)  # total size = 4*BOOSTRAP_SIZE
         b_pdf_walk["bstrap"] = i  # add bootstrap column
         b_pdf_walks.append(b_pdf_walk)
 
@@ -298,7 +300,7 @@ def get_vmax_vmin(pdf_walk, lims):
             all_counts.append(hb.get_array())
         plt.close(fig_tmp)  # Close the temporary figure
         glob = np.concatenate(all_counts)
-    if P_TYPE in [5, 6]:  # calculate vmin and vmax for 2d histogram
+    if P_TYPE in [1, 5, 6]:  # calculate vmin and vmax for 2d histogram
         all_counts = []
         fig_tmp, ax_tmp = plt.subplots()
         for s in pdf_walk['shape'].unique():
@@ -346,7 +348,7 @@ def paramspace():
         ).reset_index(drop=True)  # reduce to BOOTSTRAP_SIZE
 
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
-    if P_TYPE in [2, 4, 5]:
+    if P_TYPE in [1, 2, 4, 5]:
         vmin, vmax = get_vmax_vmin(pdf_walk, lims)
     icon_imgs = load_leaf_imgs()
 
@@ -361,8 +363,10 @@ def paramspace():
             p = ax.scatter(x=pld[XVAR], y=pld[YVAR],
                            s=10, alpha=ALPHA, ec=None)
         elif P_TYPE == 1:
-            p = ax.hist2d(x=pld[XVAR], y=pld[YVAR],
-                          bins=N_BINS, cmap="viridis", cmin=1)
+            h, _, _, p = ax.hist2d(x=pld[XVAR], y=pld[YVAR], range=lims,
+                                   bins=N_BINS, cmin=1, vmin=vmin, vmax=vmax)
+            print(np.nanmax(h))
+
         elif P_TYPE == 2:
             x = pld[XVAR]
             y = pld[YVAR]
@@ -451,7 +455,7 @@ def paramspace():
                 )
             ax.set_title(f"{order_full[i]} h-vol:{round(hull.volume, 2)}")
 
-    if P_TYPE in [4, 5]:
+    if P_TYPE in [1, 4, 5]:
         fig.colorbar(p, ax=axs, shrink=0.5, label="Frequency")
     fig.supxlabel(fr"{XVAR} (${(evr[0] * 100):.2f}\%$)")
     fig.supylabel(fr"{YVAR} (${(evr[1] * 100):.2f}\%$)")
@@ -489,7 +493,7 @@ def bincount_paramspace():
     b_pdf_walk, bin_counts, mean_htmps = boostrap_sample(pdf_walk, lims)
     vmin, vmax = get_vmin_vmax_htmp(mean_htmps)
 
-    fig = plt.figure(figsize=(7, 8), layout="constrained")
+    fig = plt.figure(figsize=(6, 8), layout="constrained")
     subfigs = fig.subfigures(2, 1, height_ratios=[2, 1])
     axs1 = subfigs[0].subplots(2, 2, sharex=True, sharey=True)
     axs2 = subfigs[1].subplots(1, 1)
@@ -506,7 +510,8 @@ def bincount_paramspace():
         bin_count = np.sum(mean_htmps[shape] >= c_thresh)
         print(f"Bin count {shape}: {bin_count}")
         print(f"Max grid val {shape}: {masked_heatmap.max()}")
-        ax.text(1, 0, fr"bins$>{c_thresh}$ $={bin_count}$", ha="right",
+        print(mean_htmps[shape].sum())
+        ax.text(1, 0, fr"#bins$\geq{c_thresh}$ $={bin_count}$", ha="right",
                 va="bottom", transform=ax.transAxes)
         imbg_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
         ab = AnnotationBbox(
@@ -520,9 +525,11 @@ def bincount_paramspace():
         ax.add_artist(ab)
         ax.grid(alpha=0.3)
         ax.set_title(fr"{order_full[i]}")
-    subfigs[0].colorbar(p, ax=axs1, shrink=0.5, label="Frequency")
+    subfigs[0].colorbar(p, ax=axs1, shrink=0.5, label=" Mean frequency")
     subfigs[0].supxlabel(fr"{XVAR} (${(evr[0] * 100):.2f}\%$)")
     subfigs[0].supylabel(fr"{YVAR} (${(evr[1] * 100):.2f}\%$)")
+    # subfigs[0].suptitle(
+    #     r"Mean bin counts $N_{bootstrap}$"+fr"$={N_BOOTSTRAP}$")
     # subfigs[0].suptitle(
     #     "\n".join(wrap(
     #         "2D histogram of PCA space showing the mean bin counts for each" +
@@ -535,15 +542,15 @@ def bincount_paramspace():
         axs2.hist(sub["bin_count"], alpha=0.3, range=h_rng,
                   color=f"C{i}", label=order_full[i], bins=h_rng[1]-h_rng[0])
     axs2.grid(alpha=0.3)
-    subfigs[1].supxlabel("PCA bins occupied")
+    # axs2.text(0.95, 0.95, ha="right", va="top", transform=axs2.transAxes,
+    #           s=r"$N_{bootstrap}$"+fr"$={N_BOOTSTRAP}$")
+    subfigs[1].supxlabel("No. PCA bins occupied")
     subfigs[1].supylabel("Frequency")
-    subfigs[1].suptitle("\n".join(wrap(
-        "No. PCA 2D histogram bins occupied by each shape over" +
-        f" {N_BOOTSTRAP} bootstraps", width=40))
-    )
-    # axs2.legend(title="Shape", loc="upper right")
-    subfigs[1].legend(title="Shape", loc="outside right")
-
+    # subfigs[1].suptitle(r"$N_{bootstrap}$"+fr"$={N_BOOTSTRAP}$")
+    axs2.legend(loc="upper right")
+    # subfigs[1].legend(title="Shape", loc="outside right")
+    plt.savefig(f"pca_param_ptype{P_TYPE}_{WD}.pdf", dpi=1200,
+                metadata={"Keywords": str(G_PARAMS)})
     plt.show()
 
 
