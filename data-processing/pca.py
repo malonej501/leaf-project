@@ -567,20 +567,24 @@ def paramspace_combined():
         #     (0, 0, 0, 0),           # RGBA for transparent (for 0)
         #     f"C{i}"  # Color for 1
         # ])
-        cmap = [plt.get_cmap("Blues"), plt.get_cmap("Oranges"),
-                plt.get_cmap("Greens"), plt.get_cmap("Reds")]
-        msk = np.where(mean_htmps[shape] < c_thresh, 0, 1)  # binary mask
-        # msk1 = np.ma.masked_where(  # set white where count<1
-        #     mean_htmps[shape] < c_thresh, mean_htmps[shape])
-        x, y = np.meshgrid(edgs[0][:-1], edgs[1][:-1])
-        p1 = ax.contourf(x, y, msk.T,  levels=[c_thresh, 999],
-                         colors=f"C{i}", alpha=0.3,
-                         extent=np.concatenate(lims).tolist())
-        # p1 = ax.contourf(x, y, msk1.T,  # levels=[c_thresh, 999],
-        #                  cmap=cmap[i], alpha=1,
-        #                  extent=np.concatenate(lims).tolist())
+        cmaps = []
+        for cmap_name in ["Blues", "Oranges", "Greens", "Reds"]:
+            cmap = plt.get_cmap(cmap_name).copy()
+            cmap.set_bad((0, 0, 0, 0))
+            cmaps.append(cmap)
+        msk1 = np.where(mean_htmps[shape] < c_thresh,
+                        0, 1)  # binary mask
+        print(mean_htmps[shape])
+        msk = np.ma.masked_where(  # set white where count<1
+            mean_htmps[shape] < c_thresh, mean_htmps[shape])
+        print(msk)
 
-        p2 = ax.contour(x, y, msk.T, levels=[c_thresh, 999],
+        # msk = mean_htmps[shape]
+        x, y = np.meshgrid(edgs[0][:-1], edgs[1][:-1])
+        p1 = ax.contourf(x, y, msk.T,  levels=5,
+                         cmap=cmaps[i], alpha=1, vmin=c_thresh,
+                         extent=np.concatenate(lims).tolist())
+        p2 = ax.contour(x, y, msk1.T, levels=[c_thresh, 1e20],
                         colors=f"C{i}", alpha=1, label=order_full[i],
                         extent=np.concatenate(lims).tolist())
         # ax.imshow(msk.T, origin="lower", alpha=0.5,
@@ -604,16 +608,16 @@ def paramspace_combined():
         # ax.set_title(fr"{order_full[i]}")
         if i == 0:
             msku = msk
-            # msku1 = msk1
+            msku1 = msk1
         else:
             # cmapu = mcolors.ListedColormap([
             #     (0, 0, 0, 0),           # RGBA for transparent (for 0)
             #     "C0"  # Color for 1
             # ])
-            p3 = ax.contourf(x, y, msku.T, levels=[c_thresh, 999],
+            p3 = ax.contourf(x, y, msku1.T, levels=[c_thresh, 1e20],
                              colors="C0", alpha=0.3, zorder=0,
                              extent=np.concatenate(lims).tolist())
-            p4 = ax.contour(x, y, msku.T, levels=[c_thresh, 999],
+            p4 = ax.contour(x, y, msku1.T, levels=[c_thresh, 1e20],
                             colors="C0", alpha=1, zorder=0,
                             extent=np.concatenate(lims).tolist())
             # ax.imshow(msku.T, origin="lower", alpha=0.2,
