@@ -8,7 +8,8 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-from matplotlib.patches import Polygon
+from matplotlib.patches import Polygon, Patch
+import matplotlib.colors as mcolors
 import seaborn as sns
 from PIL import Image
 
@@ -28,12 +29,13 @@ BOOTSTRAP = True  # do "bootstrapping" on the final PCA distribution
 SAMP_SIZE = 4000  # no. leaves to sample at random from each shape
 SAMP_SEED = 1  # seed for sub sampling raw walks to equal size per shape
 BOOSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
-N_BOOTSTRAP = 10000  # no. bootstrap iterations
+N_BOOTSTRAP = 1000  # no. bootstrap iterations
 PLOT_BIN_COUNT_DIST = True  # show histogram of bin counts for 2D hist of PCA
-P_TYPE = 6  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
+P_TYPE = 7  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 # 5-2dhist for mean bin counts, 6-2d hist mean bin counts with bin counts hist
+# 7-2d hist mean bin counts single ax
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
-N_BINS = 50  # number of bins for hist2d/hexbin/kdeplot
+N_BINS = 20  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
 DATA = 1  # 0-len 80, 1-len 320
@@ -202,8 +204,9 @@ def boostrap_sample(pdf_walk, lims):
     space. Returns the bootstrap samples and the 2D hist bin counts."""
 
     bin_counts = []
-    b_pdf_walks = []
+    b_pdf_walks = []  # for storing bootstrap samples
     htmps_by_shape = {shape: []for shape in ORDER}  # Store hists by shape
+    edgs = None  # for storing bin edges
     for i in range(N_BOOTSTRAP):
         print(f"Bootstrap {i}", end="\r")
         b_pdf_walk = pdf_walk.groupby("shape").sample(  # with replacement
@@ -214,19 +217,22 @@ def boostrap_sample(pdf_walk, lims):
 
         for shape in ORDER:
             pca_sub = b_pdf_walk[b_pdf_walk["shape"] == shape]
-            h, _, _ = np.histogram2d(
+            h, xe, ye = np.histogram2d(
                 pca_sub[XVAR], pca_sub[YVAR], bins=N_BINS,
                 range=lims)  # global min and max for consistent binning
             bin_count = np.count_nonzero(h)
             bin_counts.append(
                 {"bstrap": i, "shape": shape, "bin_count": bin_count})
             htmps_by_shape[shape].append(h)
+            if edgs is None:
+                edgs = [xe, ye]
+
     mean_htmps = {s: np.mean(htmps_by_shape[s], axis=0) for s in ORDER}
 
     b_pdf_walk = pd.concat(b_pdf_walks, ignore_index=True)
     bin_counts = pd.DataFrame(bin_counts)
 
-    return b_pdf_walk, bin_counts, mean_htmps
+    return b_pdf_walk, bin_counts, mean_htmps, edgs
 
 
 def get_bin_count_dist(bin_counts):
@@ -249,8 +255,6 @@ def get_bin_count_dist(bin_counts):
         plt.savefig(f"pca_bin_count_dist_ptype{P_TYPE}_{WD}.pdf", dpi=1200,
                     metadata={"Keywords": str(G_PARAMS)})
         plt.show()
-
-    return fig
 
 
 def get_vmax_vmin(pdf_walk, lims):
@@ -318,9 +322,10 @@ def paramspace():
     lims = get_pca_lims(pdf_walk)  # get global min and max for PCA space
 
     if BOOTSTRAP:
-        b_pdf_walk, bin_counts, mean_htmps = boostrap_sample(pdf_walk, lims)
+        b_pdf_walk, bin_counts, mean_htmps, _ = boostrap_sample(
+            pdf_walk, lims)
         if PLOT_BIN_COUNT_DIST:
-            bcount_fig = get_bin_count_dist(bin_counts)
+            get_bin_count_dist(bin_counts)
 
         pdf_walk = pdf_walk.groupby("shape").sample(
             n=BOOSTRAP_SIZE, replace=True
@@ -469,7 +474,7 @@ def bincount_paramspace():
     icon_imgs = load_leaf_imgs()
     pdf_walk, pdf_init, evr, hulls = do_pca()
     lims = get_pca_lims(pdf_walk)  # get global min and max for PCA space
-    b_pdf_walk, bin_counts, mean_htmps = boostrap_sample(pdf_walk, lims)
+    b_pdf_walk, bin_counts, mean_htmps, _ = boostrap_sample(pdf_walk, lims)
     vmin, vmax = get_vmin_vmax_htmp(mean_htmps)
 
     fig = plt.figure(figsize=(6, 8), layout="constrained")
@@ -521,16 +526,115 @@ def bincount_paramspace():
     plt.show()
 
 
-def paramspace_single_ax():
-    """Visualise PCA parameter space for different leaf shapes on a single
-    axis. Highlights the differences in occupancy."""
+def paramspace_combined():
+    """Visualise PCA parameter space for different leaf shapes overlayed on
+    top of unlobed."""
+
+    c_thresh = 0.5  # threshold value for bins to be counted
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    icon_imgs = load_leaf_imgs()
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+    lims = get_pca_lims(pdf_walk)  # get global min and max for PCA space
+    b_pdf_walk, bin_counts, mean_htmps, edgs = boostrap_sample(pdf_walk, lims)
+    # vmin, vmax = get_vmin_vmax_htmp(mean_htmps)
+
+    # fig, ax = plt.subplots(figsize=(6, 4), layout="constrained")
+    # handles = []
+    # for i, shape in enumerate(ORDER):
+    #     cmap = mcolors.ListedColormap([plt.get_cmap("tab10")(i)])
+    #     # masked_heatmap = np.ma.masked_where(  # set white where count<1
+    #     #     mean_htmps[shape] < c_thresh, mean_htmps[shape])
+    #     msk = np.where(mean_htmps[shape] < c_thresh, 0, 1)  # binary mask
+    #     htmp = mean_htmps[shape]
+    #     # p = ax.imshow(masked_heatmap.T, origin="lower", alpha=0.3,
+    #     #               cmap=cmap, extent=np.concatenate(lims).tolist())
+    #     x, y = np.meshgrid(edgs[0][:-1], edgs[1][:-1])
+    #     p1 = ax.contourf(x, y, msk.T, levels=[c_thresh, 999],
+    #                      colors=f"C{i}", alpha=0.3,
+    #                      extent=np.concatenate(lims).tolist())
+    #     p2 = ax.contour(x, y, msk.T, levels=[c_thresh, 999],
+    #                     colors=f"C{i}", alpha=1,
+    #                     extent=np.concatenate(lims).tolist())
+    #     handles.append(f"C{i}")
+    # ax.legend(handles, labels=order_full, loc="upper right")
+    # plt.show()
+    fig, axs = plt.subplots(2, 2, figsize=(6, 4), layout="constrained",
+                            sharex=True, sharey=True)
+    msku = None
+    for i, ax in enumerate(axs.flat):
+        shape = ORDER[i]
+        # cmap = mcolors.ListedColormap([
+        #     (0, 0, 0, 0),           # RGBA for transparent (for 0)
+        #     f"C{i}"  # Color for 1
+        # ])
+        cmap = [plt.get_cmap("Blues"), plt.get_cmap("Oranges"),
+                plt.get_cmap("Greens"), plt.get_cmap("Reds")]
+        msk = np.where(mean_htmps[shape] < c_thresh, 0, 1)  # binary mask
+        # msk1 = np.ma.masked_where(  # set white where count<1
+        #     mean_htmps[shape] < c_thresh, mean_htmps[shape])
+        x, y = np.meshgrid(edgs[0][:-1], edgs[1][:-1])
+        p1 = ax.contourf(x, y, msk.T,  levels=[c_thresh, 999],
+                         colors=f"C{i}", alpha=0.3,
+                         extent=np.concatenate(lims).tolist())
+        # p1 = ax.contourf(x, y, msk1.T,  # levels=[c_thresh, 999],
+        #                  cmap=cmap[i], alpha=1,
+        #                  extent=np.concatenate(lims).tolist())
+
+        p2 = ax.contour(x, y, msk.T, levels=[c_thresh, 999],
+                        colors=f"C{i}", alpha=1, label=order_full[i],
+                        extent=np.concatenate(lims).tolist())
+        # ax.imshow(msk.T, origin="lower", alpha=0.5,
+        #           cmap=cmap, extent=np.concatenate(lims).tolist())
+        bin_count = np.sum(mean_htmps[shape] >= c_thresh)
+        print(f"Bin count {shape}: {bin_count}")
+        print(mean_htmps[shape].sum())
+        # ax.text(1, 0, fr"#bins$\geq{c_thresh}$ $={bin_count}$", ha="right",
+        #         va="bottom", transform=ax.transAxes)
+        imbg_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
+        ab = AnnotationBbox(
+            imbg_box,
+            (1, 1),
+            xycoords="axes fraction",
+            box_alignment=(1, 1),  # upper right corner alignment
+            frameon=False,
+            pad=0.2,
+        )
+        ax.add_artist(ab)
+        ax.grid(alpha=0.3)
+        # ax.set_title(fr"{order_full[i]}")
+        if i == 0:
+            msku = msk
+            # msku1 = msk1
+        else:
+            # cmapu = mcolors.ListedColormap([
+            #     (0, 0, 0, 0),           # RGBA for transparent (for 0)
+            #     "C0"  # Color for 1
+            # ])
+            p3 = ax.contourf(x, y, msku.T, levels=[c_thresh, 999],
+                             colors="C0", alpha=0.3, zorder=0,
+                             extent=np.concatenate(lims).tolist())
+            p4 = ax.contour(x, y, msku.T, levels=[c_thresh, 999],
+                            colors="C0", alpha=1, zorder=0,
+                            extent=np.concatenate(lims).tolist())
+            # ax.imshow(msku.T, origin="lower", alpha=0.2,
+            #           cmap=cmapu, extent=np.concatenate(lims).tolist())
+        ax.grid(alpha=0.3)
+
+    fig.supxlabel(fr"{XVAR} (${(evr[0] * 100):.2f}\%$)")
+    fig.supylabel(fr"{YVAR} (${(evr[1] * 100):.2f}\%$)")
+
+    handles = [Patch(color=f"C{i}", label=s) for i, s in enumerate(order_full)]
+    fig.legend(handles, order_full, loc="outside right")
+    plt.show()
 
 
 if __name__ == "__main__":
     for name, val in G_PARAMS.items():
         print(f"{name} {val}")
-    if P_TYPE != 6:
+    if P_TYPE in [0, 1, 2, 3, 4, 5]:
         paramspace()
-    else:
+    elif P_TYPE == 6:
         bincount_paramspace()
+    elif P_TYPE == 7:
+        paramspace_combined()
     # get_p_and_s_data()
