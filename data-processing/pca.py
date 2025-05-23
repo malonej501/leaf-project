@@ -78,18 +78,6 @@ def get_p_and_s_data():
     return pdata, sdata
 
 
-def sort_walk_shape_data(pdata, sdata):
-    """Sort walk shape data to match parameter data according to leafid,
-    walkid and step."""
-    idxs = ["leafid", "walkid", "step"]  # index columns for data sorting
-    sdata_sort = sdata.set_index(idxs).reindex(pdata.set_index(idxs).index)
-    sdata = sdata_sort.reset_index()
-    match = (pdata[idxs] == sdata[idxs]).all().all()  # check idx columns match
-    assert match, f"pdata and sdata {idxs} do not match"
-
-    return sdata
-
-
 def do_pca():
     """
     Perform PCA on the walk parameter data and initial leaves parameter data.
@@ -226,14 +214,6 @@ def boostrap_sample(pdf_walk, lims):
 
         for shape in ORDER:
             pca_sub = b_pdf_walk[b_pdf_walk["shape"] == shape]
-            # h = plt.hexbin(
-            #     x=pca_sub[XVAR],
-            #     y=pca_sub[YVAR],
-            #     gridsize=N_BINS,
-            #     mincnt=1,
-            # )
-            # print(h)
-            # bin_count = np.count_nonzero(h.get_array())
             h, _, _ = np.histogram2d(
                 pca_sub[XVAR], pca_sub[YVAR], bins=N_BINS,
                 range=lims)  # global min and max for consistent binning
@@ -241,7 +221,6 @@ def boostrap_sample(pdf_walk, lims):
             bin_counts.append(
                 {"bstrap": i, "shape": shape, "bin_count": bin_count})
             htmps_by_shape[shape].append(h)
-    # plt.close()
     mean_htmps = {s: np.mean(htmps_by_shape[s], axis=0) for s in ORDER}
 
     b_pdf_walk = pd.concat(b_pdf_walks, ignore_index=True)
@@ -528,30 +507,23 @@ def bincount_paramspace():
     subfigs[0].colorbar(p, ax=axs1, shrink=0.5, label=" Mean frequency")
     subfigs[0].supxlabel(fr"{XVAR} (${(evr[0] * 100):.2f}\%$)")
     subfigs[0].supylabel(fr"{YVAR} (${(evr[1] * 100):.2f}\%$)")
-    # subfigs[0].suptitle(
-    #     r"Mean bin counts $N_{bootstrap}$"+fr"$={N_BOOTSTRAP}$")
-    # subfigs[0].suptitle(
-    #     "\n".join(wrap(
-    #         "2D histogram of PCA space showing the mean bin counts for each" +
-    #         f" shape over {N_BOOTSTRAP} samples of size {BOOSTRAP_SIZE} from" +
-    #         f" a sample of {SAMP_SIZE} of each shape.", width=40))
-    # )
     h_rng = (bin_counts["bin_count"].min(), bin_counts["bin_count"].max())
     for i, s in enumerate(ORDER):
         sub = bin_counts[bin_counts["shape"] == s]
         axs2.hist(sub["bin_count"], alpha=0.3, range=h_rng,
                   color=f"C{i}", label=order_full[i], bins=h_rng[1]-h_rng[0])
     axs2.grid(alpha=0.3)
-    # axs2.text(0.95, 0.95, ha="right", va="top", transform=axs2.transAxes,
-    #           s=r"$N_{bootstrap}$"+fr"$={N_BOOTSTRAP}$")
     subfigs[1].supxlabel("No. PCA bins occupied")
     subfigs[1].supylabel("Frequency")
-    # subfigs[1].suptitle(r"$N_{bootstrap}$"+fr"$={N_BOOTSTRAP}$")
     axs2.legend(loc="upper right")
-    # subfigs[1].legend(title="Shape", loc="outside right")
     plt.savefig(f"pca_param_ptype{P_TYPE}_{WD}.pdf", dpi=1200,
                 metadata={"Keywords": str(G_PARAMS)})
     plt.show()
+
+
+def paramspace_single_ax():
+    """Visualise PCA parameter space for different leaf shapes on a single
+    axis. Highlights the differences in occupancy."""
 
 
 if __name__ == "__main__":
