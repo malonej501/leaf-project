@@ -4,16 +4,16 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
-from arrow_violin import import_phylo_and_sim_rates, import_phylo_ML_rates, \
-    import_sim_ML_rates, normalise_rates, rates_map2
+from arrow_violin import import_phylo_and_sim_rates, import_phylo_ml_rates, \
+    import_sim_ml_rates, normalise_rates, rates_map2
 
 NORM_METHOD = "meanmean"
 ML_DATA = "ML6_genus_mean_rates_all"  # ML data for the phylogeny
 LEGEND = False
 
-plot_order = [
-    "MUT1_simulation",
-    "MUT2_simulation",
+PLOT_ORDER = [
+    "MUT1_06-02-25",
+    "MUT2_320_mcmc_2_24-04-25",
     # "jan_phylo_nat_class_uniform0-0.1_1",
     # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_2",
     # "geeta_phylo_geeta_class_uniform0-100_4",
@@ -27,15 +27,15 @@ def plot_phylo_and_sim_rates_with_leaf_icons():
     """Violins for the Q matrix showing estimates from simulations and 
     phylogeny including MCMC and ML estimates"""
 
-    ml_ph_l = import_phylo_ML_rates(plot_order, calc_diff=False)
-    ml_sm_l = import_sim_ML_rates(calc_diff=False)
-    ph_sm_l = import_phylo_and_sim_rates(plot_order, calc_diff=False)
+    ml_ph_l = import_phylo_ml_rates(calc_diff=False)
+    ml_sm_l = import_sim_ml_rates(calc_diff=False)
+    ph_sm_l = import_phylo_and_sim_rates(calc_diff=False)
     ph_sm_l, ml_ph_l, ml_sm_l = normalise_rates(ph_sm_l, ml_ph_l, ml_sm_l)
     ml_sm_l = ml_sm_l.rename(columns={"Dataset": "dataset"})
     ml_all = pd.concat([ml_ph_l, ml_sm_l], ignore_index=True)  # combine ML
 
     #### plotting ####
-    plt.rcParams["font.family"] = "CMU Serif"
+    # plt.rcParams["font.family"] = "CMU Serif"
     if LEGEND:
         fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(10, 8))
     else:
@@ -45,6 +45,7 @@ def plot_phylo_and_sim_rates_with_leaf_icons():
     for i in range(1, 5):
         for j in range(0, 4):
             ax = axes[i, j]
+            ax.grid(axis="y", alpha=0.3)
             if i - 1 == j:
                 ax.axis("off")
                 continue  # skip diagonals
@@ -55,7 +56,7 @@ def plot_phylo_and_sim_rates_with_leaf_icons():
             ml_plot_data = ml_all[ml_all["transition"] == transition]
             rates = []
             ml_rates = []
-            for dataset in plot_order:
+            for dataset in PLOT_ORDER:
                 rates.append(plot_data["rate_norm"][
                     plot_data["Dataset"] == dataset].squeeze())
 
@@ -69,6 +70,7 @@ def plot_phylo_and_sim_rates_with_leaf_icons():
                 if dataset not in legend_labels:
                     legend_labels.append(dataset)
             ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
+            # print(rates)
             bp = ax.violinplot(rates, showextrema=False, showmeans=True)
 
             # for median in bp["medians"]:
@@ -87,22 +89,22 @@ def plot_phylo_and_sim_rates_with_leaf_icons():
 
             # plot ML values
             if ML_DATA:
-                pos = list(range(1, len(plot_order) + 1))
+                pos = list(range(1, len(PLOT_ORDER) + 1))
                 ax.scatter(pos, ml_rates, color="black", zorder=5, s=8,
                            facecolors="white")
 
             xticklabs = ["S1", "S2"]
-            xticklabs.extend([f"P{i}" for i in range(1, len(plot_order) - 1)])
+            xticklabs.extend([f"P{i}" for i in range(1, len(PLOT_ORDER) - 1)])
             if i == 4:
                 ax.set_xticks(
-                    list(range(1, len(plot_order) + 1)),
+                    list(range(1, len(PLOT_ORDER) + 1)),
                     ["MUT1", "MUT2", "Janssens", "Zuntini", "Geeta"],
                     fontsize=9,
                 )
                 ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
             if (i, j) == (3, 3):
                 ax.set_xticks(
-                    list(range(1, len(plot_order) + 1)),
+                    list(range(1, len(PLOT_ORDER) + 1)),
                     ["MUT1", "MUT2", "Janssens", "Zuntini", "Geeta"],
                     fontsize=9,
                 )
