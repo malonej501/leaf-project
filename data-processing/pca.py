@@ -29,17 +29,17 @@ BOOTSTRAP = True  # do "bootstrapping" on the final PCA distribution
 SAMP_SIZE = 4000  # no. leaves to sample at random from each shape
 SAMP_SEED = 1  # seed for sub sampling raw walks to equal size per shape
 BOOSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
-N_BOOTSTRAP = 1000  # no. bootstrap iterations
+N_BOOTSTRAP = 500  # no. bootstrap iterations
 PLOT_BIN_COUNT_DIST = True  # show histogram of bin counts for 2D hist of PCA
-P_TYPE = 7  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
+P_TYPE = 8  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 # 5-2dhist for mean bin counts, 6-2d hist mean bin counts with bin counts hist
-# 7-2d hist mean bin counts single ax
+# 7-2d hist mean bin counts single ax, 8-hist for bin counts in nd histogram
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
-N_BINS = 20  # number of bins for hist2d/hexbin/kdeplot
+N_BINS = 6  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
 DATA = 1  # 0-len 80, 1-len 320
-N_COMP = 4  # number of PCA components to keep
+N_COMP = 8  # number of PCA components to keep
 XVAR = "PC1"  # which component to plot on x-axis
 YVAR = "PC2"  # which component to plot on y-axis
 G_PARAMS = {name: val for name, val in globals().items()if name.isupper()}
@@ -187,14 +187,15 @@ def do_pca():
     return pdf_walk, pdf_init, evr, hulls
 
 
-def get_pca_lims(pdf_walk):
-    """Get global min and max for PCA space to ensure consistent binning"""
-    x_min = pdf_walk[XVAR].min()
-    x_max = pdf_walk[XVAR].max()
-    y_min = pdf_walk[YVAR].min()
-    y_max = pdf_walk[YVAR].max()
+def get_pca_lims(pdf_walk, npc=2):
+    """Get global min and max for PCA space to ensure consistent binning.
+    Returns lims in form [[pc1_min, pc1_max], [pc2_min, pc2_max],...].
+    Choose number of PCs to consider with npc."""
 
-    lims = [[x_min, x_max], [y_min, y_max]]
+    pcs = [f"PC{pc}" for pc in range(1, npc + 1)]
+    mins = pdf_walk[pcs].min()
+    maxs = pdf_walk[pcs].max()
+    lims = [[mins[pc], maxs[pc]] for pc in pcs]
     return lims
 
 
@@ -394,9 +395,9 @@ def paramspace():
         imbg_box = OffsetImage(icon_imgs[i], zoom=0.08, alpha=0.5)
         ab = AnnotationBbox(
             imbg_box,
-            (1, 1),
+            (1, 0),
             xycoords="axes fraction",
-            box_alignment=(1, 1),  # upper right corner alignment
+            box_alignment=(1, 0),  # upper right corner alignment
             frameon=False,
             pad=0.2,
         )
@@ -441,8 +442,8 @@ def paramspace():
 
     if P_TYPE in [1, 4, 5]:
         fig.colorbar(p, ax=axs, shrink=0.5, label="Frequency")
-    fig.supxlabel(fr"{XVAR} (${(evr[0] * 100):.2f}\%$)")
-    fig.supylabel(fr"{YVAR} (${(evr[1] * 100):.2f}\%$)")
+    fig.supxlabel(fr"{XVAR} (${(evr[int(XVAR[-1])-1] * 100):.2f}\%$)")
+    fig.supylabel(fr"{YVAR} (${(evr[int(YVAR[-1])-1] * 100):.2f}\%$)")
 
     # plt.tight_layout()
     plt.savefig(f"pca_param_ptype{P_TYPE}_{WD}.pdf", dpi=1200,
@@ -510,8 +511,8 @@ def bincount_paramspace():
         ax.grid(alpha=0.3)
         ax.set_title(fr"{order_full[i]}")
     subfigs[0].colorbar(p, ax=axs1, shrink=0.5, label=" Mean frequency")
-    subfigs[0].supxlabel(fr"{XVAR} (${(evr[0] * 100):.2f}\%$)")
-    subfigs[0].supylabel(fr"{YVAR} (${(evr[1] * 100):.2f}\%$)")
+    subfigs[0].supxlabel(fr"{XVAR} (${(evr[int(XVAR[-1])-1] * 100):.2f}\%$)")
+    subfigs[0].supylabel(fr"{YVAR} (${(evr[int(YVAR[-1])-1] * 100):.2f}\%$)")
     h_rng = (bin_counts["bin_count"].min(), bin_counts["bin_count"].max())
     for i, s in enumerate(ORDER):
         sub = bin_counts[bin_counts["shape"] == s]
@@ -536,7 +537,7 @@ def paramspace_combined():
     pdf_walk, pdf_init, evr, hulls = do_pca()
     lims = get_pca_lims(pdf_walk)  # get global min and max for PCA space
     b_pdf_walk, bin_counts, mean_htmps, edgs = boostrap_sample(pdf_walk, lims)
-    # vmin, vmax = get_vmin_vmax_htmp(mean_htmps)
+    vmin, vmax = get_vmin_vmax_htmp(mean_htmps)
 
     # fig, ax = plt.subplots(figsize=(6, 4), layout="constrained")
     # handles = []
@@ -570,21 +571,21 @@ def paramspace_combined():
         cmaps = []
         for cmap_name in ["Blues", "Oranges", "Greens", "Reds"]:
             cmap = plt.get_cmap(cmap_name).copy()
-            cmap.set_bad((0, 0, 0, 0))
+            cmap.set_under((0, 0, 0, 0))
             cmaps.append(cmap)
-        msk1 = np.where(mean_htmps[shape] < c_thresh,
-                        0, 1)  # binary mask
-        print(mean_htmps[shape])
-        msk = np.ma.masked_where(  # set white where count<1
-            mean_htmps[shape] < c_thresh, mean_htmps[shape])
-        print(msk)
-
-        # msk = mean_htmps[shape]
+        # msk1 = np.where(mean_htmps[shape] < c_thresh,
+        #                 0, 1)  # binary mask
+        # print(mean_htmps[shape])
+        # msk = np.ma.masked_where(  # set white where count<1
+        #     mean_htmps[shape] < c_thresh, mean_htmps[shape])
+        # print(msk)
+        msk = mean_htmps[shape]
+        levels = np.linspace(c_thresh, vmax, 5)
         x, y = np.meshgrid(edgs[0][:-1], edgs[1][:-1])
-        p1 = ax.contourf(x, y, msk.T,  levels=5,
+        p1 = ax.contourf(x, y, msk.T,  levels=levels,
                          cmap=cmaps[i], alpha=1, vmin=c_thresh,
                          extent=np.concatenate(lims).tolist())
-        p2 = ax.contour(x, y, msk1.T, levels=[c_thresh, 1e20],
+        p2 = ax.contour(x, y, msk.T, levels=[c_thresh, 1e20],
                         colors=f"C{i}", alpha=1, label=order_full[i],
                         extent=np.concatenate(lims).tolist())
         # ax.imshow(msk.T, origin="lower", alpha=0.5,
@@ -608,17 +609,17 @@ def paramspace_combined():
         # ax.set_title(fr"{order_full[i]}")
         if i == 0:
             msku = msk
-            msku1 = msk1
+            # msku1 = msk1
         else:
             # cmapu = mcolors.ListedColormap([
             #     (0, 0, 0, 0),           # RGBA for transparent (for 0)
             #     "C0"  # Color for 1
             # ])
-            p3 = ax.contourf(x, y, msku1.T, levels=[c_thresh, 1e20],
-                             colors="C0", alpha=0.3, zorder=0,
+            p3 = ax.contourf(x, y, msku.T, levels=[c_thresh, 1e20],
+                             colors="C0", alpha=0.2, zorder=0,
                              extent=np.concatenate(lims).tolist())
-            p4 = ax.contour(x, y, msku1.T, levels=[c_thresh, 1e20],
-                            colors="C0", alpha=1, zorder=0,
+            p4 = ax.contour(x, y, msku.T, levels=[c_thresh, 1e20],
+                            colors="C0", alpha=0.2, zorder=0,
                             extent=np.concatenate(lims).tolist())
             # ax.imshow(msku.T, origin="lower", alpha=0.2,
             #           cmap=cmapu, extent=np.concatenate(lims).tolist())
@@ -629,6 +630,125 @@ def paramspace_combined():
 
     handles = [Patch(color=f"C{i}", label=s) for i, s in enumerate(order_full)]
     fig.legend(handles, order_full, loc="outside right")
+    plt.savefig(f"pca_param_ptype{P_TYPE}_{WD}.pdf", dpi=1200,
+                metadata={"Keywords": str(G_PARAMS)})
+    plt.show()
+
+
+def boostrap_sample_nd(pdf_walk, lims, npc=2):
+    """Sub-sample the walk data many times to build a distribution of the PCA
+    space in nd. Counts no. bins occupied by each shape in a nd histogram of
+    the PCA space. Returns the bootstrap samples and the nd hist bin counts.
+    Choose number of principal components with npc."""
+
+    bin_counts = []
+    b_pdf_walks = []  # for storing bootstrap samples
+    mean_htmps = {shape: []for shape in ORDER}  # Store hists by shape
+    for i in range(N_BOOTSTRAP):
+        print(f"Bootstrap {i}", end="\r")
+        b_pdf_walk = pdf_walk.groupby("shape").sample(  # with replacement
+            n=BOOSTRAP_SIZE, replace=True  # equally over shape
+        ).reset_index(drop=True)  # total size = 4*BOOSTRAP_SIZE
+        b_pdf_walk["bstrap"] = i  # add bootstrap column
+        b_pdf_walks.append(b_pdf_walk)
+
+        for shape in ORDER:
+            pca_sub = b_pdf_walk[b_pdf_walk["shape"] == shape]
+            pca_sub_arr = pca_sub[[
+                f"PC{pc}" for pc in range(1, npc + 1)]].values
+            h, _ = np.histogramdd(pca_sub_arr, bins=N_BINS, range=lims)
+            if i == 0 and shape == ORDER[0]:
+                print(f"Hist shape: {h.shape}")
+                print(f"No. hist elements: {h.size}")
+            bin_count = np.count_nonzero(h)
+            bin_counts.append(
+                {"bstrap": i, "shape": shape, "bin_count": bin_count})
+            if i == 0:
+                mean_htmp = h.astype(float)
+            else:  # calculate running mean for each shape
+                mean_htmp = (mean_htmps[shape] * i + h) / (i + 1)
+            mean_htmps[shape] = mean_htmp
+
+    b_pdf_walk = pd.concat(b_pdf_walks, ignore_index=True)
+    bin_counts = pd.DataFrame(bin_counts)
+
+    return b_pdf_walk, bin_counts, mean_htmps,
+
+
+def nd_hist():
+    """Get bin occupancy estimates by bootstrapping nd histograms."""
+    npc = 6  # no. principle components to consider
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+    print(evr)
+    print(f"Total variance explained by {N_COMP} PCs: {evr.sum() * 100:.2f}%")
+    print(pdf_walk)
+    # get global min and max for each PCA component
+
+    bcts = []  # for storing bin counts
+    for i, npc in enumerate(range(1, N_COMP + 1)):
+        lims = get_pca_lims(pdf_walk, npc)
+        b_pdf_walk, bin_counts, mean_htmps = boostrap_sample_nd(
+            pdf_walk, lims, npc)
+        print("max bin values")
+        print([np.max(mean_htmps[s]) for s in ORDER])
+        print("min bin values")
+        print([np.min(mean_htmps[s]) for s in ORDER])
+
+        mean_bcts = bin_counts.groupby("shape", as_index=False).agg(
+            mean_bin_count=("bin_count", "mean"),
+            sem_bin_count=("bin_count", "sem"),
+            std_bin_count=("bin_count", "std")
+        )
+
+        mean_bcts["npc"] = npc
+        # mean_bcts["total_bins"] = mean_htmps[ORDER[0]].size
+        mean_bcts["total_bins"] = mean_bcts.groupby("npc")[
+            "mean_bin_count"].transform("sum")
+        mean_bcts["mean_norm"] = mean_bcts["mean_bin_count"] / \
+            mean_bcts["total_bins"]
+        mean_bcts["sem_norm"] = mean_bcts["sem_bin_count"] / \
+            mean_bcts["total_bins"]
+        mean_bcts["std_norm"] = mean_bcts["std_bin_count"] / \
+            mean_bcts["total_bins"]
+        bcts.append(mean_bcts)
+
+    bcts = pd.concat(bcts, ignore_index=True)
+    print(bcts)
+    get_bin_count_dist(bin_counts)
+
+    fig, ax = plt.subplots()
+
+    for i, shape in enumerate(ORDER):
+        sub = bcts[bcts['shape'] == shape]
+        # ax.plot(sub['npc'], sub['mean_norm'],
+        #         marker='o', label=order_full[i])
+        # ax.fill_between(
+        #     sub['npc'],
+        #     sub['mean_norm'] - sub["std_norm"],
+        #     sub['mean_norm'] + sub["std_norm"],
+        #     alpha=0.2
+        # )
+        ax.errorbar(
+            sub['npc'],
+            sub['mean_bin_count'],
+            # yerr=1.96 * sub['sem_norm'],
+            yerr=sub["std_bin_count"],
+            marker='o',
+            label=order_full[i],
+            capsize=3,  # adds little lines at the end of error bars
+            linestyle='-'
+        )
+        ax.set_ylim(0)
+
+    ax.grid(alpha=0.3)
+    # ax.set_yscale("log")
+    ax.set_xlabel("Number of principal components")
+    # ax.set_ylabel("log(mean bin count / total bins)")//
+    # ax.set_ylabel("Mean bin count / total mean bin count")
+    ax.set_ylabel("Mean bin count")
+    ax.legend(title="Shape")
     plt.show()
 
 
@@ -641,4 +761,6 @@ if __name__ == "__main__":
         bincount_paramspace()
     elif P_TYPE == 7:
         paramspace_combined()
+    elif P_TYPE == 8:
+        nd_hist()
     # get_p_and_s_data()
