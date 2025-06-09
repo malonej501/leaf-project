@@ -12,6 +12,11 @@ from matplotlib.patches import Polygon, Patch
 import matplotlib.colors as mcolors
 import seaborn as sns
 from PIL import Image
+from sklearn.cluster import DBSCAN
+import alphashape
+# Add at the top if not already present
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 
 LEAFIDS = ["p6af", "p6i", "p7a", "p7g", "p8ae", "p8i", "p9b", "p10c7", "p12b",
@@ -31,16 +36,16 @@ SAMP_SEED = 1  # seed for sub sampling raw walks to equal size per shape
 BOOSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
 N_BOOTSTRAP = 50  # no. bootstrap iterations
 PLOT_BIN_COUNT_DIST = True  # show histogram of bin counts for 2D hist of PCA
-P_TYPE = 8  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
+P_TYPE = 10  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 # 5-2dhist for mean bin counts, 6-2d hist mean bin counts with bin counts hist
 # 7-2d hist mean bin counts single ax, 8-hist for bin counts in nd histogram
-# 9-line graph fro bin counts against nbins
+# 9-line graph fro bin counts against nbins, 10-ashape analysis
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
 N_BINS = 10  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
 DATA = 1  # 0-len 80, 1-len 320
-N_COMP = 8  # number of PCA components to keep
+N_COMP = 3  # number of PCA components to keep
 XVAR = "PC1"  # which component to plot on x-axis
 YVAR = "PC2"  # which component to plot on y-axis
 G_PARAMS = {name: val for name, val in globals().items()if name.isupper()}
@@ -842,6 +847,72 @@ def nd_hist_var_nbin():
     plt.show()
 
 
+def nd_alpha_shape():
+    """Get alpha shape of PCA space in nd."""
+
+    eps = 1  # max dist between points to be considered in the same cluster
+    min_samples = 6  # min no. points in a cluster
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+
+    pcs = [f"PC{pc}" for pc in range(1, N_COMP + 1)]
+    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(6, 6),
+                            sharex=True, sharey=True, layout="constrained")
+    axs = [fig.add_subplot(2, 2, i + 1, projection='3d') for i in range(4)]
+
+    ch_dat = []  # for storing convex hull data
+    for i, s in enumerate(ORDER):  # cluster for each shape separately
+        ax = axs[i]
+        pdf_sub = pdf_walk[pdf_walk["shape"] == s]
+        pc_data = pdf_sub[pcs].values
+        pclust = DBSCAN(eps=eps, min_samples=min_samples).fit(pc_data)
+        db_labs = pclust.labels_  # cluster labels
+        pdf_sub["db_label"] = db_labs  # add cluster labels to pdf_walk
+        # plt.scatter(pdf_walk["PC1"], pdf_walk["PC2"],
+        #             c=pdf_walk["db_label"], cmap="tab10", s=10)
+
+        # plt.xlabel("PC1")
+        # plt.ylabel("PC2")
+        # plt.title("DBSCAN Clusters on PCA Data")
+        # plt.show()
+        total_vol = 0  # total volume of all clusters
+        for l in set(db_labs):
+            if l == -1:
+                continue  # skip noise points
+            pclust_sub = pdf_sub[pdf_sub["db_label"] == l][pcs]
+            chull = spatial.ConvexHull(pclust_sub.values)
+            ch_dat.append({
+                "shape": s,
+                "db_label": l,
+                "hvol": chull.volume,
+                "hull": chull,
+            })
+            total_vol += chull.volume
+            ax.scatter(
+                pclust_sub["PC1"], pclust_sub["PC2"], pclust_sub["PC3"],
+                color=f"C{i}", s=5)
+            # for simplex in chull.simplices:
+            #     ax.plot(
+            #         pclust_sub["PC1"].iloc[simplex],
+            #         pclust_sub["PC2"].iloc[simplex],
+            #         pclust_sub["PC3"].iloc[simplex],
+            #         color=f"C{i}", alpha=0.5
+            #     )
+            points = pclust_sub[["PC1", "PC2", "PC3"]].values
+
+            faces = [points[simplex] for simplex in chull.simplices]
+            hull_poly = Poly3DCollection(
+                faces, alpha=0.2, facecolor=f"C{i}", edgecolor=f"C{i}")
+            ax.add_collection3d(hull_poly)
+            ax.set_title(f"{order_full[i]}: volume {total_vol:.2f}")
+
+    plt.show()
+
+    ch_dat = pd.DataFrame(ch_dat)
+    print(ch_dat)
+
+
 if __name__ == "__main__":
     for name, val in G_PARAMS.items():
         print(f"{name} {val}")
@@ -855,4 +926,6 @@ if __name__ == "__main__":
         nd_hist()
     elif P_TYPE == 9:
         nd_hist_var_nbin()
+    elif P_TYPE == 10:
+        nd_alpha_shape()
     # get_p_and_s_data()
