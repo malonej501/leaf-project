@@ -29,13 +29,14 @@ BOOTSTRAP = True  # do "bootstrapping" on the final PCA distribution
 SAMP_SIZE = 4000  # no. leaves to sample at random from each shape
 SAMP_SEED = 1  # seed for sub sampling raw walks to equal size per shape
 BOOSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
-N_BOOTSTRAP = 500  # no. bootstrap iterations
+N_BOOTSTRAP = 50  # no. bootstrap iterations
 PLOT_BIN_COUNT_DIST = True  # show histogram of bin counts for 2D hist of PCA
 P_TYPE = 8  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 # 5-2dhist for mean bin counts, 6-2d hist mean bin counts with bin counts hist
 # 7-2d hist mean bin counts single ax, 8-hist for bin counts in nd histogram
+# 9-line graph fro bin counts against nbins
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
-N_BINS = 6  # number of bins for hist2d/hexbin/kdeplot
+N_BINS = 10  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
 DATA = 1  # 0-len 80, 1-len 320
@@ -635,7 +636,7 @@ def paramspace_combined():
     plt.show()
 
 
-def boostrap_sample_nd(pdf_walk, lims, npc=2):
+def boostrap_sample_nd(pdf_walk, lims, npc=2, nbns=N_BINS):
     """Sub-sample the walk data many times to build a distribution of the PCA
     space in nd. Counts no. bins occupied by each shape in a nd histogram of
     the PCA space. Returns the bootstrap samples and the nd hist bin counts.
@@ -656,7 +657,7 @@ def boostrap_sample_nd(pdf_walk, lims, npc=2):
             pca_sub = b_pdf_walk[b_pdf_walk["shape"] == shape]
             pca_sub_arr = pca_sub[[
                 f"PC{pc}" for pc in range(1, npc + 1)]].values
-            h, _ = np.histogramdd(pca_sub_arr, bins=N_BINS, range=lims)
+            h, _ = np.histogramdd(pca_sub_arr, bins=nbns, range=lims)
             if i == 0 and shape == ORDER[0]:
                 print(f"Hist shape: {h.shape}")
                 print(f"No. hist elements: {h.size}")
@@ -677,8 +678,10 @@ def boostrap_sample_nd(pdf_walk, lims, npc=2):
 
 def nd_hist():
     """Get bin occupancy estimates by bootstrapping nd histograms."""
-    npc = 6  # no. principle components to consider
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    tnbn = 10000  # total number of bins in nd histogram
+    nbn_list = [round(np.exp(np.log(tnbn) / i)) for i in range(1, N_COMP + 1)]
+    # print(nbn_list)
 
     pdf_walk, pdf_init, evr, hulls = do_pca()
     print(evr)
@@ -688,9 +691,12 @@ def nd_hist():
 
     bcts = []  # for storing bin counts
     for i, npc in enumerate(range(1, N_COMP + 1)):
+        # nbns = nbn_list[i]  # number of bins for this PCA
+        nbns = N_BINS
         lims = get_pca_lims(pdf_walk, npc)
         b_pdf_walk, bin_counts, mean_htmps = boostrap_sample_nd(
-            pdf_walk, lims, npc)
+            pdf_walk, lims, npc, nbns)
+        print(f"Number of bins per PC: {nbns}")
         print("max bin values")
         print([np.max(mean_htmps[s]) for s in ORDER])
         print("min bin values")
@@ -716,7 +722,7 @@ def nd_hist():
 
     bcts = pd.concat(bcts, ignore_index=True)
     print(bcts)
-    get_bin_count_dist(bin_counts)
+    # get_bin_count_dist(bin_counts)
 
     fig, ax = plt.subplots()
 
@@ -732,9 +738,9 @@ def nd_hist():
         # )
         ax.errorbar(
             sub['npc'],
-            sub['mean_bin_count'],
+            sub['mean_norm'],
             # yerr=1.96 * sub['sem_norm'],
-            yerr=sub["std_bin_count"],
+            yerr=sub["std_norm"],
             marker='o',
             label=order_full[i],
             capsize=3,  # adds little lines at the end of error bars
@@ -747,7 +753,91 @@ def nd_hist():
     ax.set_xlabel("Number of principal components")
     # ax.set_ylabel("log(mean bin count / total bins)")//
     # ax.set_ylabel("Mean bin count / total mean bin count")
-    ax.set_ylabel("Mean bin count")
+    # ax.set_ylabel("Mean bin count")
+    ax.set_ylabel("Mean bin count / total bins")
+    ax.legend(title="Shape")
+    plt.show()
+
+
+def nd_hist_var_nbin():
+    """Get bin occupancy estimates by bootstrapping nd histograms with
+    varying number of bins per principal component."""
+
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+    print(evr)
+    print(f"Total variance explained by {N_COMP} PCs: {evr.sum() * 100:.2f}%")
+    print(pdf_walk)
+    # get global min and max for each PCA component
+    nbn_list = [5, 10, 20, 40, 80, 160, 320, 640, 1280]
+    npc = 2  # number of principal components to consider
+
+    bcts = []  # for storing bin counts
+    for i, nbns in enumerate(nbn_list):
+        lims = get_pca_lims(pdf_walk, npc)
+        b_pdf_walk, bin_counts, mean_htmps = boostrap_sample_nd(
+            pdf_walk, lims, npc, nbns)
+        print("max bin values")
+        print([np.max(mean_htmps[s]) for s in ORDER])
+        print("min bin values")
+        print([np.min(mean_htmps[s]) for s in ORDER])
+
+        mean_bcts = bin_counts.groupby("shape", as_index=False).agg(
+            mean_bin_count=("bin_count", "mean"),
+            sem_bin_count=("bin_count", "sem"),
+            std_bin_count=("bin_count", "std")
+        )
+
+        mean_bcts["npc"] = npc
+        mean_bcts["nbins"] = nbns
+        # mean_bcts["total_bins"] = mean_htmps[ORDER[0]].size
+        mean_bcts["total_bins"] = mean_bcts.groupby("nbins")[
+            "mean_bin_count"].transform("sum")
+        mean_bcts["mean_norm"] = mean_bcts["mean_bin_count"] / \
+            mean_bcts["total_bins"]
+        mean_bcts["sem_norm"] = mean_bcts["sem_bin_count"] / \
+            mean_bcts["total_bins"]
+        mean_bcts["std_norm"] = mean_bcts["std_bin_count"] / \
+            mean_bcts["total_bins"]
+        bcts.append(mean_bcts)
+
+    bcts = pd.concat(bcts, ignore_index=True)
+    print(bcts)
+
+    fig, ax = plt.subplots()
+
+    for i, shape in enumerate(ORDER):
+        sub = bcts[bcts['shape'] == shape]
+        # ax.plot(sub['npc'], sub['mean_norm'],
+        #         marker='o', label=order_full[i])
+        # ax.fill_between(
+        #     sub['npc'],
+        #     sub['mean_norm'] - sub["std_norm"],
+        #     sub['mean_norm'] + sub["std_norm"],
+        #     alpha=0.2
+        # )
+        ax.errorbar(
+            sub['nbins'],
+            sub['mean_norm'],
+            # sub['mean_bin_count'],
+            # yerr=1.96 * sub['sem_norm'],
+            yerr=sub["std_norm"],
+            # yerr=sub["sem_bin_count"],
+            marker='o',
+            label=order_full[i],
+            capsize=3,  # adds little lines at the end of error bars
+            linestyle='-'
+        )
+        ax.set_ylim(0)
+
+    ax.grid(alpha=0.3)
+    # ax.set_yscale("log")
+    # ax.set_xscale("log")
+    ax.set_xlabel("No. bins per principal component")
+    # ax.set_ylabel("log(mean bin count / total bins)")//
+    ax.set_ylabel("Mean bin count / total mean bin count")
+    # ax.set_ylabel("Mean bin count")
     ax.legend(title="Shape")
     plt.show()
 
@@ -763,4 +853,6 @@ if __name__ == "__main__":
         paramspace_combined()
     elif P_TYPE == 8:
         nd_hist()
+    elif P_TYPE == 9:
+        nd_hist_var_nbin()
     # get_p_and_s_data()
