@@ -13,11 +13,6 @@ import matplotlib.colors as mcolors
 import seaborn as sns
 from PIL import Image
 from sklearn.cluster import DBSCAN
-import alphashape
-# Add at the top if not already present
-from mpl_toolkits.mplot3d import Axes3D
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
 
 LEAFIDS = ["p6af", "p6i", "p7a", "p7g", "p8ae", "p8i", "p9b", "p10c7", "p12b",
            "p12c7", "p12de", "p12f", "p1_414", "p4_510", "p6_163_alt",
@@ -45,7 +40,7 @@ N_BINS = 10  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
 DATA = 1  # 0-len 80, 1-len 320
-N_COMP = 3  # number of PCA components to keep
+N_COMP = 8  # number of PCA components to keep
 XVAR = "PC1"  # which component to plot on x-axis
 YVAR = "PC2"  # which component to plot on y-axis
 G_PARAMS = {name: val for name, val in globals().items()if name.isupper()}
@@ -847,8 +842,8 @@ def nd_hist_var_nbin():
     plt.show()
 
 
-def nd_alpha_shape():
-    """Get alpha shape of PCA space in nd."""
+def nd_chull(pdf_walk, npc=N_COMP, plot=False):
+    """Get convex hull of PCA space in nd."""
 
     eps = 1  # max dist between points to be considered in the same cluster
     min_samples = 6  # min no. points in a cluster
@@ -856,14 +851,14 @@ def nd_alpha_shape():
 
     pdf_walk, pdf_init, evr, hulls = do_pca()
 
-    pcs = [f"PC{pc}" for pc in range(1, N_COMP + 1)]
-    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(6, 6),
-                            sharex=True, sharey=True, layout="constrained")
-    axs = [fig.add_subplot(2, 2, i + 1, projection='3d') for i in range(4)]
+    pcs = [f"PC{pc}" for pc in range(1, npc + 1)]
+    if plot:
+        fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(6, 6),
+                                sharex=True, sharey=True, layout="constrained")
 
     ch_dat = []  # for storing convex hull data
     for i, s in enumerate(ORDER):  # cluster for each shape separately
-        ax = axs[i]
+
         pdf_sub = pdf_walk[pdf_walk["shape"] == s]
         pc_data = pdf_sub[pcs].values
         pclust = DBSCAN(eps=eps, min_samples=min_samples).fit(pc_data)
@@ -876,41 +871,100 @@ def nd_alpha_shape():
         # plt.ylabel("PC2")
         # plt.title("DBSCAN Clusters on PCA Data")
         # plt.show()
+
         total_vol = 0  # total volume of all clusters
         for l in set(db_labs):
-            if l == -1:
-                continue  # skip noise points
             pclust_sub = pdf_sub[pdf_sub["db_label"] == l][pcs]
-            chull = spatial.ConvexHull(pclust_sub.values)
+            if l == -1 or len(pclust_sub) < npc + 1:
+                continue  # skip noise or smaller clusters
+            chull = spatial.ConvexHull(pclust_sub.values, qhull_options="QJ")
             ch_dat.append({
                 "shape": s,
                 "db_label": l,
                 "hvol": chull.volume,
-                "hull": chull,
             })
             total_vol += chull.volume
-            ax.scatter(
-                pclust_sub["PC1"], pclust_sub["PC2"], pclust_sub["PC3"],
-                color=f"C{i}", s=5)
-            # for simplex in chull.simplices:
-            #     ax.plot(
-            #         pclust_sub["PC1"].iloc[simplex],
-            #         pclust_sub["PC2"].iloc[simplex],
-            #         pclust_sub["PC3"].iloc[simplex],
-            #         color=f"C{i}", alpha=0.5
-            #     )
-            points = pclust_sub[["PC1", "PC2", "PC3"]].values
+            if plot:
+                ax = axs.flat[i]
+                ax.scatter(
+                    pclust_sub["PC1"], pclust_sub["PC2"],
+                    color=f"C{i}", s=5)
+                for simplex in chull.simplices:
+                    ax.plot(
+                        pclust_sub["PC1"].iloc[simplex],
+                        pclust_sub["PC2"].iloc[simplex],
+                        color=f"C{i}", alpha=0.5
+                    )
+        if plot:
+            ax.set_title(f"{order_full[i]} volume: {total_vol:.2f}")
+            ax.grid(alpha=0.3)
 
-            faces = [points[simplex] for simplex in chull.simplices]
-            hull_poly = Poly3DCollection(
-                faces, alpha=0.2, facecolor=f"C{i}", edgecolor=f"C{i}")
-            ax.add_collection3d(hull_poly)
-            ax.set_title(f"{order_full[i]}: volume {total_vol:.2f}")
+    if plot:
+        fig.supxlabel(XVAR)
+        fig.supylabel(YVAR)
 
-    plt.show()
+        plt.show()
 
     ch_dat = pd.DataFrame(ch_dat)
-    print(ch_dat)
+
+    return ch_dat
+
+
+def ch_vol_dist():
+    """Plot distribution of convex hull columes for different no. PCs."""
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+
+    all_ch_dat = []  # for storing all convex hull data
+    for npc in range(2, N_COMP + 1):
+        print(f"Calculating convex hulls for {npc} PCs")
+        ch_dat = nd_chull(pdf_walk, npc, plot=False)
+        ch_dat = ch_dat.groupby("shape", as_index=False).agg(
+            total_volume=("hvol", "sum"),
+        )
+        ch_dat["npc"] = npc
+        all_ch_dat.append(ch_dat)
+
+    all_ch_dat = pd.concat(all_ch_dat, ignore_index=True)
+
+    print(all_ch_dat)
+
+    fig, ax = plt.subplots(figsize=(6, 4), layout="constrained")
+
+    for i, shape in enumerate(ORDER):
+        sub = all_ch_dat[all_ch_dat['shape'] == shape]
+        # ax.plot(sub['npc'], sub['mean_norm'],
+        #         marker='o', label=order_full[i])
+        # ax.fill_between(
+        #     sub['npc'],
+        #     sub['mean_norm'] - sub["std_norm"],
+        #     sub['mean_norm'] + sub["std_norm"],
+        #     alpha=0.2
+        # )
+        ax.errorbar(
+            sub['npc'],
+            sub['total_volume'],
+            # sub['mean_bin_count'],
+            # yerr=1.96 * sub['sem_norm'],
+            # yerr=sub["std_norm"],
+            # yerr=sub["sem_bin_count"],
+            marker='o',
+            label=order_full[i],
+            capsize=3,  # adds little lines at the end of error bars
+            linestyle='-'
+        )
+        ax.set_ylim(0)
+
+    ax.grid(alpha=0.3)
+    # ax.set_yscale("log")
+    # ax.set_xscale("log")
+    ax.set_xlabel("No. principal components")
+    # ax.set_ylabel("log(mean bin count / total bins)")//
+    ax.set_ylabel("Total convex hull volume")
+    # ax.set_ylabel("Mean bin count")
+    ax.legend(title="Shape")
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -927,5 +981,5 @@ if __name__ == "__main__":
     elif P_TYPE == 9:
         nd_hist_var_nbin()
     elif P_TYPE == 10:
-        nd_alpha_shape()
+        ch_vol_dist()
     # get_p_and_s_data()
