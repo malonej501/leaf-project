@@ -11,8 +11,8 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.patches import Polygon, Patch
 import matplotlib.colors as mcolors
 import seaborn as sns
-from PIL import Image
 from sklearn.cluster import DBSCAN
+from sklearn.neighbors import NearestNeighbors
 
 LEAFIDS = ["p6af", "p6i", "p7a", "p7g", "p8ae", "p8i", "p9b", "p10c7", "p12b",
            "p12c7", "p12de", "p12f", "p1_414", "p4_510", "p6_163_alt",
@@ -40,9 +40,9 @@ N_BINS = 10  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
 WD = "leaves_full_13-03-25_MUT2_CLEAN"  # walk directory
 DATA = 1  # 0-len 80, 1-len 320
-N_COMP = 8  # number of PCA components to keep
-XVAR = "PC1"  # which component to plot on x-axis
-YVAR = "PC2"  # which component to plot on y-axis
+N_COMP = 6  # number of PCA components to keep
+XVAR = "PC2"  # which component to plot on x-axis
+YVAR = "PC3"  # which component to plot on y-axis
 G_PARAMS = {name: val for name, val in globals().items()if name.isupper()}
 
 
@@ -845,61 +845,60 @@ def nd_hist_var_nbin():
 def nd_chull(pdf_walk, npc=N_COMP, plot=False):
     """Get convex hull of PCA space in nd."""
 
-    eps = 1  # max dist between points to be considered in the same cluster
+    # lims = get_pca_lims(pdf_walk, npc)  # get global min and max for PCA space
+    # print(lims)
+    eps = 2  # max dist between points to be considered in the same cluster
     min_samples = 6  # min no. points in a cluster
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
 
-    pdf_walk, pdf_init, evr, hulls = do_pca()
-
     pcs = [f"PC{pc}" for pc in range(1, npc + 1)]
-    if plot:
+    if plot and XVAR in pcs and YVAR in pcs:
         fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(6, 6),
                                 sharex=True, sharey=True, layout="constrained")
 
     ch_dat = []  # for storing convex hull data
     for i, s in enumerate(ORDER):  # cluster for each shape separately
 
-        pdf_sub = pdf_walk[pdf_walk["shape"] == s]
+        pdf_sub = pdf_walk[pdf_walk["shape"] == s].copy()
         pc_data = pdf_sub[pcs].values
         pclust = DBSCAN(eps=eps, min_samples=min_samples).fit(pc_data)
         db_labs = pclust.labels_  # cluster labels
         pdf_sub["db_label"] = db_labs  # add cluster labels to pdf_walk
-        # plt.scatter(pdf_walk["PC1"], pdf_walk["PC2"],
-        #             c=pdf_walk["db_label"], cmap="tab10", s=10)
-
-        # plt.xlabel("PC1")
-        # plt.ylabel("PC2")
-        # plt.title("DBSCAN Clusters on PCA Data")
-        # plt.show()
+        # pdf_sub["db_label"] = 0  # don't use cluster labels
 
         total_vol = 0  # total volume of all clusters
+        total_simplices = 0  # total simplices in all clusters
         for l in set(db_labs):
             pclust_sub = pdf_sub[pdf_sub["db_label"] == l][pcs]
             if l == -1 or len(pclust_sub) < npc + 1:
                 continue  # skip noise or smaller clusters
             chull = spatial.ConvexHull(pclust_sub.values, qhull_options="QJ")
-            ch_dat.append({
-                "shape": s,
-                "db_label": l,
-                "hvol": chull.volume,
-            })
+
             total_vol += chull.volume
-            if plot:
+            total_simplices += len(chull.simplices)
+            if plot and XVAR in pcs and YVAR in pcs:
                 ax = axs.flat[i]
                 ax.scatter(
-                    pclust_sub["PC1"], pclust_sub["PC2"],
+                    pclust_sub[XVAR], pclust_sub[YVAR],
                     color=f"C{i}", s=5)
                 for simplex in chull.simplices:
                     ax.plot(
-                        pclust_sub["PC1"].iloc[simplex],
-                        pclust_sub["PC2"].iloc[simplex],
+                        pclust_sub[XVAR].iloc[simplex],
+                        pclust_sub[YVAR].iloc[simplex],
                         color=f"C{i}", alpha=0.5
                     )
-        if plot:
+        ch_dat.append({
+            "npc": npc,
+            "shape": s,
+            "total_volume": total_vol,
+            "total_simplices": total_simplices,
+            "n_clusters": len(set(db_labs)),
+        })
+        if plot and XVAR in pcs and YVAR in pcs:
             ax.set_title(f"{order_full[i]} volume: {total_vol:.2f}")
             ax.grid(alpha=0.3)
 
-    if plot:
+    if plot and XVAR in pcs and YVAR in pcs:
         fig.supxlabel(XVAR)
         fig.supylabel(YVAR)
 
@@ -908,6 +907,29 @@ def nd_chull(pdf_walk, npc=N_COMP, plot=False):
     ch_dat = pd.DataFrame(ch_dat)
 
     return ch_dat
+
+
+def bstrap_chull(pdf_walk, npc=N_COMP):
+    """Sub-sample the walk data many times to build a distribution of the PCA
+    space in nd. Compute total convex hull volume for the sample."""
+
+    h_vols = []
+    b_pdf_walks = []  # for storing bootstrap samples
+    for i in range(N_BOOTSTRAP):
+        print(f"Bootstrap {i}", end="\r")
+        b_pdf_walk = pdf_walk.groupby("shape").sample(  # with replacement
+            n=BOOSTRAP_SIZE, replace=True  # equally over shape
+        ).reset_index(drop=True)  # total size = 4*BOOSTRAP_SIZE
+        b_pdf_walk["bstrap"] = i  # add bootstrap column
+        b_pdf_walks.append(b_pdf_walk)
+
+        ch_dat = nd_chull(b_pdf_walk, npc, plot=False)
+        ch_dat["bstrap"] = i
+        h_vols.append(ch_dat)
+    b_pdf_walk = pd.concat(b_pdf_walks, ignore_index=True)
+    h_vols = pd.concat(h_vols, ignore_index=True)
+
+    return h_vols
 
 
 def ch_vol_dist():
@@ -919,14 +941,19 @@ def ch_vol_dist():
     all_ch_dat = []  # for storing all convex hull data
     for npc in range(2, N_COMP + 1):
         print(f"Calculating convex hulls for {npc} PCs")
-        ch_dat = nd_chull(pdf_walk, npc, plot=False)
-        ch_dat = ch_dat.groupby("shape", as_index=False).agg(
-            total_volume=("hvol", "sum"),
-        )
-        ch_dat["npc"] = npc
+        # ch_dat = nd_chull(pdf_walk, npc, plot=False)
+        ch_dat = bstrap_chull(pdf_walk, npc)
+        print(ch_dat)
         all_ch_dat.append(ch_dat)
 
     all_ch_dat = pd.concat(all_ch_dat, ignore_index=True)
+    all_ch_dat = all_ch_dat.groupby(
+        ["npc", "shape"], as_index=False
+    ).agg(
+        mean_volume=("total_volume", "mean"),
+        std_volume=("total_volume", "std"),
+        sem_volume=("total_volume", "sem")
+    )
 
     print(all_ch_dat)
 
@@ -944,10 +971,11 @@ def ch_vol_dist():
         # )
         ax.errorbar(
             sub['npc'],
-            sub['total_volume'],
+            # sub['total_volume'],
+            sub['mean_volume'],
             # sub['mean_bin_count'],
             # yerr=1.96 * sub['sem_norm'],
-            # yerr=sub["std_norm"],
+            yerr=sub["std_volume"],
             # yerr=sub["sem_bin_count"],
             marker='o',
             label=order_full[i],
@@ -964,6 +992,20 @@ def ch_vol_dist():
     ax.set_ylabel("Total convex hull volume")
     # ax.set_ylabel("Mean bin count")
     ax.legend(title="Shape")
+    plt.show()
+
+
+def plot_k_distance(data, k=5, npc=N_COMP):
+    plt.figure()
+    n_points = 200  # number of points to plot
+    nbrs = NearestNeighbors(n_neighbors=k).fit(data)
+    distances, _ = nbrs.kneighbors(data)
+    k_distances = np.sort(distances[:, k-1])  # k-th nearest neighbor distance
+    idx = np.linspace(0, len(k_distances) - 1, n_points, dtype=int)
+    plt.plot(k_distances[idx])
+    plt.ylabel(f"{k}-th Nearest Neighbor Distance")
+    plt.xlabel("Points sorted by distance")
+    plt.title(f"k-distance graph for DBSCAN eps selection {npc} PCs")
     plt.show()
 
 
