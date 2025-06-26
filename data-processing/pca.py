@@ -13,6 +13,7 @@ import matplotlib.colors as mcolors
 import seaborn as sns
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
+import networkx as nx
 
 LEAFIDS = ["p6af", "p6i", "p7a", "p7g", "p8ae", "p8i", "p9b", "p10c7", "p12b",
            "p12c7", "p12de", "p12f", "p1_414", "p4_510", "p6_163_alt",
@@ -28,13 +29,14 @@ SUB_SAMPLE = True  # whether to sub-sample the data
 BOOTSTRAP = True  # do "bootstrapping" on the final PCA distribution
 SAMP_SIZE = 4000  # no. leaves to sample at random from each shape
 SAMP_SEED = 1  # seed for sub sampling raw walks to equal size per shape
-BOOSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
-N_BOOTSTRAP = 50  # no. bootstrap iterations
+BOOTSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
+N_BOOTSTRAP = 500  # no. bootstrap iterations
 PLOT_BIN_COUNT_DIST = True  # show histogram of bin counts for 2D hist of PCA
-P_TYPE = 10  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
+P_TYPE = 11  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 # 5-2dhist for mean bin counts, 6-2d hist mean bin counts with bin counts hist
-# 7-2d hist mean bin counts single ax, 8-hist for bin counts in nd histogram
-# 9-line graph fro bin counts against nbins, 10-ashape analysis
+# 7-2d hist mean bin counts single ax, 8-line graph for bin counts against NPC
+# 9-line graph for bin counts against nbins, 10-ashape analysis
+# 11-compute MEE volume
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
 N_BINS = 10  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
@@ -212,8 +214,8 @@ def boostrap_sample(pdf_walk, lims):
     for i in range(N_BOOTSTRAP):
         print(f"Bootstrap {i}", end="\r")
         b_pdf_walk = pdf_walk.groupby("shape").sample(  # with replacement
-            n=BOOSTRAP_SIZE, replace=True  # equally over shape
-        ).reset_index(drop=True)  # total size = 4*BOOSTRAP_SIZE
+            n=BOOTSTRAP_SIZE, replace=True  # equally over shape
+        ).reset_index(drop=True)  # total size = 4*BOOTSTRAP_SIZE
         b_pdf_walk["bstrap"] = i  # add bootstrap column
         b_pdf_walks.append(b_pdf_walk)
 
@@ -330,7 +332,7 @@ def paramspace():
             get_bin_count_dist(bin_counts)
 
         pdf_walk = pdf_walk.groupby("shape").sample(
-            n=BOOSTRAP_SIZE, replace=True
+            n=BOOTSTRAP_SIZE, replace=True
         ).reset_index(drop=True)  # reduce to BOOTSTRAP_SIZE
 
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
@@ -648,8 +650,8 @@ def boostrap_sample_nd(pdf_walk, lims, npc=2, nbns=N_BINS):
     for i in range(N_BOOTSTRAP):
         print(f"Bootstrap {i}", end="\r")
         b_pdf_walk = pdf_walk.groupby("shape").sample(  # with replacement
-            n=BOOSTRAP_SIZE, replace=True  # equally over shape
-        ).reset_index(drop=True)  # total size = 4*BOOSTRAP_SIZE
+            n=BOOTSTRAP_SIZE, replace=True  # equally over shape
+        ).reset_index(drop=True)  # total size = 4*BOOTSTRAP_SIZE
         b_pdf_walk["bstrap"] = i  # add bootstrap column
         b_pdf_walks.append(b_pdf_walk)
 
@@ -677,7 +679,7 @@ def boostrap_sample_nd(pdf_walk, lims, npc=2, nbns=N_BINS):
 
 
 def nd_hist():
-    """Get bin occupancy estimates by bootstrapping nd histograms."""
+    """Get histogram bin occupancy estimates as NPCs increases."""
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
     tnbn = 10000  # total number of bins in nd histogram
     nbn_list = [round(np.exp(np.log(tnbn) / i)) for i in range(1, N_COMP + 1)]
@@ -918,8 +920,8 @@ def bstrap_chull(pdf_walk, npc=N_COMP):
     for i in range(N_BOOTSTRAP):
         print(f"Bootstrap {i}", end="\r")
         b_pdf_walk = pdf_walk.groupby("shape").sample(  # with replacement
-            n=BOOSTRAP_SIZE, replace=True  # equally over shape
-        ).reset_index(drop=True)  # total size = 4*BOOSTRAP_SIZE
+            n=BOOTSTRAP_SIZE, replace=True  # equally over shape
+        ).reset_index(drop=True)  # total size = 4*BOOTSTRAP_SIZE
         b_pdf_walk["bstrap"] = i  # add bootstrap column
         b_pdf_walks.append(b_pdf_walk)
 
@@ -996,6 +998,7 @@ def ch_vol_dist():
 
 
 def plot_k_distance(data, k=5, npc=N_COMP):
+    """Plot k-distance graph for DBSCAN eps selection."""
     plt.figure()
     n_points = 200  # number of points to plot
     nbrs = NearestNeighbors(n_neighbors=k).fit(data)
@@ -1007,6 +1010,50 @@ def plot_k_distance(data, k=5, npc=N_COMP):
     plt.xlabel("Points sorted by distance")
     plt.title(f"k-distance graph for DBSCAN eps selection {npc} PCs")
     plt.show()
+
+
+def histogram_pairs():
+    """Estimate high dimensional bin counts by combining counts from 2D
+    histograms of pairs of principal components."""
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+    lims = get_pca_lims(pdf_walk)  # get global min and max for PCA space
+    pc_pairs = [[f"PC{i}", f"PC{i+1}"] for i in range(1, N_COMP, 2)]
+    print(pc_pairs)
+
+    lims = get_pca_lims(pdf_walk, 2)
+    bcts = []  # for storing bin counts
+    for i, pair in enumerate(pc_pairs):
+        pdf_sub = pdf_walk[pair + ["shape"]].copy()  # rename PCs to PC1, PC2
+        pdf_sub = pdf_sub.rename(columns={pair[0]: "PC1", pair[1]: "PC2"})
+        b_pdf_sub, bin_counts, mean_htmps = boostrap_sample_nd(
+            pdf_sub, lims, 2, N_BINS)
+        b_pdf_sub = b_pdf_sub.rename(columns={"PC1": pair[0], "PC2": pair[1]})
+        print(b_pdf_sub)
+        print(bin_counts)
+
+        mean_bcts = bin_counts.groupby("shape", as_index=False).agg(
+            mean_bin_count=("bin_count", "mean"),
+            sem_bin_count=("bin_count", "sem"),
+            std_bin_count=("bin_count", "std")
+        )
+        print(mean_bcts)
+        # mean_bcts["total_bins"] = mean_htmps[ORDER[0]].size
+        mean_bcts["total_bins"] = mean_bcts["mean_bin_count"].sum()
+        mean_bcts["mean_norm"] = mean_bcts["mean_bin_count"] / \
+            mean_bcts["total_bins"]
+        mean_bcts["sem_norm"] = mean_bcts["sem_bin_count"] / \
+            mean_bcts["total_bins"]
+        mean_bcts["std_norm"] = mean_bcts["std_bin_count"] / \
+            mean_bcts["total_bins"]
+        mean_bcts["pair"] = f"{pair[0]}-{pair[1]}"
+        bcts.append(mean_bcts)
+
+    bcts = pd.concat(bcts, ignore_index=True)
+    print(bcts)
+    vol_est = bcts.groupby("shape")["mean_bin_count"].prod()
+    print(vol_est)
+    print(bcts.groupby("shape")["mean_norm"].prod())
 
 
 if __name__ == "__main__":
@@ -1024,4 +1071,6 @@ if __name__ == "__main__":
         nd_hist_var_nbin()
     elif P_TYPE == 10:
         ch_vol_dist()
-    # get_p_and_s_data()
+    elif P_TYPE == 11:
+        histogram_pairs()
+        # get_p_and_s_data()
