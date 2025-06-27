@@ -32,11 +32,11 @@ SAMP_SEED = 1  # seed for sub sampling raw walks to equal size per shape
 BOOTSTRAP_SIZE = 1000  # no. leaves drawn per shape per bootstrap iteration
 N_BOOTSTRAP = 500  # no. bootstrap iterations
 PLOT_BIN_COUNT_DIST = True  # show histogram of bin counts for 2D hist of PCA
-P_TYPE = 11  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
+P_TYPE = 12  # 0-scatter, 1-hist2d, 2-kdeplot matplotlib, 3-kdeplot seaborn, 4-hexbin
 # 5-2dhist for mean bin counts, 6-2d hist mean bin counts with bin counts hist
 # 7-2d hist mean bin counts single ax, 8-line graph for bin counts against NPC
 # 9-line graph for bin counts against nbins, 10-ashape analysis
-# 11-compute MEE volume
+# 11-infer nd bin count from pairs of 2d bincounts, 12-connectivity analysis
 ALPHA = 0.005  # alpha in scatter plot, 0.05 for sub-sample, 0.005 for full
 N_BINS = 10  # number of bins for hist2d/hexbin/kdeplot
 MINCT = 0  # method for minimum count for hexbin - 0 for 1, 1 for 5% of vmax
@@ -1056,6 +1056,53 @@ def histogram_pairs():
     print(bcts.groupby("shape")["mean_norm"].prod())
 
 
+def connectivity():
+    """Estimate connectivity of point clouds in PCA space."""
+    order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
+    pdf_walk, pdf_init, evr, hulls = do_pca()
+    fig, axs = plt.subplots(2, 2, figsize=(6, 6), layout="constrained")
+    for axi, shape in enumerate(ORDER):
+        pcs = ["PC1", "PC2"]  # for 2D connectivity analysis
+        # pcs = [f"PC{pc}" for pc in range(1, N_COMP + 1)]
+        samples = pdf_walk[pdf_walk["shape"] == shape][pcs].values
+
+        k = 6  # no. nearest neighbors to query
+        # Step 1: Fit k-NN model
+        nbrs = NearestNeighbors(n_neighbors=k).fit(samples)
+        distances, indices = nbrs.kneighbors(samples)
+
+        # Step 2: Build adjacency list (skip self-edges at index 0)
+        edges = []
+        for i, neighbors in enumerate(indices):
+            for j in neighbors[1:]:
+                edges.append((i, j))
+
+        # Step 3: Create undirected graph
+        G = nx.Graph()
+        G.add_nodes_from(range(len(samples)))
+        G.add_edges_from(edges)
+
+        # Step 4: Analyze connectivity
+        connected = list(nx.connected_components(G))
+        n_components = len(connected)
+        component_sizes = [len(c) for c in connected]
+
+        print(f"Number of connected components: {n_components}")
+        print(f"Sizes of components: {component_sizes}")
+
+        # Optional: plot in 2D
+        if samples.shape[1] == 2:
+            ax = axs.flat[axi]
+            pos = {i: samples[i] for i in range(len(samples))}
+            nx.draw(G, pos, ax=ax, node_size=1,
+                    alpha=0.1)
+            ax.set_title(
+                f"{order_full[axi]}\n{n_components} connected component(s)")
+    plt.show()
+
+    return n_components, component_sizes
+
+
 if __name__ == "__main__":
     for name, val in G_PARAMS.items():
         print(f"{name} {val}")
@@ -1073,4 +1120,5 @@ if __name__ == "__main__":
         ch_vol_dist()
     elif P_TYPE == 11:
         histogram_pairs()
-        # get_p_and_s_data()
+    elif P_TYPE == 12:
+        connectivity()
