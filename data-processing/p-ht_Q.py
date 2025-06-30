@@ -12,10 +12,10 @@ from matplotlib import pyplot as plt
 # WALK_DATA = "MUT2.2.csv"  # Path to the CSV file containing walk data
 # MLE_Q_DATA = "MUT2.2_MLE_rates.csv"  # CSV containing MLE rates
 # Path to the CSV file containing walk data
-WALK_DATA = "MUT2_320_mle_20-03-25.csv"
+WALK_DATA = "MUT2_320_mle_23-04-25.csv"
 # WALK_DATA = "pwalks_10_160_leaves_full_13-03-25_MUT2_CLEAN.csv"
-MLE_Q_DATA = "markov_fitter_reports/emcee/MUT2_320_mle_20-03-25/" \
-    "ML_MUT2_320_mle_20-03-25.csv"
+MLE_Q_DATA = "markov_fitter_reports/emcee/MUT2_320_mcmc_2_24-04-25/" \
+    "ML_MUT2_320_mcmc_2_24-04-25.csv"
 # MLE_Q_DATA = "markov_fitter_reports/emcee/MUT2_pwalks_160_10_07-04-25/" \
 #     "ML_MUT2_pwalks_160_10_07-04-25.csv"
 EXPORT_Q = False   # export the Q matrix to file
@@ -25,9 +25,9 @@ Q_ID = "test"
 # keep only walks with first_cat in contig_filt for holding time calculation
 CONTIG_FILT = ["u", "l", "d", "c"]
 RM_NO_TRANS = False  # remove walks that never transition
-PLOT = 99  # 0 - None, 1 - trans probs and hold times, 2 - q matrix comparison,
-# 3 - hold time distribution, 4 - hold time distribution by first_cat
-# 99 - plot all
+PLOT = 3  # 0 - None, 1 - trans probs and hold times, 2 - q matrix comparison,
+# 3 - hold time distribution, 4 - hold time distribution by first_cat,
+# 5 - alternative hold time distribution, 99 - plot all
 INCL_DIAG = False  # include diagonal transitions e.g. uu in prop calculation
 V = False  # verbose
 
@@ -36,6 +36,10 @@ def get_walks():
     """Return the details of random walks along with transition type at each
     step"""
     walks = pd.read_csv(WALK_DATA)
+    assert len(walks) == 320 * 5 * 48, (
+        "The number of rows in the walk data does not match the expected " +
+        "number of steps (320 leaves * 5 steps * 48 walks per leaf)."
+    )
     # get transitions by shifting shape columns down by one and combining
     walks["prevshape"] = walks["shape"].shift(+1)
     # replace 0th step with first_cat
@@ -84,7 +88,10 @@ def contig_state_counts(c_filt=None):
                                          "step", "transition",
                                          "first_cat"]].apply(
         count_contig_states).reset_index(drop=True)
-
+    assert c_count["count"].sum() == 320 * 5 * 48, (
+        "The total no. steps in holding times does not match the expected number "
+        "of steps (320 leaves * 5 steps * 48 walks per leaf)."
+    )
     h_time_avg = c_count.groupby("shape")["count"].agg(
         ht_avg="mean", ht_std="std", n_contigs="count").reset_index()
     h_time_avg["ht_se"] = h_time_avg["ht_std"] / h_time_avg["n_contigs"]**0.5
@@ -94,7 +101,7 @@ def contig_state_counts(c_filt=None):
 
 def trans_prob():
     """Get each transition type as a proportion of total transitions from the
-    same initial state. Can include diagonal transitionsin the proportion 
+    same initial state. Can include diagonal transitionsin the proportion
     calculation or not"""
     walks = get_walks()
     # count transitions
@@ -168,6 +175,7 @@ def plot_q(q_data):
 def plot_prop_ht(q_data):
     """Visualise proportions and holding times"""
     fig, axs = plt.subplots(ncols=2, figsize=(8, 5))
+    print(q_data)
     axs[0].bar(q_data["trans"], q_data["prop"])
     axs[0].set_xlabel("Transition")
     if INCL_DIAG:
@@ -187,20 +195,66 @@ def plot_prop_ht(q_data):
 
 
 def plot_contig_distr():
-    """Visualise the distribution of holding times"""
+    """Visualise the distribution of holding times. Can balance the no.
+    contigs or just use the maximum for each shape."""
     c_count, _ = contig_state_counts()
+    min_count = c_count["shape"].value_counts().min()  # shape with min count
+    c_count_balanced = c_count.groupby("shape", group_keys=False).apply(
+        lambda x: x.sample(n=min_count))  # balance the counts
     fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(8, 7), sharex=True,
                             sharey=True)
     fig.suptitle(
         f"Holding time distribution by state\n{WALK_DATA}, "
-        "contig_filt={CONTIG_FILT}")
-    fig.supxlabel("Contiguous state length (holding time)")
-    fig.supylabel("Frequency density")
+        f"contig_filt={CONTIG_FILT}")
+    fig.supxlabel("Holding time (no. steps)")
+    fig.supylabel("Frequency")
     for i, shape in enumerate(["u", "l", "d", "c"]):
         ax = axs[i // 2, i % 2]
-        ax.hist(c_count[c_count["shape"] == shape]["count"],
-                bins=50, density=True)
-        ax.set_title(f"State: {shape}")
+        c_count_shape = c_count_balanced[c_count_balanced["shape"] == shape]
+        ax.hist(c_count_shape["count"], bins=50, range=(0, 320))
+        ax.grid(alpha=0.3)
+        ax.set_title(["Unlobed", "Lobed", "Dissected", "Compound"][i] +
+                     fr", $N={len(c_count_shape)}$")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_contig_distr_alt():
+    """Visualise holding time distribution with violin plots."""
+    c_count, _ = contig_state_counts()
+    min_count = c_count["shape"].value_counts().min()  # shape with min count
+    c_count_balanced = c_count.groupby("shape", group_keys=False).apply(
+        lambda x: x.sample(n=min_count))  # balance the counts
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+    for i, shape in enumerate(["u", "l", "d", "c"]):
+        c_count_shape = c_count_balanced[c_count_balanced["shape"] == shape]
+        q1, med, q3 = np.percentile(c_count_shape["count"], [25, 50, 75])
+        min, max = c_count_shape["count"].min(), c_count_shape["count"].max()
+        # ax.hist(c_count_shape["count"],
+        #         bins=50, alpha=0.3, label=f"State: {shape}",
+        #         color=f"C{i}", range=(0, 320))
+        v = ax.violinplot(c_count_shape["count"],
+                          positions=[i], showmeans=False, showmedians=False,
+                          widths=0.5, bw_method=0.2, showextrema=False)
+        v["bodies"][0].set_facecolor("C0")
+        v["bodies"][0].set_edgecolor("C0")
+        # ax.vlines([i], q1, q3, color="black", lw=3)
+        # ax.vlines([i], min, max, color="black", lw=1)
+        # ax.scatter([i], med, color="white", marker="o", s=20, zorder=3,
+        #            edgecolor="black", label=f"State: {shape}")
+        ax.boxplot(c_count_shape["count"], positions=[i], widths=0.2,
+                   showfliers=True, showmeans=False,
+                   medianprops=dict(color="black"))
+    # ax.set_xlabel("Contiguous state length (holding time)")
+    # ax.set_ylabel("Frequency")
+        print(len(c_count_shape))
+    ax.set_xticks(range(4), ["Unlobed", "Lobed", "Dissected", "Compound"])
+    ax.set_ylabel("Holding time (no. steps)")
+    ax.set_title(f"Holding time distribution by state\n{WALK_DATA}, "
+                 f"contig_filt={CONTIG_FILT}")
+    # ax.legend()
+    ax.grid(alpha=0.3)
     plt.tight_layout()
     plt.show()
 
@@ -217,13 +271,14 @@ def plot_contig_distr_by_first_cat():
     fig.suptitle(
         f"Holding time distribution by state and initial state\n{WALK_DATA}")
     fig.supxlabel("Contiguous state length (holding time)")
-    fig.supylabel("Frequency density")
+    fig.supylabel("Frequency")
     for i, first_cat in enumerate(["u", "l", "d", "c"]):
         for j, shape in enumerate(["u", "l", "d", "c"]):
             ax = axs[i, j]
             ax.hist(cc_fcat[(cc_fcat["shape"] == shape) &
                             (cc_fcat["first_cat"] == first_cat)]["count"],
-                    bins=30, density=True)
+                    bins=30)
+            ax.grid(alpha=0.3)
             ax.set_title(f"Initial state: {first_cat}, state: {shape}")
     plt.tight_layout()
     plt.show()
@@ -311,6 +366,8 @@ if __name__ == "__main__":
         plot_contig_distr()
     elif PLOT == 4:
         plot_contig_distr_by_first_cat()
+    elif PLOT == 5:
+        plot_contig_distr_alt()
     elif PLOT == 99:
         plot_prop_ht(q)
         plot_q(q)
