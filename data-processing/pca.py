@@ -9,7 +9,6 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.patches import Polygon, Patch
-import matplotlib.colors as mcolors
 import seaborn as sns
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
@@ -1060,7 +1059,8 @@ def connectivity():
     """Estimate connectivity of point clouds in PCA space."""
     order_full = ["Unlobed", "Lobed", "Dissected", "Compound"]
     pdf_walk, pdf_init, evr, hulls = do_pca()
-    fig, axs = plt.subplots(2, 2, figsize=(6, 6), layout="constrained")
+    fig, axs = plt.subplots(2, 2, figsize=(
+        6, 6), layout="constrained", sharex=True, sharey=True)
     for axi, shape in enumerate(ORDER):
         pcs = ["PC1", "PC2"]  # for 2D connectivity analysis
         # pcs = [f"PC{pc}" for pc in range(1, N_COMP + 1)]
@@ -1068,14 +1068,15 @@ def connectivity():
 
         k = 6  # no. nearest neighbors to query
         # Step 1: Fit k-NN model
-        nbrs = NearestNeighbors(n_neighbors=k).fit(samples)
-        distances, indices = nbrs.kneighbors(samples)
+        nbrs = NearestNeighbors(n_neighbors=k).fit(samples)  # model
+        distances, indices = nbrs.kneighbors(samples)  # query all points
 
         # Step 2: Build adjacency list (skip self-edges at index 0)
         edges = []
         for i, neighbors in enumerate(indices):
             for j in neighbors[1:]:
-                edges.append((i, j))
+                if i != j:  # skip self-loops
+                    edges.append((i, j))
 
         # Step 3: Create undirected graph
         G = nx.Graph()
@@ -1087,6 +1088,7 @@ def connectivity():
         n_components = len(connected)
         component_sizes = [len(c) for c in connected]
 
+        print(f"No. nodes: {len(samples)}")
         print(f"Number of connected components: {n_components}")
         print(f"Sizes of components: {component_sizes}")
 
@@ -1094,10 +1096,30 @@ def connectivity():
         if samples.shape[1] == 2:
             ax = axs.flat[axi]
             pos = {i: samples[i] for i in range(len(samples))}
-            nx.draw(G, pos, ax=ax, node_size=1,
-                    alpha=0.1)
-            ax.set_title(
-                f"{order_full[axi]}\n{n_components} connected component(s)")
+            # nx.draw(G, pos, ax=ax, node_size=0.1, node_color="black",
+            #         width=1, alpha=0.5)
+            # nx.draw_networkx_edges(G, pos, ax=ax, width=0.3,
+            #                        edge_color="black", alpha=0.3)
+            # Assign a color to each component
+            colors = plt.get_cmap('tab10', n_components)
+            node_color_map = np.zeros(len(samples), dtype=int)
+            for idx, component in enumerate(connected):
+                for node in component:
+                    node_color_map[node] = idx
+
+            # Draw edges for each component in its color
+            for idx, component in enumerate(connected):
+                subgraph = G.subgraph(component)
+                nx.draw_networkx_edges(
+                    subgraph, pos, ax=ax, width=1,
+                    edge_color=[colors(idx)], alpha=1, hide_ticks=False
+                )
+            ax.set_title(fr"{order_full[axi]} ($N={len(samples)}$)")
+            ax.grid(alpha=0.3)
+            ax.text(0.98, 0.02, fr"No. components $={n_components}$",
+                    transform=ax.transAxes, va='bottom', ha="right")
+        fig.supxlabel(fr"{pcs[0]} (${(evr[0] * 100):.2f}\%$)")
+        fig.supylabel(fr"{pcs[1]} (${(evr[1] * 100):.2f}\%$)")
     plt.show()
 
     return n_components, component_sizes
