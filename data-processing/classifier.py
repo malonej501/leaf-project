@@ -436,43 +436,43 @@ def main_batch(directory, plot=False):
         if plot:
             # annotate the silhouette of the leaf with the pertinent points
             # and write to file
-            for points in local_maxima:
-                for x, y in points:
-                    cv2.circle(img, (x, y), 10, (0, 0, 255), -1)
-            for points in local_minima:
-                for x, y in points:
-                    cv2.circle(img, (x, y), 10, (255, 191, 0), -1)
-            cv2.circle(img, refpoint, 10, (0, 165, 255), -1)
-            # cv2.imwrite(directory + f"/{file[:-4]}-points.png", img)
-            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            plt.figure(figsize=(2.75, 2.75))
+            plt.imshow(img, alpha=0.5)
+            plt.scatter(local_maxima[:, 0][:, 0], local_maxima[:, 0][:, 1],
+                        color="C1", s=60, ec="white", label="Max")
+            plt.scatter(local_minima[:, 0][:, 0], local_minima[:, 0][:, 1],
+                        color="C0", s=60, ec="white", label="Min")
+            plt.scatter([refpoint[0]], [refpoint[1]],
+                        color="C2", s=60, ec="white", label="Ref")
+            plt.legend(loc="lower right", frameon=False)
+            plt.axis("off")
+            plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+            plt.tight_layout(pad=0)
             # Save the image as a PDF
-            plt.imsave(directory + f"/{file[:-4]}-points.pdf", img_rgb)
+            plt.savefig(directory + f"/{file[:-4]}-points.pdf", dpi=1200)
+            plt.show()
+            plt.close()
 
-            plt.figure(figsize=(4, 3))
-            plt.rcParams["font.family"] = "CMU Serif"
-            seaborn.scatterplot(refdist, color="black", s=10, edgecolor="none")
-            seaborn.scatterplot(
-                y=refdist[local_maxima_indices + 40],
-                x=local_maxima_indices + 40,
-                color="red",
-                s=100,
-                edgecolor="none",
-            )
-            seaborn.scatterplot(
-                y=refdist[local_minima_indices + 40],
-                x=local_minima_indices + 40,
-                color="#00bfff",
-                s=100,
-                edgecolor="none",
-            )
-            plt.xlabel("Contour position", fontsize=12)
-            plt.ylabel("Distance from ref. point", fontsize=12)
+            plt.figure(figsize=(3.5, 3))
+            # plt.rcParams["font.family"] = "CMU Serif"
+            plt.plot(range(len(refdist)), refdist, color="black", zorder=0)
+            plt.scatter(local_maxima_indices + 40,
+                        refdist[local_maxima_indices + 40], color="C1",
+                        ec="white", label="Max", s=60)
+            plt.scatter(local_minima_indices + 40,
+                        refdist[local_minima_indices + 40], color="C0",
+                        ec="white", label="Min", s=60)
+            plt.xlabel("Contour position")
+            plt.ylabel("Distance from ref. point")
+            plt.legend(loc="lower right")
+            plt.grid(alpha=0.3)
             # plt.xticks(fontsize=14)
             # plt.yticks(fontsize=14)
-            plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.95)
+            # plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.95)
+            plt.tight_layout()
+            plt.savefig(directory + f"/{file[:-4]}-graph.pdf")
             plt.show()
-            # plt.savefig(directory + f"/{file[:-4]}-graph.png")
-            plt.clf()
+            plt.close()
 
         (
             minmax_dist_avg,
@@ -646,7 +646,7 @@ def parallel(dir, function):
 
 
 if __name__ == "__main__":
-    # main_batch("leaf")
+    main_batch("leaf", plot=True)
     # parallel(randomwalkleaves, contour_out)
     # parallel(randomwalkleaves, main_batch)
-    main_batch("leaves_full_13-03-25_MUT2_CLEAN/p1_122_alt/walk1")
+    # main_batch("leaves_full_13-03-25_MUT2_CLEAN/p1_122_alt/walk1")
