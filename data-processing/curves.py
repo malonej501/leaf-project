@@ -11,7 +11,7 @@ from scipy.stats import chisquare, chi2
 from PIL import Image
 import seaborn as sns
 
-PLOT = 1  # type of plot to produce
+PLOT = 4  # type of plot to produce
 # 0-three rows with error bars,
 # 1-two rows with mean model,
 # 2-proportion of shapes over simulation time against model predictions
@@ -955,6 +955,8 @@ def plot_sim_and_phylogeny_curves_new_alt():
     simulation and phylogeny CTMCs. The scale for the phylogeny is different
     to the simulation scale."""
 
+    ylim = 0.35  # ylim for lobed, dissected, compound
+    leg_inside = True  # whether to put legend inside or outside axs
     icon_imgs = load_leaf_imgs()  # get leaf icons
 
     #### Get phylo-rates ####
@@ -992,9 +994,10 @@ def plot_sim_and_phylogeny_curves_new_alt():
 
     # Create subplots
     # plt.rcParams["font.family"] = "CMU Serif"
+    fsize = (5, 6) if leg_inside else (6.5, 6)
     fig, axs = plt.subplots(
-        nrows=4, ncols=3, figsize=(6.5, 6), layout="constrained",
-        sharey="row", gridspec_kw={"width_ratios": [0.01, 1, 1]})
+        nrows=4, ncols=3, figsize=fsize, layout="constrained",
+        sharey="row", sharex="col", gridspec_kw={"width_ratios": [0.01, 1, 1]})
     axs_g1 = [axs[0, 0], axs[1, 0], axs[2, 0], axs[3, 0]]  # for leaf icons
     axs_g2 = [axs[0, 1], axs[1, 1], axs[2, 1], axs[3, 1]]
     axs_g3 = [axs[0, 2], axs[1, 2], axs[2, 2], axs[3, 2]]
@@ -1022,13 +1025,16 @@ def plot_sim_and_phylogeny_curves_new_alt():
                         alpha=AF, color="C1", ec=None)
         ax.set_xlim(0, s_xlim_loc)
         ax.grid(alpha=0.3)
-        if i in range(0, 3):
-            ax.set_xticklabels([])
-        else:
+        if i in [1, 2, 3]:
+            ax.set_ylim(0, ylim)
+        if i == 3:
             ax.set_xlabel("Time (step)")
         if i == 0:
             ax.set_title("Simulation")
         ax.tick_params(axis="y", labelleft=True)  # make sure ytick labs on
+        if leg_inside and i == 0:
+            ax.legend([l_data, l_fit], ["Data", "CTMC"],
+                      loc="lower right", frameon=False)
 
     for i, ax in enumerate(axs_g3):  # phylogeny
 
@@ -1047,12 +1053,17 @@ def plot_sim_and_phylogeny_curves_new_alt():
                         alpha=AF, color="C3", ec=None)
         ax.set_xlim(0, p_xlim_loc)
         ax.grid(alpha=0.3)
-        if i in range(0, 3):
-            ax.set_xticklabels([])
-        else:
+        if i in [1, 2, 3]:
+            ax.set_ylim(0, ylim)
+        if i == 3:
             ax.set_xlabel("Time (Myr)")
         if i == 0:
             ax.set_title("Phylogeny")
+        if leg_inside and i == 0:
+            ax.legend([l_phy_z, l_phy_j],
+                      ["CTMC Zun.",
+                       "CTMC Jan."],
+                      loc="lower right", frameon=False)
 
     for i, ax in enumerate(axs_g1):
         ax.axis("off")
@@ -1074,19 +1085,20 @@ def plot_sim_and_phylogeny_curves_new_alt():
             ax.add_artist(ab)
 
     fig.supylabel("Proportion")
-    if SHOW_PHYLO:
-        leg = fig.legend([l_data, l_fit, l_phy_z, l_phy_j],
-                         ["Simulation Data", "Simulation CTMC",
-                         "Phylogeny CTMC\nZuntini et al. (2024)",
-                          "Phylogeny CTMC\nJanssens et al. (2021)"],
-                         loc="outside center right"
-                         )
-    else:
-        leg = fig.legend([l_data, l_fit],
-                         ["Simulation Data", "Simulation CTMC"],
-                         loc="outside center right")
-    for lh in leg.legend_handles:
-        lh.set_alpha(1)
+    if not leg_inside:
+        if SHOW_PHYLO:
+            leg = fig.legend([l_data, l_fit, l_phy_z, l_phy_j],
+                             ["Simulation Data", "Simulation CTMC",
+                             "Phylogeny CTMC\nZuntini et al. (2024)",
+                              "Phylogeny CTMC\nJanssens et al. (2021)"],
+                             loc="outside center right"
+                             )
+        else:
+            leg = fig.legend([l_data, l_fit],
+                             ["Simulation Data", "Simulation CTMC"],
+                             loc="outside center right")
+        for lh in leg.legend_handles:
+            lh.set_alpha(1)
     plt.savefig(
         f"sim_ctmc_fit_vert_mcerr{MC_ERR_SAMP}.pdf", format="pdf", dpi=1200)
     plt.show()
