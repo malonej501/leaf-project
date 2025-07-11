@@ -12,12 +12,12 @@ import seaborn as sns
 # enough species in the database, it will take the maximum number.
 SP_PER_FAM = 200
 
-angio_fams = pd.read_csv("../APG_IV/APG_IV_ang_fams.csv")
-eud_fams = pd.read_csv("../APG_IV/APG_IV_eud_fams.csv")
+ANGIO_FAMS = pd.read_csv("../APG_IV/APG_IV_ang_fams.csv")
+EUD_FAMS = pd.read_csv("../APG_IV/APG_IV_eud_fams.csv")
 
-current_date = datetime.now().strftime("%d-%m-%y")
+CURR_DATE = datetime.now().strftime("%d-%m-%y")
 
-startfrom = 2389
+START_FROM = 2389
 
 
 def filter_to_angio_or_eud():
@@ -39,7 +39,7 @@ def filter_to_angio_or_eud():
         print(f"Row number: {i * chunk_size}")
         # Perform the intersection with angio_fams for the current chunk
         intersect_chunk = pd.merge(
-            chunk_occurrence, angio_fams, on="family", how="inner"
+            chunk_occurrence, ANGIO_FAMS, on="family", how="inner"
         )
 
         # Subset chunk to rows representing a species
@@ -104,7 +104,7 @@ def sample_families(sample_fams):
     )  # do this because the variable is called CoreId in Multimedia.txt
 
     sample.to_csv(
-        f"./Naturalis_occurrence_eud_sample_{current_date}.csv",
+        f"./Naturalis_occurrence_eud_sample_{CURR_DATE}.csv",
         index=False,
     )
 
@@ -125,7 +125,7 @@ def img_from_sample():
     intersect = pd.merge(multimedia, sample, on="CoreId", how="inner")
 
     intersect.to_csv(
-        f"./Naturalis_multimedia_eud_sample_{current_date}.csv",
+        f"./Naturalis_multimedia_eud_sample_{CURR_DATE}.csv",
         index=False,
     )
 
@@ -145,7 +145,7 @@ def download_imgs():
         print(f"Downloading {len(intersect)} images...")
 
         failed_indicies = []
-        for index, row in intersect.iloc[startfrom:].iterrows():
+        for index, row in intersect.iloc[START_FROM:].iterrows():
             try:
                 species = row["species"]
                 print(index, species)
@@ -204,7 +204,7 @@ def get_all_genera():
     print(f"Final number of genera: {len(unique_genera_clean)}")
 
     unique_genera_clean.to_csv(
-        f"Naturalis_unique_genera_{current_date}.csv",
+        f"Naturalis_unique_genera_{CURR_DATE}.csv",
         index=False,
     )
 
@@ -391,8 +391,8 @@ def equalise_taxon_sample(level, export):
 
 
 if __name__ == "__main__":
-    # sample_families(eud_fams)
-    # sample_families(angio_fams)
+    # sample_families(EUD_FAMS)
+    # sample_families(ANGIO_FAMS)
     # img_from_sample()
     # download_imgs()
     # plot_taxon_distribution()
