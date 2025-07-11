@@ -1,14 +1,16 @@
-import pandas as pd
-from datetime import datetime
 import os
+import datetime
 import urllib.request
+import pandas as pd
+import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-import numpy as np
 import seaborn as sns
 
 
-species_per_family = 200  # specify no. species to sample per angiosperm family - if there aren't enough species in the database, it will take the maximum number.
+# specify no. species to sample per angiosperm family - if there aren't
+# enough species in the database, it will take the maximum number.
+SP_PER_FAM = 200
 
 angio_fams = pd.read_csv("../APG_IV/APG_IV_ang_fams.csv")
 eud_fams = pd.read_csv("../APG_IV/APG_IV_eud_fams.csv")
@@ -19,6 +21,8 @@ startfrom = 2389
 
 
 def filter_to_angio_or_eud():
+    """Filter the occurrence data to only include angiosperm or eudicot
+    lineages and save to .csv."""
 
     chunk_size = 100000  # Adjust the chunk size as needed
     # Initialize an empty list to store the intersected dataframes
@@ -39,7 +43,8 @@ def filter_to_angio_or_eud():
         )
 
         # Subset chunk to rows representing a species
-        intersect_chunk = intersect_chunk[intersect_chunk["taxonRank"] == "species"]
+        intersect_chunk = intersect_chunk[
+            intersect_chunk["taxonRank"] == "species"]
 
         # Append the intersected chunk to the list
         intersect_dfs.append(intersect_chunk)
@@ -48,12 +53,16 @@ def filter_to_angio_or_eud():
     intersect = pd.concat(intersect_dfs, ignore_index=True)
 
     intersect.to_csv(
-        "~/Documents/Leaf Project/Naturalis/Naturalis_ang_species_occurrence.csv",
+        "~/Documents/Leaf Project/Naturalis/" +
+        "Naturalis_ang_species_occurrence.csv",
         index=False,
     )
 
 
 def sample_families(sample_fams):
+    """Sample a specified number of species from each family in the
+    sample_fams dataframe and save to a .csv file."""
+
     print("Reading data...")
     ang_sp_full = pd.read_csv(
         "botany-20240108.dwca/Naturalis_ang_species_occurrence.csv",
@@ -62,7 +71,8 @@ def sample_families(sample_fams):
     print("Done!")
 
     print("Removing duplicate species...")
-    sp_list = ang_sp_full["genus"].str.cat(ang_sp_full["specificEpithet"], sep="_")
+    sp_list = ang_sp_full["genus"].str.cat(
+        ang_sp_full["specificEpithet"], sep="_")
     ang_sp_full.insert(0, "species", sp_list)
     ang_sp_full_clean = ang_sp_full.drop_duplicates(
         subset="species", keep="first"
@@ -81,8 +91,8 @@ def sample_families(sample_fams):
     for i, family in enumerate(sample_fams["family"]):
         print(i, family)
         fam = ang_sp_full_clean[ang_sp_full_clean["family"] == family]
-        if len(fam) >= species_per_family:
-            fam_samp = fam.sample(n=species_per_family)
+        if len(fam) >= SP_PER_FAM:
+            fam_samp = fam.sample(n=SP_PER_FAM)
         else:
             fam_samp = fam.sample(n=len(fam))
         sample_dfs.append(fam_samp)
@@ -100,6 +110,9 @@ def sample_families(sample_fams):
 
 
 def img_from_sample():
+    """Get the intersection of occurrence data and multimedia data
+    based on CoreId and save to a .csv file."""
+
     print("Reading data...")
     sample = pd.read_csv(
         "jan_zun_nat_ang_09-10-24/Naturalis_occurrence_eud_sample_09-10-24.csv"
@@ -118,14 +131,17 @@ def img_from_sample():
 
 
 def download_imgs():
+    """Download multimedia sample from Naturalis database to download_imgs/"""
     if os.listdir("download_imgs"):
         print("download_imgs is not empty! Terminating.")
 
     else:
         # intersect = pd.read_csv(
-        #     "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_21-01-24.csv"
+        #     "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_
+        # intersect_21-01-24.csv"
         # )
-        intersect = pd.read_csv("jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus.csv")
+        intersect = pd.read_csv(
+            "jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus.csv")
         print(f"Downloading {len(intersect)} images...")
 
         failed_indicies = []
@@ -134,20 +150,19 @@ def download_imgs():
                 species = row["species"]
                 print(index, species)
                 url = row["accessURI"]
-                urllib.request.urlretrieve(url, f"temp.png")
+                urllib.request.urlretrieve(url, "temp.png")
                 img = Image.open(r"temp.png")
                 img.save(f"download_imgs/{species}{index}.png")
-            except:
+            except (urllib.error.URLError, OSError) as e:
                 failed_indicies.append(index)
-                print("Error: Download failed")
+                print(f"Error: Download failed - {e}")
 
         failed_to_download = intersect.iloc[failed_indicies]
         if not failed_to_download.empty:
-            failed_to_download.to_csv(f"download_failed.csv", index=False)
+            failed_to_download.to_csv("download_failed.csv", index=False)
 
 
 def get_all_genera():
-
     """Return the taxon ranks of all genera in the Naturalis database"""
 
     chunk_size = 100000  # Adjust the chunk size as needed
@@ -163,8 +178,10 @@ def get_all_genera():
         )
     ):
         print(f"Row number: {i * chunk_size}")
-        unique_genera_chunk = chunk_occurrence.drop_duplicates(subset=["class","order","family","genus"], keep="first")
-        print(f"Dropped {len(chunk_occurrence) - len(unique_genera_chunk)} duplicates")
+        unique_genera_chunk = chunk_occurrence.drop_duplicates(
+            subset=["class", "order", "family", "genus"], keep="first")
+        print(f"Dropped {len(chunk_occurrence) - len(unique_genera_chunk)} " +
+              "duplicates")
 
         unique_genera_dfs.append(unique_genera_chunk)
 
@@ -173,15 +190,17 @@ def get_all_genera():
     print(f"Total number of genera: {len(concat)}")
 
     # Drop any remaining duplicated genera
-    unique_genera = concat.drop_duplicates(subset=["class","order","family","genus"], keep="first")
+    unique_genera = concat.drop_duplicates(
+        subset=["class", "order", "family", "genus"], keep="first")
     print(f"Dropped further {len(concat) - len(unique_genera)} duplicates")
 
     # Subset to just taxon rank columns
-    unique_genera = unique_genera[["class","order","family","genus"]]
+    unique_genera = unique_genera[["class", "order", "family", "genus"]]
 
     # Remove rows containing missing values
     unique_genera_clean = unique_genera.dropna()
-    print(f"Dropped {len(unique_genera) - len(unique_genera_clean)} rows with missing values")
+    print(f"Dropped {len(unique_genera) - len(unique_genera_clean)} " +
+          "rows with missing values")
     print(f"Final number of genera: {len(unique_genera_clean)}")
 
     unique_genera_clean.to_csv(
@@ -191,11 +210,18 @@ def get_all_genera():
 
 
 def plot_taxon_distribution():
-    # datapath1 = "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled.csv"
-    # datapath2 = "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24.csv"
-    # datapath1 = "sample_eud_zun_equal_fam_16-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled_equal_fam.csv"
-    # datapath2 = "sample_eud_jan_equal_fam_16-09-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_equal_fam.csv"
-    # datapath1 = "jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus_labelled.csv"
+    """Plot the no. taxa per family in the specified samples of from
+    Naturalis."""
+    # datapath1 = "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample
+    # _10-09-24_zuntini_intercept_genera_labelled.csv"
+    # datapath2 = "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect
+    # _labelled_21-01-24.csv"
+    # datapath1 = "sample_eud_zun_equal_fam_16-09-24/Naturalis_multimedia_eud
+    # _sample_10-09-24_zuntini_intercept_genera_labelled_equal_fam.csv"
+    # datapath2 = "sample_eud_jan_equal_fam_16-09-24/Naturalis_eud_sample
+    # _Janssens_intersect_labelled_21-01-24_equal_fam.csv"
+    # datapath1 = "jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus
+    # _labelled.csv"
     # datapath2 = "jan_zun_nat_ang_26-09-24/jan_nat_genus.csv"
     # datapath3 = "jan_zun_nat_ang_26-09-24/zun_nat_genus.csv"
     datapath1 = "jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv"
@@ -207,10 +233,12 @@ def plot_taxon_distribution():
     # js = samples[1]
     # zs = samples[2]
     # j = u[u["CoreId"].isin(js["CoreId"])]
-    # j.to_csv("jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv", index=False)
+    # j.to_csv("jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv",
+    # index=False)
     # print(len(j))
     # z = u[u["CoreId"].isin(zs["CoreId"])]
-    # z.to_csv("jan_zun_nat_ang_26-09-24/zun_nat_genus_labelled.csv", index=False)
+    # z.to_csv("jan_zun_nat_ang_26-09-24/zun_nat_genus_labelled.csv",
+    # index=False)
     # print(len(z))
     # exit()
 
@@ -219,26 +247,28 @@ def plot_taxon_distribution():
         datanames.append(datapath.split("/")[1].split(".")[0])
     # data_full = pd.concat(samples)
     # print(data_full)
-    freqs = [pd.DataFrame(sample["family"].value_counts()) for sample in samples]
+    freqs = [pd.DataFrame(sample["family"].value_counts())
+             for sample in samples]
     for i, freq in enumerate(freqs):
         freq.rename(columns={"count": f"count_{datanames[i]}"}, inplace=True)
     freqs_merged = pd.merge(*freqs, on="family", how="outer").reset_index()
-    freqs_merged.sort_values(by=freqs_merged.columns[1], ascending=False, inplace=True)
+    freqs_merged.sort_values(
+        by=freqs_merged.columns[1], ascending=False, inplace=True)
     print(datanames)
     print(freqs)
     print(freqs_merged)
     # plt.figure(figsize=(18, 6))
-    fig, ax = plt.subplots(figsize=(18, 6))
+    _, ax = plt.subplots(figsize=(18, 6))
     index = np.arange(len(freqs_merged["family"]))
     bar_width = 0.35
-    bars1 = ax.bar(
+    ax.bar(
         index - bar_width / 2,
         freqs_merged[f"count_{datanames[0]}"],
         bar_width,
         label=f"count_{datanames[0]}",
         color=sns.color_palette("colorblind")[0],
     )
-    bars2 = ax.bar(
+    ax.bar(
         index + bar_width / 2,
         freqs_merged[f"count_{datanames[1]}"],
         bar_width,
@@ -254,7 +284,8 @@ def plot_taxon_distribution():
     plt.subplots_adjust(bottom=0.205, left=0.035, right=0.985)
     plt.show()
     # freq.plot(
-    #     kind="bar", xlabel=f"Family N={len(freq)}", ylabel="Count", title=dataname
+    #     kind="bar", xlabel=f"Family N={len(freq)}", ylabel="Count",
+    # title=dataname
     # )
     # plt.xticks(fontsize=6)
     # plt.tight_layout
@@ -263,9 +294,13 @@ def plot_taxon_distribution():
 
 
 def taxon_difference(level):
+    """Find the intersection of the specified taxon level between two
+    samples of Naturalis data and print the results."""
 
-    datapath1 = "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled.csv"
-    datapath2 = "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24.csv"
+    datapath1 = ("sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample"
+                 "_10-09-24_zuntini_intercept_genera_labelled.csv")
+    datapath2 = ("sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect"
+                 "_labelled_21-01-24.csv")
     zun_nat = pd.read_csv(datapath1)
     jan_nat = pd.read_csv(datapath2)
 
@@ -282,9 +317,14 @@ def taxon_difference(level):
 
 
 def equalise_taxon_sample(level, export):
+    """Equalise the no. samples of the specified taxon level
+    between two samples of Naturalis data and save the results to .csv 
+    files."""
 
-    datapath1 = "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled.csv"
-    datapath2 = "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_2416.csv"
+    datapath1 = ("sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample"
+                 "_10-09-24_zuntini_intercept_genera_labelled.csv")
+    datapath2 = ("sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_"
+                 "labelled_21-01-24_2416.csv")
     zun_nat = pd.read_csv(datapath1)
     jan_nat = pd.read_csv(datapath2)
     print(len(set(jan_nat["species"])))
@@ -317,11 +357,13 @@ def equalise_taxon_sample(level, export):
     jan_nat_reduced.reset_index(drop=True, inplace=True)
     if export:
         zun_nat_reduced.to_csv(
-            f"Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled_equal_{level}.csv",
+            "Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_" +
+            f"genera_labelled_equal_{level}.csv",
             index=False,
         )
         jan_nat_reduced.to_csv(
-            f"Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_equal_{level}.csv",
+            "Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24_" +
+            f"equal_{level}.csv",
             index=False,
         )
 
