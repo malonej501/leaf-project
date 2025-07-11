@@ -1,5 +1,5 @@
 import os
-import datetime
+from datetime import datetime
 import urllib.request
 import pandas as pd
 import numpy as np
