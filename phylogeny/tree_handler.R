@@ -1,6 +1,7 @@
+# Generates an intersect between trees and herbarium data
 library(ape)
 
-setwd("phylogeny")
+# setwd("phylogeny")
 
 load_tree <- function(tree_path) {
   tree <- read.tree(paste0("phylogenies/", tree_path))
@@ -8,6 +9,7 @@ load_tree <- function(tree_path) {
 }
 
 load_trees <- function(path) {
+  ## Load all tree files in specified directory
   path <- "phylo_data/raw_trees"
   tree_files <- list.files(
     path = path,
@@ -28,28 +30,28 @@ load_trees <- function(path) {
   return(trees)
 }
 
-load_shape_data_full <- function(shape_dataset) {
-  if (shape_dataset == "Naturalis") {
-    path <- "leaf_data/Naturalis/botany-20240108.dwca"
-    leaf_data_occur <- read.csv(paste0(path, "/Occurrence.txt"))
-    names(leaf_data_occur)[names(leaf_data_occur) == "id"] <- "CoreId"
-    leaf_data_media <- read.csv(paste0(path, "/Multimedia.txt"))
-    # only return records with an associated digitised image
-    shape_data <- merge(leaf_data_occur, leaf_data_media, by = "CoreId")
-  }
+load_shape_data_full <- function() {
+  ## Load full naturalis data with associated digitised records
+  path <- "shape_data/Naturalis/botany-20240108.dwca"
+  leaf_data_occur <- read.csv(paste0(path, "/Occurrence.txt"))
+  names(leaf_data_occur)[names(leaf_data_occur) == "id"] <- "CoreId"
+  leaf_data_media <- read.csv(paste0(path, "/Multimedia.txt"))
+  # only return records with an associated digitised image
+  shape_data <- merge(leaf_data_occur, leaf_data_media, by = "CoreId")
   return(shape_data)
 }
 
 load_naturalis_sample_data <- function() {
   sample <- read.csv(paste0(
     "shape_data/Naturalis",
-    "/jan_zun_nat_ang_26-09-24/",
-    "Naturalis_multimedia_ang_sample_26-09-24.csv"
+    "/jan_zun_nat_ang_11-07-25/",
+    "Naturalis_occurrence_ang_sppfam-1_11-07-25_multimedia.csv"
   ))
   return(list(janssens_nat = sample, zuntini_nat = sample))
 }
 
 unique_tips <- function(tree) {
+  ## Drop all but the first occurance of any duplicated tip labels
   # Get the tip labels
   tip_labels <- tree$tip.label
   # Identify unique labels and keep the first occurrence
@@ -66,7 +68,29 @@ unique_tips <- function(tree) {
   return(pruned_tree)
 }
 
+sub_sample_nat_tree_intersect <- function(nat_tree_intersect, tax_level) {
+  ## If there are more than sample_size taxa in the intersect between the
+  ## tree and naturalis data, draw sample_size taxa at random and return.
+  sample_size <- 3100
+  if (nrow(nat_tree_intersect) > sample_size) {
+    print(paste(
+      "more than", sample_size, tax_level,
+      "in the naturalis intersect data",
+      sep = " "
+    ))
+    # if there are more than 3100 species, randomly sample 3100
+    nat_tree_intersect <- nat_tree_intersect[sample(
+      nrow(nat_tree_intersect),
+      sample_size
+    ), ]
+    print(paste("randomly sampled", sample_size, tax_level, sep = " "))
+  }
+  return(nat_tree_intersect)
+}
+
 nat_tree_intersect <- function(export) {
+  ## Get intersect between phylogenies and naturalis data at the species and
+  ## genus level, returning both tree files and label files
   trees <- load_trees()
   print("Done loading trees")
   nat_samp_data <- load_naturalis_sample_data()
@@ -93,7 +117,9 @@ nat_tree_intersect <- function(export) {
       "nat phylo species intersect =",
       nrow(nat_tree_intersect_species)
     ))
-
+    # if ntaxa > sample_size, randomly sample sample_size taxa
+    nat_tree_intersect_species <-
+      sub_sample_nat_tree_intersect(nat_tree_intersect_species, "species")
     # subset nat data to genera present in the tree
     nat_tree_intersect_genus <-
       nat_samp[nat_samp$genus %in% intersect(nat_samp$genus, tip_gen), ]
@@ -101,6 +127,9 @@ nat_tree_intersect <- function(export) {
     nat_tree_intersect_genus <-
       nat_tree_intersect_genus[!duplicated(nat_tree_intersect_genus$genus), ]
     print(paste("nat phylo genus intersect =", nrow(nat_tree_intersect_genus)))
+    # if ntaxa > sample_size, randomly sample sample_size taxa
+    nat_tree_intersect_genus <-
+      sub_sample_nat_tree_intersect(nat_tree_intersect_genus, "genus")
 
     if (export) {
       write.csv(
@@ -108,11 +137,13 @@ nat_tree_intersect <- function(export) {
         paste(substr(name, 1, 3), "nat_species.csv", sep = "_"),
         row.names = FALSE
       )
+      print(paste("exported labels: ", substr(name, 1, 3), "_nat_species.csv"))
       write.csv(
         nat_tree_intersect_genus,
         paste(substr(name, 1, 3), "nat_genus.csv", sep = "_"),
         row.names = FALSE
       )
+      print(paste("exported labels: ", substr(name, 1, 3), "_nat_genus.csv"))
     }
 
     # subset the trees
@@ -167,10 +198,12 @@ nat_tree_intersect <- function(export) {
         tree_genus_sub,
         file = paste(substr(name, 1, 3), "nat_genus.tre", sep = "_")
       )
+      print(paste0("exported tree: ", substr(name, 1, 3), "_nat_genus.tre"))
       write.nexus(
         tree_species_sub,
         file = paste(substr(name, 1, 3), "nat_species.tre", sep = "_")
       )
+      print(paste0("exported tree: ", substr(name, 1, 3), "_nat_species.tre"))
     }
     genus_trees[[name]] <- tree_genus_sub
     species_trees[[name]] <- tree_species_sub
@@ -178,8 +211,15 @@ nat_tree_intersect <- function(export) {
   return(c(genus_trees, species_trees))
 }
 
-nat_tree_intersect(export = FALSE)
+# nat_tree_intersect(export = FALSE)
 
+nat_full_tree_intersect <- function(export) {
+  trees <- load_trees()
+  nat_full <- load_shape_data_full()
+  print(nat_full)
+}
+
+# nat_full_tree_intersect(export = FALSE)
 
 generate_tree_labs <- function(trees, label_data, export_labs) {
   tree_names <- c("janssens", "zuntini")
@@ -249,7 +289,7 @@ get_nat_tree_intersect <- function() {
   nat_tree_intersect(tree_path = "phylo_data/raw_trees")
 }
 
-nat_tree_intersect(tree_path = "phylo_data/raw_trees")
+# nat_tree_intersect(tree_path = "phylo_data/raw_trees")
 # x <- read.csv("jan_nat_species.csv")
 # x <- read.csv("zun_nat_genus.csv")
 # y <- read.csv("jan_nat_genus.csv")
@@ -353,3 +393,6 @@ compare_phylo_taxa <- function() {
   jan_labels$genus <- sub("_.*", "", jan_labels$gen_sp)
   genus_intersect <- intersect(jan_labels$genus, zun_labels$genus)
 }
+
+#### Main #####
+nat_tree_intersect(export = TRUE)
