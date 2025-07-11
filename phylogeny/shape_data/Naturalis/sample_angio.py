@@ -146,6 +146,50 @@ def download_imgs():
             failed_to_download.to_csv(f"download_failed.csv", index=False)
 
 
+def get_all_genera():
+
+    """Return the taxon ranks of all genera in the Naturalis database"""
+
+    chunk_size = 100000  # Adjust the chunk size as needed
+    # Initialize an empty list to store the intersected dataframes
+    unique_genera_dfs = []
+
+    # Read and process the data in chunks
+    for i, chunk_occurrence in enumerate(
+        pd.read_csv(
+            "botany-20240108.dwca/Occurrence.txt",
+            chunksize=chunk_size,
+            low_memory=False,
+        )
+    ):
+        print(f"Row number: {i * chunk_size}")
+        unique_genera_chunk = chunk_occurrence.drop_duplicates(subset=["class","order","family","genus"], keep="first")
+        print(f"Dropped {len(chunk_occurrence) - len(unique_genera_chunk)} duplicates")
+
+        unique_genera_dfs.append(unique_genera_chunk)
+
+    # Concatenate the list of intersected dataframes into a single dataframe
+    concat = pd.concat(unique_genera_dfs, ignore_index=True)
+    print(f"Total number of genera: {len(concat)}")
+
+    # Drop any remaining duplicated genera
+    unique_genera = concat.drop_duplicates(subset=["class","order","family","genus"], keep="first")
+    print(f"Dropped further {len(concat) - len(unique_genera)} duplicates")
+
+    # Subset to just taxon rank columns
+    unique_genera = unique_genera[["class","order","family","genus"]]
+
+    # Remove rows containing missing values
+    unique_genera_clean = unique_genera.dropna()
+    print(f"Dropped {len(unique_genera) - len(unique_genera_clean)} rows with missing values")
+    print(f"Final number of genera: {len(unique_genera_clean)}")
+
+    unique_genera_clean.to_csv(
+        f"Naturalis_unique_genera_{current_date}.csv",
+        index=False,
+    )
+
+
 def plot_taxon_distribution():
     # datapath1 = "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample_10-09-24_zuntini_intercept_genera_labelled.csv"
     # datapath2 = "sample_eud_21-1-24/Naturalis_eud_sample_Janssens_intersect_labelled_21-01-24.csv"
@@ -307,8 +351,9 @@ def equalise_taxon_sample(level, export):
 if __name__ == "__main__":
     # sample_families(eud_fams)
     # sample_families(angio_fams)
-    img_from_sample()
+    # img_from_sample()
     # download_imgs()
     # plot_taxon_distribution()
     # taxon_difference(level="family")
     # equalise_taxon_sample(level="genus", export=False)
+    get_all_genera()
