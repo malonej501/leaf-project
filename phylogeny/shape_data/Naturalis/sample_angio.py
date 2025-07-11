@@ -10,10 +10,13 @@ import seaborn as sns
 
 # specify no. species to sample per angiosperm family - if there aren't
 # enough species in the database, it will take the maximum number.
-SP_PER_FAM = 200
+SP_PER_FAM = -1  # set to -1 to disable subsampling
 
+FILTER = "ang"  # "ang" for angiosperms, "eud" for eudicots
 ANGIO_FAMS = pd.read_csv("../APG_IV/APG_IV_ang_fams.csv")
 EUD_FAMS = pd.read_csv("../APG_IV/APG_IV_eud_fams.csv")
+CHUNK_SIZE = 100000  # For reading large .csv files
+
 
 CURR_DATE = datetime.now().strftime("%d-%m-%y")
 
@@ -24,7 +27,6 @@ def filter_to_angio_or_eud():
     """Filter the occurrence data to only include angiosperm or eudicot
     lineages and save to .csv."""
 
-    chunk_size = 100000  # Adjust the chunk size as needed
     # Initialize an empty list to store the intersected dataframes
     intersect_dfs = []
 
@@ -32,14 +34,15 @@ def filter_to_angio_or_eud():
     for i, chunk_occurrence in enumerate(
         pd.read_csv(
             "botany-20240108.dwca/Occurrence.txt",
-            chunksize=chunk_size,
+            chunksize=CHUNK_SIZE,
             low_memory=False,
         )
     ):
-        print(f"Row number: {i * chunk_size}")
-        # Perform the intersection with angio_fams for the current chunk
+        print(f"Row number: {i * CHUNK_SIZE}")
+        filt = ANGIO_FAMS if FILTER == "ang" else EUD_FAMS
+        # intersect with angio or eud fams for the current chunk
         intersect_chunk = pd.merge(
-            chunk_occurrence, ANGIO_FAMS, on="family", how="inner"
+            chunk_occurrence, filt, on="family", how="inner"
         )
 
         # Subset chunk to rows representing a species
@@ -59,9 +62,11 @@ def filter_to_angio_or_eud():
     )
 
 
-def sample_families(sample_fams):
+def sample_families():
     """Sample a specified number of species from each family in the
     sample_fams dataframe and save to a .csv file."""
+
+    sample_fams = ANGIO_FAMS if FILTER == "ang" else EUD_FAMS
 
     print("Reading data...")
     ang_sp_full = pd.read_csv(
@@ -88,23 +93,26 @@ def sample_families(sample_fams):
 
     sample_dfs = []
 
-    for i, family in enumerate(sample_fams["family"]):
-        print(i, family)
-        fam = ang_sp_full_clean[ang_sp_full_clean["family"] == family]
-        if len(fam) >= SP_PER_FAM:
-            fam_samp = fam.sample(n=SP_PER_FAM)
-        else:
-            fam_samp = fam.sample(n=len(fam))
-        sample_dfs.append(fam_samp)
+    if SP_PER_FAM != -1:
+        for i, family in enumerate(sample_fams["family"]):
+            print(i, family)
+            fam = ang_sp_full_clean[ang_sp_full_clean["family"] == family]
+            if len(fam) >= SP_PER_FAM:
+                fam_samp = fam.sample(n=SP_PER_FAM)
+            else:
+                fam_samp = fam.sample(n=len(fam))
+            sample_dfs.append(fam_samp)
 
-    sample = pd.concat(sample_dfs, ignore_index=True)
+        sample = pd.concat(sample_dfs, ignore_index=True)
+    else:
+        sample = ang_sp_full_clean  # no subsampling
 
     sample = sample.rename(
         columns={"id": "CoreId"}
     )  # do this because the variable is called CoreId in Multimedia.txt
 
     sample.to_csv(
-        f"./Naturalis_occurrence_eud_sample_{CURR_DATE}.csv",
+        f"./Naturalis_occurrence_{FILTER}_sppfam{SP_PER_FAM}_{CURR_DATE}.csv",
         index=False,
     )
 
@@ -114,9 +122,12 @@ def img_from_sample():
     based on CoreId and save to a .csv file."""
 
     print("Reading data...")
-    sample = pd.read_csv(
-        "jan_zun_nat_ang_09-10-24/Naturalis_occurrence_eud_sample_09-10-24.csv"
-    )
+    # sample = pd.read_csv(
+    #     "jan_zun_nat_ang_09-10-24/Naturalis_occurrence
+    # _ang_sppfam-1_11-07-25.csv"
+    # )
+    sample_fname = "Naturalis_occurrence_ang_sppfam-1_11-07-25"
+    sample = pd.read_csv(sample_fname + ".csv")
     print("Done!")
 
     multimedia = pd.read_csv("botany-20240108.dwca/Multimedia.txt")
@@ -125,7 +136,7 @@ def img_from_sample():
     intersect = pd.merge(multimedia, sample, on="CoreId", how="inner")
 
     intersect.to_csv(
-        f"./Naturalis_multimedia_eud_sample_{CURR_DATE}.csv",
+        f"./{sample_fname}_multimedia.csv",
         index=False,
     )
 
@@ -165,7 +176,6 @@ def download_imgs():
 def get_all_genera():
     """Return the taxon ranks of all genera in the Naturalis database"""
 
-    chunk_size = 100000  # Adjust the chunk size as needed
     # Initialize an empty list to store the intersected dataframes
     unique_genera_dfs = []
 
@@ -173,11 +183,11 @@ def get_all_genera():
     for i, chunk_occurrence in enumerate(
         pd.read_csv(
             "botany-20240108.dwca/Occurrence.txt",
-            chunksize=chunk_size,
+            chunksize=CHUNK_SIZE,
             low_memory=False,
         )
     ):
-        print(f"Row number: {i * chunk_size}")
+        print(f"Row number: {i * CHUNK_SIZE}")
         unique_genera_chunk = chunk_occurrence.drop_duplicates(
             subset=["class", "order", "family", "genus"], keep="first")
         print(f"Dropped {len(chunk_occurrence) - len(unique_genera_chunk)} " +
@@ -391,11 +401,10 @@ def equalise_taxon_sample(level, export):
 
 
 if __name__ == "__main__":
-    # sample_families(EUD_FAMS)
-    # sample_families(ANGIO_FAMS)
-    # img_from_sample()
+    # sample_families()
+    img_from_sample()
     # download_imgs()
     # plot_taxon_distribution()
     # taxon_difference(level="family")
     # equalise_taxon_sample(level="genus", export=False)
-    get_all_genera()
+    # get_all_genera()
