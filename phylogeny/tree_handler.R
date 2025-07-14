@@ -289,17 +289,6 @@ get_nat_tree_intersect <- function() {
   nat_tree_intersect(tree_path = "phylo_data/raw_trees")
 }
 
-# nat_tree_intersect(tree_path = "phylo_data/raw_trees")
-# x <- read.csv("jan_nat_species.csv")
-# x <- read.csv("zun_nat_genus.csv")
-# y <- read.csv("jan_nat_genus.csv")
-# z <- intersect(x$genus, y$genus)
-# a <- intersect(x$species, y$species)
-# b <- union(x$species, y$species)
-# union <- rbind(x,y)
-# union <- unique(union)
-# write.csv(union, "jan_zun_union_nat_genus.csv", row.names=FALSE)
-
 load_apg <- function() {
   apg <- read.csv("leaf_data/APG_IV/APG_IV_ang_fams.csv")
 }
@@ -394,5 +383,24 @@ compare_phylo_taxa <- function() {
   genus_intersect <- intersect(jan_labels$genus, zun_labels$genus)
 }
 
+get_label_union <- function() {
+  ## Get the union of labels from two datasets
+  x <- read.csv("zun_nat_species_11-07-25.csv")
+  y <- read.csv("jan_nat_species_11-07-25.csv")
+  union <- rbind(x, y)
+  union <- unique(union) # remove duplicate rows n.b. some duplicate species
+  print(nrow(union)) # may remain
+  write.csv(union, "jan_zun_union_nat_genus.csv", row.names = FALSE)
+}
+
 #### Main #####
 nat_tree_intersect(export = TRUE)
+# nat_tree_intersect(tree_path = "phylo_data/raw_trees")
+# x <- read.csv("jan_nat_species.csv")
+# z <- intersect(x$genus, y$genus)
+# print(length(z))
+# a <- intersect(x$species, y$species)
+# print(length(a))
+# b <- union(x$species, y$species)
+# print(length(b))
+# get_label_union()
