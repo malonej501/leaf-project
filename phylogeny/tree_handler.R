@@ -88,7 +88,7 @@ sub_sample_nat_tree_intersect <- function(nat_tree_intersect, tax_level) {
   return(nat_tree_intersect)
 }
 
-nat_tree_intersect <- function(export) {
+nat_tree_intersect <- function(export, sub_sample = TRUE) {
   ## Get intersect between phylogenies and naturalis data at the species and
   ## genus level, returning both tree files and label files
   trees <- load_trees()
@@ -117,19 +117,24 @@ nat_tree_intersect <- function(export) {
       "nat phylo species intersect =",
       nrow(nat_tree_intersect_species)
     ))
-    # if ntaxa > sample_size, randomly sample sample_size taxa
-    nat_tree_intersect_species <-
-      sub_sample_nat_tree_intersect(nat_tree_intersect_species, "species")
     # subset nat data to genera present in the tree
     nat_tree_intersect_genus <-
       nat_samp[nat_samp$genus %in% intersect(nat_samp$genus, tip_gen), ]
     # keep only the first occurring species in each genera
     nat_tree_intersect_genus <-
       nat_tree_intersect_genus[!duplicated(nat_tree_intersect_genus$genus), ]
-    print(paste("nat phylo genus intersect =", nrow(nat_tree_intersect_genus)))
-    # if ntaxa > sample_size, randomly sample sample_size taxa
-    nat_tree_intersect_genus <-
-      sub_sample_nat_tree_intersect(nat_tree_intersect_genus, "genus")
+    print(paste(
+      "nat phylo genus intersect =", nrow(nat_tree_intersect_genus)
+    ))
+
+    if (sub_sample) {
+      # if ntaxa > sample_size, randomly sample sample_size taxa
+      nat_tree_intersect_species <-
+        sub_sample_nat_tree_intersect(nat_tree_intersect_species, "species")
+      # if ntaxa > sample_size, randomly sample sample_size taxa
+      nat_tree_intersect_genus <-
+        sub_sample_nat_tree_intersect(nat_tree_intersect_genus, "genus")
+    }
 
     if (export) {
       write.csv(
@@ -221,22 +226,25 @@ nat_full_tree_intersect <- function(export) {
 
 # nat_full_tree_intersect(export = FALSE)
 
-generate_tree_labs <- function(trees, label_data, export_labs) {
+generate_tree_labs <- function(
+    trees, label_data, export_labs, level = "genus") {
   tree_names <- c("janssens", "zuntini")
   tree_labs <- list()
   for (name in tree_names) {
     print(name)
     tree <- trees[[grep(name, names(trees))]]
 
-    tree_label_intersect <- label_data[label_data$genus %in% tree$tip.label, ]
+    tree_label_intersect <- label_data[
+      label_data[[level]] %in% tree$tip.label,
+    ]
     print(paste("nrow filtered label data", nrow(tree_label_intersect)))
     print(paste("ntips tree", length(tree$tip.label)))
-    tree_label_intersect <- tree_label_intersect[, c("genus", "shape")]
+    tree_label_intersect <- tree_label_intersect[, c(level, "shape")]
     tree_labs[[name]] <- tree_label_intersect
     if (export_labs) {
       write.table(
         tree_label_intersect,
-        file = paste(substr(name, 1, 3), "nat_genus.txt", sep = "_"),
+        file = paste(substr(name, 1, 3), "nat", level, ".txt", sep = "_"),
         sep = "\t",
         row.names = FALSE,
         col.names = FALSE,
@@ -247,14 +255,17 @@ generate_tree_labs <- function(trees, label_data, export_labs) {
   return(tree_labs)
 }
 
-drop_ambiguous_tips <- function(trees, tree_labs, export_trees) {
+drop_ambiguous_tips <- function(
+    trees, tree_labs, export_trees, level = "genus") {
   trees_unambig <- list()
+  print(trees)
   for (i in seq_along(trees)) {
     tree <- trees[[i]]
+    print(tree)
     name <- names(trees[i])
     print(name)
     tree_lab <- tree_labs[[i]]
-    tree_unambig <- drop.tip(tree, setdiff(tree$tip.label, tree_lab$genus))
+    tree_unambig <- drop.tip(tree, setdiff(tree$tip.label, tree_lab[[level]]))
     print(paste("ntips before dropping ambiguous", length(tree$tip.label)))
     print(paste("no. tips in unambiguous label data", nrow(tree_lab)))
     print(paste(
@@ -275,14 +286,24 @@ drop_ambiguous_tips <- function(trees, tree_labs, export_trees) {
 
 
 label_phylogenies <- function() {
+  # Generate labels for trees from union label data
   label_data <- read.csv(paste0(
     "shape_data/Naturalis/",
-    "jan_zun_nat_ang_26-09-24/",
-    "jan_zun_union_nat_genus_labelled.csv"
+    "jan_zun_nat_ang_11-07-25/",
+    "jan_zun_union_nat_species_11-07-25_labelled.csv"
   ))
-  trees <- nat_tree_intersect(tree_path = "phylo_data/raw_trees")
-  tree_labs <- generate_tree_labs(trees, label_data, export_labs = TRUE)
-  trees_unambig <- drop_ambiguous_tips(trees, tree_labs, export_trees = TRUE)
+  trees_list <- nat_tree_intersect(export = FALSE, sub_sample = FALSE)
+  g_trees <- trees_list[1:2]
+  sp_trees <- trees_list[3:4]
+
+  tree_labs <- generate_tree_labs(
+    sp_trees, label_data,
+    export_labs = TRUE, level = "species"
+  )
+  trees_unambig <- drop_ambiguous_tips(
+    sp_trees, tree_labs,
+    export_trees = TRUE, level = "species"
+  )
 }
 
 get_nat_tree_intersect <- function() {
@@ -393,14 +414,64 @@ get_label_union <- function() {
   write.csv(union, "jan_zun_union_nat_genus.csv", row.names = FALSE)
 }
 
+label_phylogenies_alt <- function(export = FALSE) {
+  ## Label  subsampled trees with the union of labels from two datasets
+  label_data <- read.csv(paste0(
+    "shape_data/Naturalis/jan_zun_nat_ang_11-07-25/",
+    "jan_zun_union_nat_species_11-07-25_labelled.csv"
+  )) # union
+
+  jan_sp <- read.nexus(paste0(
+    "shape_data/Naturalis/jan_zun_nat_ang_11-07-25/",
+    "unlabelled_tree_data/jan_nat_species_11-07-25.tre"
+  ))
+  zun_sp <- read.nexus(paste0(
+    "shape_data/Naturalis/jan_zun_nat_ang_11-07-25/",
+    "unlabelled_tree_data/zun_nat_species_11-07-25.tre"
+  ))
+
+  trees <- list(jan = jan_sp, zun = zun_sp)
+  for (tree_name in names(trees)) {
+    # export labels for each
+    tree <- trees[[tree_name]]
+    tree_label_intersect <- label_data[label_data$species %in% tree$tip.label, ]
+    print(paste("nrow filtered label data", nrow(tree_label_intersect)))
+    tree_label_intersect <- tree_label_intersect[, c("species", "shape")]
+    if (export) {
+      write.table(
+        tree_label_intersect,
+        file = paste(tree_name, "nat_species.txt", sep = "_"),
+        sep = "\t",
+        row.names = FALSE,
+        col.names = FALSE,
+        quote = FALSE
+      )
+      print(paste("exported labels: ", tree_name, "_nat_species.txt"))
+    }
+
+    # prune ambiguous tips and export trees
+    print(paste("ntips tree", length(tree$tip.label)))
+    tree_unambig <- drop.tip(
+      tree,
+      setdiff(tree$tip.label, tree_label_intersect$species)
+    )
+    print(paste(
+      "ntips after dropping ambiguous",
+      length(tree_unambig$tip.label)
+    ))
+    if (export) {
+      write.nexus(
+        tree_unambig,
+        file = paste(tree_name, "nat_species.tre", sep = "_")
+      )
+      print(paste0("exported tree: ", tree_name, "_nat_species.tre"))
+    }
+  }
+}
+
 #### Main #####
-nat_tree_intersect(export = TRUE)
-# nat_tree_intersect(tree_path = "phylo_data/raw_trees")
-# x <- read.csv("jan_nat_species.csv")
-# z <- intersect(x$genus, y$genus)
-# print(length(z))
-# a <- intersect(x$species, y$species)
-# print(length(a))
-# b <- union(x$species, y$species)
-# print(length(b))
+# nat_tree_intersect(export = TRUE)
+# label_trees()
+# label_phylogenies()
+label_phylogenies_alt(export = TRUE)
 # get_label_union()
