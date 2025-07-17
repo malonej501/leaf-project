@@ -50,18 +50,6 @@ def check_alldownloaded():
         print("None!")
 
 
-def on_press(event, root):
-    """Handle key press events."""
-    if event.char == "q":
-        root.destroy()
-    else:
-        try:
-            pressed_keys.append(event.char)
-            root.destroy()
-        except AttributeError:
-            pressed_keys.append(str(event))
-
-
 def search_google_images(query, canvas, root):
     """Search Google Images for a query and display results in a Tkinter
     canvas."""
@@ -324,6 +312,9 @@ class ImageLabeler:
         self.leafdata = []
         self.current_key = None
         self.redo = False  # Flag to indicate if redo is needed
+        self.zoom = 0.6
+        self.offset_x = 0
+        self.offset_y = 0
 
     def get_sorted_file_list(self):
         """Get a sorted list of image files in the directory."""
