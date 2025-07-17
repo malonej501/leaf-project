@@ -314,70 +314,9 @@ def display_downloaded(query, canvas):
     print("Search complete!")
 
 
-def process_images():
-    """Process images from a directory, displaying each image and allowing
-    the user to label it with a key press."""
-    leafdata = []
-
-    try:
-        sorted_file_list = sorted(
-            os.listdir(IMG_DIR),
-            key=lambda x: int(re.search(r"\d+", x).group()),
-        )
-        for filename in sorted_file_list[STARTFROM:]:
-            if filename.endswith(".png"):
-                imgpath = os.path.join(IMG_DIR, filename)
-                query = re.sub(r"\d+", "", filename.rstrip(".png"))
-
-                root = tk.Tk()
-                root.title(f"Image Viewer: {query}")
-                root.geometry("1900x902")
-
-                canvas = tk.Canvas(root)  # , width=1920, height=1080)
-                canvas.grid(row=0, column=0, rowspan=6, columnspan=2)
-
-                img = Image.open(imgpath)
-                img_resized = img.resize((600, 900))
-                photo = ImageTk.PhotoImage(img_resized)
-                label = tk.Label(canvas, image=photo)
-                label.image = photo
-                label.grid(row=0, column=0, rowspan=3, sticky="nw")
-
-                # search_google_images(query, canvas, root)
-                # search_duckduckgo_images(query, canvas)
-                # search_duckduckgo_images_alt(query, canvas)
-                # search_wikimedia_commons(query, canvas)
-
-                if os.path.exists(DDGI_DIR):
-                    display_downloaded(query, canvas)
-
-                print(filename)
-                root.bind("<Key>", lambda event,
-                          arg=root: on_press(event, arg))
-                root.mainloop()
-
-                leafdata.append(
-                    (filename.rstrip(".png"), pressed_keys.copy()[0]))
-                pressed_keys.clear()
-                print(leafdata[-1])
-
-    except Exception:
-        traceback.print_exc()
-
-    return leafdata
-
-
-# if __name__ == "__main__":
-#     check_alldownloaded()
-#     pressed_keys = []
-
-#     with Listener(on_press=on_press) as listener:
-#         ldata = process_images()
-#         ldata_df = pd.DataFrame(ldata, columns=["species", "shape"])
-#         print(ldata_df)
-#         ldata_df.to_csv(f"{WD}img_labels.csv", index=False)
-
 class ImageLabeler:
+    """Class to label images interactively using Tkinter."""
+
     def __init__(self, img_dir, startfrom=0):
         self.img_dir = img_dir
         self.sorted_file_list = self.get_sorted_file_list()
@@ -387,11 +326,13 @@ class ImageLabeler:
         self.redo = False  # Flag to indicate if redo is needed
 
     def get_sorted_file_list(self):
+        """Get a sorted list of image files in the directory."""
         files = [f for f in os.listdir(self.img_dir) if f.endswith(
             '.png') and re.search(r'\d+', f)]
         return sorted(files, key=lambda x: int(re.search(r'\d+', x).group()))
 
     def on_key(self, event, root):
+        """Handle key press events for labeling images."""
         if event.char == "q":
             root.destroy()
         elif event.char == "r":
@@ -402,6 +343,7 @@ class ImageLabeler:
             root.destroy()
 
     def label_image(self, filename):
+        """Display an image and allow the user to label it."""
         imgpath = os.path.join(self.img_dir, filename)
         query = re.sub(r"\d+", "", filename.rstrip(".png"))
 
@@ -420,6 +362,7 @@ class ImageLabeler:
         self.offset_y = 0
 
         def show_img():
+            """Display the image on the canvas with current zoom and offset."""
             # Calculate the region to crop
             crop_w = int(canvas_width / self.zoom)
             crop_h = int(canvas_height / self.zoom)
@@ -436,6 +379,7 @@ class ImageLabeler:
             canvas.create_image(0, 0, anchor="nw", image=photo)
 
         def zoom(event, zoom_in=True):
+            """Zoom in or out based on mouse wheel event."""
             # Mouse position on canvas
             mouse_x = event.x
             mouse_y = event.y
@@ -464,6 +408,7 @@ class ImageLabeler:
 
         # Bind mouse wheel for zoom (Windows/Linux)
         def on_mousewheel(event):
+            """Handle mouse wheel events for zooming."""
             if event.delta > 0:
                 zoom(event, zoom_in=True)
             else:
@@ -477,6 +422,7 @@ class ImageLabeler:
         root.mainloop()
 
     def run(self):
+        """Run the labeling process for all images."""
         while self.index < len(self.sorted_file_list):
             filename = self.sorted_file_list[self.index]
             self.current_key = None
