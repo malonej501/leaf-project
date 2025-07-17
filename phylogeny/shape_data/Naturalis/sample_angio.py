@@ -20,7 +20,7 @@ CHUNK_SIZE = 100000  # For reading large .csv files
 
 CURR_DATE = datetime.now().strftime("%d-%m-%y")
 
-START_FROM = 2389
+START_FROM = 0
 
 
 def filter_to_angio_or_eud():
@@ -152,7 +152,7 @@ def download_imgs():
         # intersect_21-01-24.csv"
         # )
         intersect = pd.read_csv(
-            "jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus.csv")
+            "jan_zun_nat_ang_11-07-25/jan_zun_union_nat_species_11-07-25.csv")
         print(f"Downloading {len(intersect)} images...")
 
         failed_indicies = []
