@@ -10,7 +10,7 @@ from PIL import Image
 
 PLOT = 0  # 0-arrow violin, 1-arrow single
 P1_DSET = 3  # dataset to plot for arrow_plot in PLOT_ORDER[P1_DSET]
-SF = 4  # scale factor for the thickness of the arrows
+SF = 2  # scale factor for the thickness of the arrows
 C_VAL = 2  # increase to increase the curviness of the arrows
 DC_VAL = 5  # increas to increase diagonal arrow curviness
 RAD = 0.5  # padding between leaf icon and circle where arrows join
@@ -25,9 +25,9 @@ ML_DATA = "ML8_mean_rates_all"
 # sim1 = "MUT1_mcmc_11-12-24"
 # sim2 = "MUT2_mcmc_11-12-24"
 # SIM1 = "MUT1_06-02-25"
-SIM1 = "MUT5_320_mcmc_10-07-25"
+SIM1 = "MUT2_320_mcmc_2_24-04-25"
+SIM2 = "MUT5_320_mcmc_10-07-25"
 # SIM2 = "MUT2_mcmc_05-02-25"
-SIM2 = "MUT2_320_mcmc_2_24-04-25"
 
 PLOT_ORDER = [
     SIM1,
@@ -35,8 +35,8 @@ PLOT_ORDER = [
     # "jan_phylo_nat_class_uniform0-0.1_5",
     # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_5",
     # "geeta_phylo_geeta_class_uniform0-100_6",
-    # "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
-    # "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+    "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+    "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
     "jan_nat_species_11-07-25_uniform0-0.1_species_11-07-25_1",
     "zun_nat_species_11-07-25_uniform0-0.1_species_11-07-25_1",
     "geeta_phylo_geeta_class_uniform0-100_genus_1",
@@ -48,8 +48,13 @@ TRANS_FNAME = ["luvd.png", "duvd.png", "cuvd.png",  # transition icons
 ICON_FNAME = ["leaf_p7a_0_0.png", "leaf_p8ae_0_0.png",  # single leaf icons
               "leaf_pd1_0_0.png", "leaf_pc1_alt_0_0.png"]
 SHOW_TITLES = True  # show titles on the plots
-PLOT_TITLES = ["MUT1", "MUT2", "Janssens et al. (2020)",
-               "Zuntini et al. (2024)", "Geeta et al. (2012)"]
+# PLOT_TITLES = ["MUT2", "MUT5", "Janssens et al. (2020)",
+#                "Zuntini et al. (2024)", "Geeta et al. (2012)"]
+PLOT_TITLES = ["MUT2", "MUT5", "Janssens et al. (2020)\ngenus",
+               "Zuntini et al. (2024)\ngenus",
+               "Janssens et al. (2020)\nspecies",
+               "Zuntini et al. (2024)\nspecies",
+               "Geeta et al. (2012)\ngenus"]  # in PLOT_ORDER
 G_PARAMS = {name: val for name, val in globals().items()if name.isupper()}
 
 
@@ -154,7 +159,7 @@ def import_phylo_and_sim_rates(calc_diff, p_order=PLOT_ORDER):
     return phy_sim
 
 
-def import_phylo_ml_rates(calc_diff):
+def import_phylo_ml_rates(calc_diff, p_order=PLOT_ORDER):
     """Import Q-matrix ML estimates for phylo"""
     qml = pd.read_csv(f"rates/ML/{ML_DATA}.csv")
     qml.drop(
@@ -183,7 +188,7 @@ def import_phylo_ml_rates(calc_diff):
         value_name="rate",
     )
     # filter to only rows with dataset in the PLOT_ORDER list
-    ml_plot_order = [x.split("_class", 1)[0] + "_class" for x in PLOT_ORDER]
+    ml_plot_order = [x.split("_class", 1)[0] + "_class" for x in p_order]
     qml_long = qml_long[
         qml_long["dataname"].apply(
             lambda x: any(x in y for y in ml_plot_order))
@@ -536,6 +541,30 @@ def import_imgs():
     return icon_imgs, trans_imgs
 
 
+def add_curly_brace(fig, x0, x1, y, label, height=0.02, text_offset=0.01):
+    """Add a curly brace (approximate) between x0 and x1 at height y in figure 
+    coordinates."""
+    # Draw the bracket as a series of lines (approximate curly brace)
+    # You can refine this with Bezier curves for a more curly look if desired
+    fig_width = fig.get_figwidth()
+    fig_height = fig.get_figheight()
+    # Main horizontal line
+    fig.lines.append(plt.Line2D(
+        [x0, x1], [y+height, y+height], transform=fig.transFigure, color='black',
+        linewidth=1.5))
+    # Left vertical
+    fig.lines.append(plt.Line2D([x0, x0], [
+                     y, y+height], transform=fig.transFigure,
+        color='black', linewidth=1.5))
+    # Right vertical
+    fig.lines.append(plt.Line2D([x1, x1], [
+                     y, y+height], transform=fig.transFigure,
+        color='black', linewidth=1.5))
+    # Add label
+    fig.text((x0 + x1)/2, y + height + text_offset, label,
+             ha='center', va='bottom', fontsize=12)
+
+
 def arrow_viol_h():
     """Plot arrows and violin plots for all phylo and sim rates"""
     # plt.rcParams["font.family"] = "CMU Serif"
@@ -577,8 +606,8 @@ def arrow_viol_h():
         arcs(plot_data, ax, C_VAL, DC_VAL)  # draw arrow
 
         if SHOW_TITLES:
-            # ax.set_title(PLOT_TITLES[i], fontsize=9)
-            ax.set_title("\n".join(wrap(PLOT_ORDER[i], 40)), fontsize=9)
+            ax.set_title(PLOT_TITLES[i], fontsize=9)
+            # ax.set_title("\n".join(wrap(PLOT_ORDER[i], 20)), fontsize=9)
 
     for i, ax in enumerate(ax_g2):  # violin plots
         mcmc_phy_pdata = phy_sim[phy_sim["Dataset"] == PLOT_ORDER[i]]
@@ -643,6 +672,21 @@ def arrow_viol_h():
         ax.set_ylabel("Net normalised rate")
         if i > 0:
             ax.set_ylabel("")
+    # Add curly brace for the first row
+    xpad = 0.005
+    yoff = 0.1
+    # Get the left and right edges of the first two columns
+    x0_sim = ax_g1[0].get_position().x0 - xpad
+    x1_sim = ax_g1[1].get_position().x1 + xpad
+    # Get the left and right edges of the remaining columns
+    x0_phy = ax_g1[2].get_position().x0 - xpad
+    x1_phy = ax_g1[-1].get_position().x1 + xpad
+    # Choose a y position above the axes (e.g., 0.98 in figure coordinates)
+    y_brace = ax_g1[0].get_position().y1 + yoff
+
+    add_curly_brace(fig, x0_sim, x1_sim, y_brace, "Simulation")
+    add_curly_brace(fig, x0_phy, x1_phy, y_brace, "Phylogeny")
+
     # Create legend
     labels = ["Compound", "Dissected", "Lobed", "Unlobed"]
     # left_pos, bottom_pos, width, height
@@ -702,7 +746,7 @@ def arrow_plot():
     arcs(plot_data, ax, C_VAL, DC_VAL)  # draw arrows
     if SHOW_TITLES:
         # ax.set_title(PLOT_TITLES[dset])
-        ax.set_title("\n".join(wrap(PLOT_ORDER[P1_DSET], 40)), fontsize=9)
+        ax.set_title("\n".join(wrap(PLOT_ORDER[P1_DSET], 20)), fontsize=9)
     plt.savefig(
         f"arrow_plot_ci{CI}_{PLOT_ORDER[P1_DSET]}.svg", format="svg", dpi=1200,
         metadata={"Keywords": str(G_PARAMS)})
