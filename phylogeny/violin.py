@@ -8,28 +8,35 @@ from arrow_violin import import_phylo_and_sim_rates, import_phylo_ml_rates, \
     import_sim_ml_rates, normalise_rates, rates_map2
 
 NORM_METHOD = "meanmean"
-ML_DATA = "ML6_genus_mean_rates_all"  # ML data for the phylogeny
+# ML_DATA = "ML6_genus_mean_rates_all"  # ML data for the phylogeny
+ML_DATA = "ML8_mean_rates_all"
 LEGEND = False
 
 PLOT_ORDER = [
-    "MUT1_06-02-25",
+    # "MUT1_06-02-25",
+    "MUT5_320_mcmc_10-07-25",
     "MUT2_320_mcmc_2_24-04-25",
     # "jan_phylo_nat_class_uniform0-0.1_1",
     # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_2",
     # "geeta_phylo_geeta_class_uniform0-100_4",
     "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
     "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+    # "jan_nat_species_11-07-25_uniform0-0.1_species_11-07-25_1",
+    # "zun_nat_species_11-07-25_uniform0-0.1_species_11-07-25_1",
     "geeta_phylo_geeta_class_uniform0-100_genus_1",
 ]
+G_PARAMS = {name: val for name, val in globals().items()if name.isupper()}
 
 
 def plot_phylo_and_sim_rates_with_leaf_icons():
     """Violins for the Q matrix showing estimates from simulations and 
     phylogeny including MCMC and ML estimates"""
 
-    ml_ph_l = import_phylo_ml_rates(calc_diff=False)
+    ml_ph_l = import_phylo_ml_rates(calc_diff=False, p_order=PLOT_ORDER)
     ml_sm_l = import_sim_ml_rates(calc_diff=False)
-    ph_sm_l = import_phylo_and_sim_rates(calc_diff=False)
+    ph_sm_l = import_phylo_and_sim_rates(calc_diff=False, p_order=PLOT_ORDER)
+    print(ph_sm_l["Dataset"].unique())
+
     ph_sm_l, ml_ph_l, ml_sm_l = normalise_rates(ph_sm_l, ml_ph_l, ml_sm_l)
     ml_sm_l = ml_sm_l.rename(columns={"Dataset": "dataset"})
     ml_all = pd.concat([ml_ph_l, ml_sm_l], ignore_index=True)  # combine ML
@@ -63,14 +70,15 @@ def plot_phylo_and_sim_rates_with_leaf_icons():
                 # get ml_plot_data in correct order
                 x = ml_plot_data[ml_plot_data["dataset"].apply(
                     lambda x, d=dataset: x in d)].reset_index(drop=True)
+
                 if not x.empty:
                     ml_rates.append(x.loc[0, "rate_norm"])
                 elif x.empty:
                     ml_rates.append(np.nan)
                 if dataset not in legend_labels:
                     legend_labels.append(dataset)
+
             ax.axvline(2.5, linestyle="--", color="grey", alpha=0.5)
-            # print(rates)
             bp = ax.violinplot(rates, showextrema=False, showmeans=True)
 
             # for median in bp["medians"]:
@@ -166,9 +174,12 @@ def plot_phylo_and_sim_rates_with_leaf_icons():
     else:
         plt.subplots_adjust(hspace=0.2, wspace=0.2)
 
-    plt.savefig(f"violin_{str(date.today())}.pdf", format="pdf", dpi=1200)
+    plt.savefig(f"violin_{str(date.today())}.pdf", format="pdf", dpi=1200,
+                metadata={"Keywords": str(G_PARAMS)})
     plt.show()
 
 
 if __name__ == "__main__":
+    for name, val in G_PARAMS.items():
+        print(f"{name} {val}")
     plot_phylo_and_sim_rates_with_leaf_icons()
