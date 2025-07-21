@@ -8,7 +8,7 @@ from matplotlib.patches import FancyArrowPatch
 from PIL import Image
 
 
-PLOT = 1  # 0-arrow violin, 1-arrow single
+PLOT = 0  # 0-arrow violin, 1-arrow single
 P1_DSET = 3  # dataset to plot for arrow_plot in PLOT_ORDER[P1_DSET]
 SF = 4  # scale factor for the thickness of the arrows
 C_VAL = 2  # increase to increase the curviness of the arrows
@@ -16,13 +16,16 @@ DC_VAL = 5  # increas to increase diagonal arrow curviness
 RAD = 0.5  # padding between leaf icon and circle where arrows join
 # the credible interval for shading the arrows grey or black
 # (>CI must be above or below zero to be black)
-CI = 0.90
+CI = 0.95
 
 NORM_MTHD = "meanmean"
-ML_DATA = "ML6_genus_mean_rates_all"
+# ML_DATA = "ML6_genus_mean_rates_all"
+ML_DATA = "ML8_mean_rates_all"
+# ML_DATA = "ML4_mean_rates_all"
 # sim1 = "MUT1_mcmc_11-12-24"
 # sim2 = "MUT2_mcmc_11-12-24"
-SIM1 = "MUT1_06-02-25"
+# SIM1 = "MUT1_06-02-25"
+SIM1 = "MUT5_320_mcmc_10-07-25"
 # SIM2 = "MUT2_mcmc_05-02-25"
 SIM2 = "MUT2_320_mcmc_2_24-04-25"
 
@@ -32,19 +35,22 @@ PLOT_ORDER = [
     # "jan_phylo_nat_class_uniform0-0.1_5",
     # "zuntini_phylo_nat_class_10-09-24_genera_class_uniform0-0.1_5",
     # "geeta_phylo_geeta_class_uniform0-100_6",
-    "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
-    "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+    # "jan_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+    # "zun_genus_phylo_nat_26-09-24_class_uniform0-0.1_genus_1",
+    "jan_nat_species_11-07-25_uniform0-0.1_species_11-07-25_1",
+    "zun_nat_species_11-07-25_uniform0-0.1_species_11-07-25_1",
     "geeta_phylo_geeta_class_uniform0-100_genus_1",
     # "jan_equal_genus_phylo_nat_class_uniform0-0.1_4",
     # "zuntini_genera_equal_genus_phylo_nat_class_uniform0-0.1_4",
 ]
-TRANS_FNAME = ["ulvd.png", "udvd.png", "ucvd.png",  # transition icons
+TRANS_FNAME = ["luvd.png", "duvd.png", "cuvd.png",  # transition icons
                "ldvd.png", "lcvd.png", "dcvd.png"]
 ICON_FNAME = ["leaf_p7a_0_0.png", "leaf_p8ae_0_0.png",  # single leaf icons
               "leaf_pd1_0_0.png", "leaf_pc1_alt_0_0.png"]
 SHOW_TITLES = True  # show titles on the plots
 PLOT_TITLES = ["MUT1", "MUT2", "Janssens et al. (2020)",
                "Zuntini et al. (2024)", "Geeta et al. (2012)"]
+G_PARAMS = {name: val for name, val in globals().items()if name.isupper()}
 
 
 rates_map2 = {
@@ -95,7 +101,7 @@ def get_rates_batch(directory):
 
 
 def calc_net_rate(rates):
-    """Calculate the net rate for each transition by subtracting the reverse 
+    """Calculate the net rate for each transition by subtracting the reverse
     transition rate from the forward transition rate"""
     transitions = rates_map3.values()
     for fwd in transitions:
@@ -106,7 +112,7 @@ def calc_net_rate(rates):
     return rates
 
 
-def import_phylo_and_sim_rates(calc_diff):
+def import_phylo_and_sim_rates(calc_diff, p_order=PLOT_ORDER):
     """Import Q-matrix posteriors for phylo and sim and calculate net rates"""
     # to return diff between rates rather than raw rates, set calc_diff true
     #### import data ####
@@ -133,11 +139,16 @@ def import_phylo_and_sim_rates(calc_diff):
         value_name="rate",
     )
     phy_sim["dataname"] = phy_sim["Dataset"].apply(
-        lambda x: x.split("_class", 1)[0] + "_class"
+        lambda x: x.split("_class", 1)[0] + "_class" if "_class" in x else x
     )
+
+    phy_sim["dataname"] = phy_sim["dataname"].apply(
+        lambda x: x.split("_uniform", 1)[0] if "_uniform" in x else x
+    )
+
     # filter to only rows with dataset in the PLOT_ORDER list
     phy_sim = phy_sim[
-        phy_sim["Dataset"].isin(PLOT_ORDER)
+        phy_sim["Dataset"].isin(p_order)
     ].reset_index(drop=True)
 
     return phy_sim
@@ -160,7 +171,7 @@ def import_phylo_ml_rates(calc_diff):
     )
     qml = qml.rename(columns=rates_map3)
     qml["dataname"] = qml["dataset"].apply(
-        lambda x: x.split("_class", 1)[0] + "_class"
+        lambda x: x.split("_class", 1)[0] + "_class" if "_class" in x else x
     )
 
     qml = calc_net_rate(qml) if calc_diff else qml
@@ -174,7 +185,8 @@ def import_phylo_ml_rates(calc_diff):
     # filter to only rows with dataset in the PLOT_ORDER list
     ml_plot_order = [x.split("_class", 1)[0] + "_class" for x in PLOT_ORDER]
     qml_long = qml_long[
-        qml_long["dataname"].isin(ml_plot_order)
+        qml_long["dataname"].apply(
+            lambda x: any(x in y for y in ml_plot_order))
     ].reset_index(drop=True)
     return qml_long
 
@@ -200,7 +212,7 @@ def import_sim_ml_rates(calc_diff):
 
     sim_ml_long = pd.melt(sim_ml, id_vars="Dataset",
                           var_name="transition", value_name="rate")
-    sim_ml_long["dataname"] = sim_ml_long["Dataset"] + "_class"
+    sim_ml_long["dataname"] = sim_ml_long["Dataset"]
     return sim_ml_long
 
 
@@ -552,7 +564,8 @@ def arrow_viol_h():
                    "l→d-d→l", "l→c-c→l", "d→c-c→d"]
 
     # Set up fig
-    fig, axs = plt.subplots(2, len(PLOT_ORDER), figsize=(14, 6))
+    fig, axs = plt.subplots(
+        2, len(PLOT_ORDER), figsize=(14, 6), sharey="row")
     ax_g1 = axs[0]  # 1st row subplots
     ax_g2 = axs[1]  # 2nd row subplots
     for i, ax in enumerate(ax_g1):  # arrow plots
@@ -570,9 +583,9 @@ def arrow_viol_h():
     for i, ax in enumerate(ax_g2):  # violin plots
         mcmc_phy_pdata = phy_sim[phy_sim["Dataset"] == PLOT_ORDER[i]]
         ml_phy_pdata = ml_q_phy[ml_q_phy["dataname"].apply(
-            lambda x: x in PLOT_ORDER[i])]
+            lambda x, i=i: x in PLOT_ORDER[i])]
         ml_sim_pdata = ml_q_sim[
-            ml_q_sim["Dataset"].apply(lambda x: x in PLOT_ORDER[i])]
+            ml_q_sim["Dataset"].apply(lambda x, i=i: x in PLOT_ORDER[i])]
         rates = []
         ml_rates = []
         for transition in transitions:
@@ -603,7 +616,7 @@ def arrow_viol_h():
             ax.scatter(pos, ml_rates, color="black", zorder=5, s=8,
                        facecolors="white")  # , marker="D")
         # ax.axhline(0, linestyle="--", color="gray", alpha=0.5)
-        ax.grid(alpha=0.3)
+        ax.grid(axis="y", alpha=0.3)
         ax.set_ylim(-8, 8)
         ax.set_xticks(
             list(range(1, len(transitions) + 1)),
@@ -643,7 +656,12 @@ def arrow_viol_h():
         axlgnd.axis("off")
 
     # plt.tight_LAYOUT()
-    plt.savefig("arrow_violin_plot.svg", format="svg", dpi=1200)
+    # plt.savefig(f"arrow_violin_plot_ci{CI}.svg", format="svg", dpi=1200)
+    # print(f"Exported arrow_violin_plot_ci{CI}.svg")
+    plt.savefig(f"arrow_violin_plot_ci{CI}.pdf", format="pdf", dpi=1200,
+                metadata={"Keywords": str(G_PARAMS)})
+    print(f"Exported arrow_violin_plot_ci{CI}.pdf")
+
     plt.show()
 
 
@@ -686,15 +704,15 @@ def arrow_plot():
         # ax.set_title(PLOT_TITLES[dset])
         ax.set_title("\n".join(wrap(PLOT_ORDER[P1_DSET], 40)), fontsize=9)
     plt.savefig(
-        f"arrow_plot_{PLOT_ORDER[P1_DSET]}.svg", format="svg", dpi=1200)
-    print(f"Exported arrow_plot_{PLOT_ORDER[P1_DSET]}.svg")
+        f"arrow_plot_ci{CI}_{PLOT_ORDER[P1_DSET]}.svg", format="svg", dpi=1200,
+        metadata={"Keywords": str(G_PARAMS)})
+    print(f"Exported arrow_plot_ci{CI}_{PLOT_ORDER[P1_DSET]}.svg")
     plt.show()
 
 
 if __name__ == "__main__":
-    for name, val in zip(list(globals()), list(globals().values())):
-        if name.isupper():
-            print(name, val)
+    for name, val in G_PARAMS.items():
+        print(f"{name} {val}")
     if PLOT == 0:
         arrow_viol_h()
     elif PLOT == 1:
