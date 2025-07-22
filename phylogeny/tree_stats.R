@@ -8,17 +8,19 @@ library(svglite)
 library(stringr)
 library(RColorBrewer)
 
-show_tip_labs <- FALSE # set to True to show tip labs on tree plots
+show_tip_labs <- TRUE # set to True to show tip labs on tree plots
 show_order_heatmap <- FALSE # set to True to show order heatmap on tree plots
-scale_bar <- FALSE # show scale bar on tree plots
+scale_bar <- TRUE # show scale bar on tree plots
 legend <- FALSE # show legend on tree plots
 tree_plot <- 1 # choose from tree_files which tree to plot
-branch_width <- 0.3 # set the branch width for the tree plot 0.1 default
+branch_width <- 0.1 # set the branch width for the tree plot 0.1 default
 tree_files <- c(
+  "zun_nat_species_11-07-25.tre",
+  "jan_nat_species_11-07-25.tre",
   "zun_genus_phylo_nat_class_26-09-24.tre",
   "jan_genus_phylo_nat_class_26-09-24.tre",
-  "geeta_phylo_geeta_class_23-04-24.tre",
-  "jan_phylo_nat_class_21-01-24.tre"
+  "geeta_phylo_geeta_class_23-04-24.tre"
+  # "jan_phylo_nat_class_21-01-24.tre"
 )
 
 import_trees <- function() {
@@ -38,7 +40,8 @@ import_labels <- function() {
       "shape_data/labels_final/",
       label
     ), header = FALSE, sep = "\t")
-    data$dataset <- sub("^(.*class).*", "\\1", label)
+    data$dataset <- sub("^(.*class).*", "\\1", label) # format dataset name
+    data$dataset <- sub("\\.txt$", "", data$dataset)
     label_data <- rbind(label_data, data)
   }
   names(label_data) <- c("label", "shape_num", "dataset")
@@ -134,16 +137,22 @@ plot_ggtrees <- function(summary) {
   dataset <- tree_files[tree_plot]
   label_data <- import_labels()
   label_data <- map_higher_order_labels(label_data)
-  print(label_data)
   trees <- list() # Initialize an empty list to store trees
   heatmap_data <- c()
 
   data_name <- sub("^(.*class).*", "\\1", dataset)
+  data_name <- sub("\\.tre$", "", data_name)
   tree_path <- paste0("phylo_data/trees_final/", dataset)
   tree <- read.nexus(tree_path)
   labels <- label_data[label_data$dataset == data_name, ]
   # Create a data frame with the tree tip labels in the tree order
-  label_data_ordered <- data.frame("label" = tree$tip.label)
+  # Handle both phylo and multiPhylo objects for tip labels
+  tip_labels <- if (inherits(tree, "multiPhylo")) {
+    tree[[1]]$tip.label
+  } else {
+    tree$tip.label
+  }
+  label_data_ordered <- data.frame("label" = tip_labels)
   # Join with the labels data frame to get the order
   label_data_ordered <- left_join(label_data_ordered, labels, by = "label")
   # here we specify the taxonomic level to be used for the heatmap
@@ -159,7 +168,6 @@ plot_ggtrees <- function(summary) {
   }
 
   class(trees) <- "multiPhylo"
-  print(trees[[1]])
   p <- ggtree(trees,
     layout = "circular",
     size = branch_width
@@ -178,7 +186,11 @@ plot_ggtrees <- function(summary) {
     p <- p + theme(legend.position = "none")
   }
   if (scale_bar) { # width=0.1 for geeta, 100 for jan, zun
-    p <- p + geom_treescale(x = 0, y = 0, width = 100, offset = 5)
+    if (grepl("geeta", data_name)) {
+      p <- p + geom_treescale(x = 0, y = 0, width = 0.1, offset = 5)
+    } else {
+      p <- p + geom_treescale(x = 0, y = 0, width = 100, offset = 5)
+    }
   }
   if (show_tip_labs) {
     p <- p + geom_tiplab(size = tiplab_text_size, vjust = tiplab_vjust)
@@ -216,6 +228,10 @@ plot_ggtrees <- function(summary) {
     dpi = 10000
   ) # text below a certain size will not be rendered with .pdf
   print(paste("Tree plot exported as", dataset, ".svg"))
+  ggsave(
+    file = paste0(dataset, ".pdf"), plot = p, width = 10, height = 10,
+    dpi = 600
+  )
   print(p)
 }
 
@@ -224,7 +240,8 @@ get_shape_counts <- function(summary) {
   tree_names <- summary$dataset
   shape_freq_df <- data.frame()
   for (dataset in tree_names) {
-    data_name <- sub("^(.*class).*", "\\1", dataset)
+    data_name <- sub("^(.*class).*", "\\1", dataset) # format data_name
+    data_name <- sub("\\.tre$", "", data_name)
     labels <- label_data[label_data$dataset == data_name, ]
     shape_freq <- as.data.frame(table(labels$shape_num))
     shape_freq$dataset <- dataset
@@ -242,6 +259,15 @@ get_shape_counts <- function(summary) {
     "dataset", "u", "l", "d", "c", "ld", "lc",
     "ldc", "n_tips"
   )
+  # Calculate proportions for each shape column (except dataset and n_tips)
+  shape_cols <- setdiff(colnames(shape_freq_df), c("dataset", "n_tips"))
+  for (col in shape_cols) {
+    prop <- shape_freq_df[[col]] / shape_freq_df$n_tips
+    # Create a new column with "count (xx%)" format
+    shape_freq_df[[col]] <- sprintf(
+      "%d (%.1f%%)", shape_freq_df[[col]], 100 * prop
+    )
+  }
   summary <- merge(summary, shape_freq_df, by = "dataset")
 }
 summary <- import_trees()
