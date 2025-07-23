@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+import itertools
 
 
 DROP = 0  # drop first n steps
@@ -23,13 +24,25 @@ phylo_transitions = pd.DataFrame({
 def get_walks():
     """Return the details of random walks along with transition type at each 
     step"""
-    walks = pd.read_csv("MUT2.2.csv")
+    # walks = pd.read_csv("MUT2_320_mle_23-04-25.csv")
+    walks = pd.read_csv("MUT5_320_mcmc_23-07-25_1.csv")
     # get transitions by shifting shape columns down by one and combining
     walks["prevshape"] = walks["shape"].shift(+1)
     walks["transition"] = walks["shape"] + walks["prevshape"]
     walks.loc[walks["step"] == 0, "transition"] = walks["first_cat"] + \
         walks["shape"]  # replace 0th step with first_cat + shape
-
+    # Get all unique leafids and walkids (or use your reference list)
+    all_leafids = walks['leafid'].unique()
+    all_walkids = walks['walkid'].unique()
+    # Generate all possible combinations
+    all_combos = pd.DataFrame(list(itertools.product(all_leafids, all_walkids)),
+                              columns=['leafid', 'walkid'])
+    # Merge with your actual data to find missing combinations
+    merged = all_combos.merge(walks[['leafid', 'walkid']], on=[
+                              'leafid', 'walkid'], how='left', indicator=True)
+    # Rows with _merge == 'left_only' are missing in your data
+    missing = merged[merged['_merge'] == 'left_only']
+    print(f"MISSING: {missing}")
     return walks
 
 
@@ -150,5 +163,5 @@ def plot_trans_prop_phylo_sim(rm_self=False, e=False):
 
 if __name__ == "__main__":
     plot_trans_prop_phylo_sim(rm_self=True)
-    # plot_phylo_sim_shape_freq()
+    plot_shape_freq_phylo_sim()
     # plot_trans_freq_sim()
