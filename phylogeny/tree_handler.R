@@ -41,13 +41,22 @@ load_shape_data_full <- function() {
   return(shape_data)
 }
 
-load_naturalis_sample_data <- function() {
-  sample <- read.csv(paste0(
-    "shape_data/Naturalis",
-    "/jan_zun_nat_ang_11-07-25/",
-    "Naturalis_occurrence_ang_sppfam-1_11-07-25_multimedia.csv"
-  ))
-  return(list(janssens_nat = sample, zuntini_nat = sample))
+load_naturalis_sample_data <- function(sample_id=NULL) {
+  if (sample_id == "11-07-25") {
+    sample <- read.csv(paste0(
+      "shape_data/Naturalis",
+      "/jan_zun_nat_ang_11-07-25/",
+      "Naturalis_occurrence_ang_sppfam-1_11-07-25_multimedia.csv"
+    ))
+  } else if (sample_id == "26-09-24") {
+    sample <- read.csv(paste0(
+      "shape_data/Naturalis/jan_zun_nat_ang_26-09-24/",
+      "Naturalis_multimedia_ang_sample_26-09-24.csv"
+    ))
+  } else {
+    stop("Invalid sample id")
+  }
+  return(sample)
 }
 
 unique_tips <- function(tree) {
@@ -404,7 +413,7 @@ compare_phylo_taxa <- function() {
   genus_intersect <- intersect(jan_labels$genus, zun_labels$genus)
 }
 
-get_label_union <- function() {
+get_label_union <- function(x, y) {
   ## Get the union of labels from two datasets
   x <- read.csv("zun_nat_species_11-07-25.csv")
   y <- read.csv("jan_nat_species_11-07-25.csv")
@@ -469,9 +478,130 @@ label_phylogenies_alt <- function(export = FALSE) {
   }
 }
 
+drop_non_eudicot <- function(tree_name, taxon_rank = NULL,
+                             sample_id = NULL, export = FALSE) {
+  print(paste("Dropping non-eudicot tips from tree:", tree_name))
+  # tree: name of tree file without extension - must be in trees_final
+  # drop non-eudicot tips from phylogenetic tree
+  eud_fams <- read.csv("shape_data/APG_IV/APG_IV_eud_fams.csv",
+                       stringsAsFactors = FALSE)
+  fam_col <- if ("family" %in% names(eud_fams)) "family" else names(eud_fams)[1]
+  eud_family_list <- unique(trimws(as.character(eud_fams[[fam_col]])))
+
+  tree <- read.nexus(paste0(
+    "phylo_data/trees_final/",
+    tree_name, ".tre"
+  ))
+
+  # load naturalis data for the relevant sample
+  sample <- load_naturalis_sample_data(sample_id)
+  if (taxon_rank == "species") {
+    missing <- setdiff(tree$tip.label, sample$species)
+  } else if (taxon_rank == "genus") {
+    missing <- setdiff(tree$tip.label, sample$genus)
+  } else {
+    stop("taxon_rank must be 'species' or 'genus'")
+  }
+
+  if (length(missing) == 0) {
+    message("All tree tips found in sample data")
+  } else {
+    message("Missing tips in sample data: ", paste(missing, collapse = ", "))
+  }
+  sample <- sample[, c("family", "genus", "species")]
+  # keep only rows whose family is in the eudicot family list
+  sample <- sample[!is.na(sample$family) & sample$family %in% eud_family_list, ]
+
+  message("rows in sample after eudicot family filter: ", nrow(sample))
+
+  if (taxon_rank == "species") {
+    # drop tips in the tree that are not in sample$species
+    tips_keep <- unique(as.character(na.omit(sample$species)))
+  } else if (taxon_rank == "genus") {
+    # drop tips in the tree that are not in sample$genus
+    tips_keep <- unique(as.character(na.omit(sample$genus)))
+  } else {
+    stop("taxon_rank must be 'species' or 'genus'")
+  }
+  tree_pruned <- drop.tip(tree, setdiff(tree$tip.label, tips_keep))
+
+  message("tips before: ", length(tree$tip.label), " after: ", 
+          length(tree_pruned$tip.label))
+
+  # drop non-eudicot labels from label data
+  labels <- read.csv(paste0(
+    "shape_data/labels_final/",
+    tree_name, ".txt"
+  ), sep = "\t", header = FALSE)
+  names(labels) <- c("taxon", "shape")
+  labels_pruned <- labels[labels$taxon %in% tips_keep, ]
+  message("labels before: ", nrow(labels), " after: ", nrow(labels_pruned))
+
+  if (nrow(labels_pruned) != length(tree_pruned$tip.label)) {
+    stop("Number of labels does not match number of tips after pruning")
+  }
+
+  if (export) {
+    write.nexus(
+      tree_pruned,
+      file = paste0(
+        "phylo_data/trees_final/",
+        tree_name, "_eudicot.tre"
+      )
+    )
+    message("exported tree: phylo_data/trees_final/", 
+            tree_name, "_eudicot.tre")
+    write.table(
+      labels_pruned,
+      file = paste0(
+        "shape_data/labels_final/",
+        tree_name, "_eudicot.txt"
+      ),
+      sep = "\t",
+      row.names = FALSE,
+      col.names = FALSE,
+      quote = FALSE
+    )
+    message("exported labels: shape_data/labels_final/",
+            tree_name, "_eudicot.txt")
+  }
+}
+
 #### Main #####
-# nat_tree_intersect(export = TRUE)
+# trees <- nat_tree_intersect(export = FALSE)
+# genus_trees <- trees[1:2]
+# print(genus_trees)
+# jan_tips <- genus_trees$janssens$tip.label
+# zun_tips <- genus_trees$zuntini$tip.label
+# print(paste("jan tips:", length(jan_tips)))
+# print(paste("zun tips:", length(zun_tips)))
+# union <- union(jan_tips, zun_tips)
+# print(paste("union tips:", length(union)))
+
 # label_trees()
 # label_phylogenies()
-label_phylogenies_alt(export = TRUE)
+# label_phylogenies_alt(export = TRUE)
 # get_label_union()
+
+# trees <- c("zun_nat_species_11-07-25",
+#            "jan_nat_species_11-07-25"
+#            "zun_genus_phylo_nat_class_26-09-24",
+#            "jan_genus_phylo_nat_class_21-1-24")
+export <- FALSE
+drop_non_eudicot(tree_name = "zun_nat_species_11-07-25",
+                 taxon_rank = "species",
+                 sample_id = "11-07-25",
+                 export)
+drop_non_eudicot(tree_name = "jan_nat_species_11-07-25",
+                 taxon_rank = "species",
+                 sample_id = "11-07-25",
+                 export)
+drop_non_eudicot(tree_name = "zun_genus_phylo_nat_class_26-09-24",
+                 taxon_rank = "genus",
+                 sample_id = "26-09-24",
+                 export)
+drop_non_eudicot(tree_name = "jan_genus_phylo_nat_class_26-09-24",
+                 taxon_rank = "genus",
+                 sample_id = "26-09-24",
+                 export)
+
