@@ -249,29 +249,52 @@ def plot_taxon_distribution(plot_sep=False):
     # print(labs_gen)
     labs_gen.loc[labs_gen['family'].str.startswith('Leguminosae', na=False),
                  'family'] = 'Leguminosae'  # replace subfamily names
+    labs_gen = labs_gen.drop_duplicates(
+        subset="genus")  # drop duplicate genera
+
     geeta = pd.merge(geeta, labs_gen, on="genus", how="left")
 
-    zun_gen = pd.read_csv(
+    zun_gen_ang = pd.read_csv(
         "jan_zun_nat_ang_26-09-24/zun_nat_genus_labelled.csv")
-    jan_gen = pd.read_csv(
+    zun_gen_eud = pd.read_csv("../labels_final/zun_genus_phylo_nat_class_26-09-24_eudicot.txt",
+                              sep="\t", names=["genus", "shape"])
+    jan_gen_ang = pd.read_csv(
         "jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv")
-    zun_sp = pd.read_csv("jan_zun_nat_ang_11-07-25/labelled_tree_data" +
-                         "/zun_nat_species_11-07-25.txt", sep="\t",
-                         names=["species", "shape"])
-    jan_sp = pd.read_csv("jan_zun_nat_ang_11-07-25/labelled_tree_data" +
-                         "/jan_nat_species_11-07-25.txt", sep="\t",
-                         names=["species", "shape"])
+    jan_gen_eud = pd.read_csv("../labels_final/jan_genus_phylo_nat_class_26-09-24_eudicot.txt",
+                              sep="\t", names=["genus", "shape"])
+    print(len(jan_gen_eud))
+    zun_sp_ang = pd.read_csv("jan_zun_nat_ang_11-07-25/labelled_tree_data" +
+                             "/zun_nat_species_11-07-25.txt", sep="\t",
+                             names=["species", "shape"])
+    zun_sp_eud = pd.read_csv("../labels_final/zun_nat_species_11-07-25_eudicot.txt",
+                             sep="\t", names=["species", "shape"])
+    jan_sp_ang = pd.read_csv("jan_zun_nat_ang_11-07-25/labelled_tree_data" +
+                             "/jan_nat_species_11-07-25.txt", sep="\t",
+                             names=["species", "shape"])
+    jan_sp_eud = pd.read_csv("../labels_final/jan_nat_species_11-07-25_eudicot.txt",
+                             sep="\t", names=["species", "shape"])
 
     labs_sp = pd.read_csv("jan_zun_nat_ang_11-07-25/" +
                           "jan_zun_union_nat_species_11-07-25_labelled.csv")
+    zun_sp_ang = pd.merge(zun_sp_ang, labs_sp, on="species",  # label with families
+                          how="left")
+    zun_sp_eud = pd.merge(zun_sp_eud, labs_sp, on="species", how="left")
+    jan_sp_ang = pd.merge(jan_sp_ang, labs_sp, on="species", how="left")
+    jan_sp_eud = pd.merge(jan_sp_eud, labs_sp, on="species", how="left")
+    zun_gen_eud = pd.merge(zun_gen_eud, labs_gen, on="genus", how="left")
+    jan_gen_eud = pd.merge(jan_gen_eud, labs_gen, on="genus", how="left")
 
-    zun_sp = pd.merge(zun_sp, labs_sp, on="species",  # label with families
-                      how="left")
-    jan_sp = pd.merge(jan_sp, labs_sp, on="species", how="left")
-
-    data = [zun_sp, jan_sp, zun_gen, jan_gen, geeta]
-    datanames = ["Zun. sp.", "Jan. sp.", "Zun. gen.", "Jan. gen.", "Geeta"]
-    fnames = ["zun_sp", "jan_sp", "zun_gen", "jan_gen", "geeta"]
+    data = [zun_sp_ang, jan_sp_ang, zun_gen_ang, jan_gen_ang,
+            zun_sp_eud, jan_sp_eud, zun_gen_eud, jan_gen_eud,
+            geeta]
+    datanames = ["Zun. sp. (ang)", "Jan. sp. (ang)", "Zun. gen. (ang)", "Jan. gen. (ang)",
+                 "Zun. sp.", "Jan. sp.", "Zun. gen.", "Jan. gen.",
+                 "Geeta"]
+    for i, d in enumerate(data):
+        print(datanames[i], len(d))
+    fnames = ["zun_sp_ang", "jan_sp_ang", "zun_gen_ang", "jan_gen_ang",
+              "zun_sp", "jan_sp", "zun_gen", "jan_gen",
+              "geeta"]
     # data_full = pd.concat(samples)
     # print(data_full)
     freqs = [pd.DataFrame(sample[["family", "order"]].value_counts())
