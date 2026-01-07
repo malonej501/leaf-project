@@ -5,8 +5,8 @@ import pandas as pd
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-import seaborn as sns
-
+from matplotlib.transforms import ScaledTranslation
+from Bio import Phylo
 
 # specify no. species to sample per angiosperm family - if there aren't
 # enough species in the database, it will take the maximum number.
@@ -219,7 +219,7 @@ def get_all_genera():
     )
 
 
-def plot_taxon_distribution():
+def plot_taxon_distribution(plot_sep=False):
     """Plot the no. taxa per family in the specified samples of from
     Naturalis."""
     # datapath1 = "sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample
@@ -233,74 +233,116 @@ def plot_taxon_distribution():
     # datapath1 = "jan_zun_nat_ang_26-09-24/jan_zun_union_nat_genus
     # _labelled.csv"
     # datapath2 = "jan_zun_nat_ang_26-09-24/jan_nat_genus.csv"
-    # datapath3 = "jan_zun_nat_ang_26-09-24/zun_nat_genus.csv"
-    datapath1 = "jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv"
-    datapath2 = "jan_zun_nat_ang_26-09-24/zun_nat_genus_labelled.csv"
+    # datapath3 = "jan_zun_nat_ang_26-09-24/zun_nat_genus.csv
+    # zun = Phylo.read(
+    #     "../../phylo_data/raw_trees/zuntini_4_young_tree_" +
+    #     "smoothing_10_pruned_for_diversification_analyses.tre",
+    #     format="newick")
+    # zun_labs = [term.name for term in zun.get_terminals()]
+    # zun_labs = pd.DataFrame([s.split("_") for s in zun_labs],)
+    # zun_labs = zun_labs.iloc[:, 0:3]  # take order, family, genus
+    # zun_labs.columns = ["order", "family", "genus"]
+    # zun_labs = zun_labs.drop_duplicates().reset_index(drop=True)
+    geeta = pd.read_csv("../geeta_561AngLf09_D_modified_genera_labels.csv",
+                        names=["genus", "shape"])
+    labs_gen = pd.read_csv("Naturalis_unique_genera_11-02-25.csv")
+    # print(labs_gen)
+    labs_gen.loc[labs_gen['family'].str.startswith('Leguminosae', na=False),
+                 'family'] = 'Leguminosae'  # replace subfamily names
+    geeta = pd.merge(geeta, labs_gen, on="genus", how="left")
 
-    datapaths = [datapath1, datapath2]  # , datapath3]
-    samples = [pd.read_csv(datapath) for datapath in datapaths]
-    # u = samples[0]
-    # js = samples[1]
-    # zs = samples[2]
-    # j = u[u["CoreId"].isin(js["CoreId"])]
-    # j.to_csv("jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv",
-    # index=False)
-    # print(len(j))
-    # z = u[u["CoreId"].isin(zs["CoreId"])]
-    # z.to_csv("jan_zun_nat_ang_26-09-24/zun_nat_genus_labelled.csv",
-    # index=False)
-    # print(len(z))
-    # exit()
+    zun_gen = pd.read_csv(
+        "jan_zun_nat_ang_26-09-24/zun_nat_genus_labelled.csv")
+    jan_gen = pd.read_csv(
+        "jan_zun_nat_ang_26-09-24/jan_nat_genus_labelled.csv")
+    zun_sp = pd.read_csv("jan_zun_nat_ang_11-07-25/labelled_tree_data" +
+                         "/zun_nat_species_11-07-25.txt", sep="\t",
+                         names=["species", "shape"])
+    jan_sp = pd.read_csv("jan_zun_nat_ang_11-07-25/labelled_tree_data" +
+                         "/jan_nat_species_11-07-25.txt", sep="\t",
+                         names=["species", "shape"])
 
-    datanames = []
-    for datapath in datapaths:
-        datanames.append(datapath.split("/")[1].split(".")[0])
+    labs_sp = pd.read_csv("jan_zun_nat_ang_11-07-25/" +
+                          "jan_zun_union_nat_species_11-07-25_labelled.csv")
+
+    zun_sp = pd.merge(zun_sp, labs_sp, on="species",  # label with families
+                      how="left")
+    jan_sp = pd.merge(jan_sp, labs_sp, on="species", how="left")
+
+    data = [zun_sp, jan_sp, zun_gen, jan_gen, geeta]
+    datanames = ["Zun. sp.", "Jan. sp.", "Zun. gen.", "Jan. gen.", "Geeta"]
+    fnames = ["zun_sp", "jan_sp", "zun_gen", "jan_gen", "geeta"]
     # data_full = pd.concat(samples)
     # print(data_full)
-    freqs = [pd.DataFrame(sample["family"].value_counts())
-             for sample in samples]
+    freqs = [pd.DataFrame(sample[["family", "order"]].value_counts())
+             for sample in data]
+
     for i, freq in enumerate(freqs):
-        freq.rename(columns={"count": f"count_{datanames[i]}"}, inplace=True)
-    freqs_merged = pd.merge(*freqs, on="family", how="outer").reset_index()
-    freqs_merged.sort_values(
-        by=freqs_merged.columns[1], ascending=False, inplace=True)
-    print(datanames)
-    print(freqs)
-    print(freqs_merged)
-    # plt.figure(figsize=(18, 6))
-    _, ax = plt.subplots(figsize=(18, 6))
-    index = np.arange(len(freqs_merged["family"]))
-    bar_width = 0.35
-    ax.bar(
-        index - bar_width / 2,
-        freqs_merged[f"count_{datanames[0]}"],
-        bar_width,
-        label=f"count_{datanames[0]}",
-        color=sns.color_palette("colorblind")[0],
+        freq.rename(columns={"count": datanames[i]}, inplace=True)
+    # freqs_merged = pd.merge(*freqs, on="family", how="outer").reset_index()
+    freqs_merged = pd.concat(freqs, axis=1).reset_index()
+    freqs_merged = freqs_merged.melt(
+        id_vars=['family', "order"],                   # Columns to keep fixed
+        value_vars=[name for name in datanames],
+        var_name='sample',                    # Name for the variable column
+        value_name='count'                    # Name for the value column
     )
-    ax.bar(
-        index + bar_width / 2,
-        freqs_merged[f"count_{datanames[1]}"],
-        bar_width,
-        label=f"count_{datanames[1]}",
-        color=sns.color_palette("colorblind")[1],
-    )
-    ax.set_xlabel(f"Family N={len(freqs_merged)}")
-    ax.set_ylabel("Count")
-    ax.set_xticks(index)
-    ax.set_xticklabels(freqs_merged["family"])
-    ax.legend(loc="upper right")
-    plt.xticks(rotation=90, fontsize=6)
-    plt.subplots_adjust(bottom=0.205, left=0.035, right=0.985)
-    plt.show()
-    # freq.plot(
-    #     kind="bar", xlabel=f"Family N={len(freq)}", ylabel="Count",
-    # title=dataname
-    # )
-    # plt.xticks(fontsize=6)
-    # plt.tight_layout
-    # plt.subplots_adjust(bottom=0.205, left=0.035, right=0.985)
-    # plt.show()
+
+    if plot_sep:
+        # Plot each sample separately
+        for i, sample in enumerate(data):
+            fig, ax = plt.subplots(figsize=(18, 3), layout="constrained")
+            filt = freqs_merged[freqs_merged["sample"] == datanames[i]]
+            num_non_nan_rows = filt.dropna().shape[0]
+            non_nan_unique_orders = len(filt.dropna()["order"].unique())
+            total_taxa = int(filt["count"].sum())
+            ax.bar(filt["family"], filt["count"], label=f"{datanames[i]}")
+            ax.text(0.995, 0.95,
+                    f"No. taxa $={total_taxa}$\n" +
+                    f"No. families $={num_non_nan_rows}$\n" +
+                    f"No. orders $={non_nan_unique_orders}$",
+                    ha="right", va="top", transform=ax.transAxes)
+            ax.grid(axis="y", alpha=0.3)
+            ax.set_ylabel("Count")
+            ax.set_xlabel("Family")
+            plt.xlim(-2, len(freqs_merged["family"].unique())+1)
+            plt.xticks(rotation=90, fontsize=4)
+            plt.savefig(f"taxon_distribution_{fnames[i]}.pdf", dpi=600)
+            # plt.show()
+
+    else:
+        fig, axs = plt.subplots(ncols=1, nrows=len(data), figsize=(18, 15),
+                                sharex=True, sharey=False, layout="constrained")
+        for i, ax in enumerate(axs):
+            filt = freqs_merged[freqs_merged["sample"]
+                                == datanames[i]]  # filter
+            num_non_nan_rows = filt.dropna().shape[0]
+            non_nan_unique_orders = len(filt.dropna()["order"].unique())
+            total_taxa = int(filt["count"].sum())
+            ax.bar(filt["family"], filt["count"], label=f"{datanames[i]}")
+            ax.set_title(
+                f"{datanames[i]}")
+            ax.text(0.995, 0.95,
+                    f"No. taxa $={total_taxa}$\n" +
+                    f"No. families $={num_non_nan_rows}$\n" +
+                    f"No. orders $={non_nan_unique_orders}$",
+                    ha="right", va="top", transform=ax.transAxes)
+            ax.grid(axis="y", alpha=0.3)
+            # align the x-tick labels to the center of the bars
+            dx, dy = 0, 0  # offset for x-tick labs, in pixels
+            offset = ScaledTranslation(
+                dx / fig.dpi, dy / fig.dpi, fig.dpi_scale_trans)
+
+            # apply offset to all xticklabels
+            for label in ax.xaxis.get_majorticklabels():
+                label.set_transform(label.get_transform() + offset)
+
+        fig.supylabel("Count")
+        fig.supxlabel("Family")
+        plt.xlim(-2, len(freqs_merged["family"].unique())+1)
+        plt.xticks(rotation=90, fontsize=4)
+        plt.savefig("taxon_distribution.pdf", dpi=600)
+        plt.show()
 
 
 def taxon_difference(level):
@@ -328,7 +370,7 @@ def taxon_difference(level):
 
 def equalise_taxon_sample(level, export):
     """Equalise the no. samples of the specified taxon level
-    between two samples of Naturalis data and save the results to .csv 
+    between two samples of Naturalis data and save the results to .csv
     files."""
 
     datapath1 = ("sample_eud_zuntini_10-09-24/Naturalis_multimedia_eud_sample"
@@ -402,9 +444,9 @@ def equalise_taxon_sample(level, export):
 
 if __name__ == "__main__":
     # sample_families()
-    img_from_sample()
+    # img_from_sample()
     # download_imgs()
-    # plot_taxon_distribution()
+    plot_taxon_distribution(plot_sep=True)
     # taxon_difference(level="family")
     # equalise_taxon_sample(level="genus", export=False)
     # get_all_genera()
